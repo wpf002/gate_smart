@@ -1,18 +1,99 @@
-from fastapi import APIRouter, Request
+from typing import Optional
+
+import msgspec
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
+
+from app.core.cache import cache_get, cache_set
+from app.services import racing_api, secretariat
 
 router = APIRouter()
 
 
+class AnalyzeRequest(msgspec.Struct):
+    race_id: str
+    mode: str = "balanced"
+    bankroll: Optional[float] = None
+
+
+class RecommendRequest(msgspec.Struct):
+    race_id: str
+    bankroll: float
+    risk_tolerance: str = "medium"
+    experience_level: str = "beginner"
+
+
+class AskRequest(msgspec.Struct):
+    question: str
+    context: Optional[dict] = None
+
+
 @router.post("/analyze")
-async def analyze_race(request: Request):
-    return {"error": "Racing API not configured"}
+async def analyze_race(request: Request) -> JSONResponse:
+    raw = await request.body()
+    try:
+        req = msgspec.json.decode(raw, type=AnalyzeRequest)
+    except Exception:
+        raise HTTPException(status_code=400, detail="malformed request body")
+
+    cache_key = f"ai_analysis:{req.race_id}:{req.mode}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return JSONResponse(cached)
+
+    try:
+        race_data = await racing_api.get_race(req.race_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Racing API error: {exc}") from exc
+
+    try:
+        analysis = await secretariat.analyze_race(race_data, mode=req.mode, bankroll=req.bankroll)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI analysis error: {exc}") from exc
+
+    await cache_set(cache_key, analysis, ex=300)
+    return JSONResponse(analysis)
 
 
 @router.post("/recommend-bet")
-async def recommend_bet(request: Request):
-    return {"error": "Racing API not configured"}
+async def recommend_bet(request: Request) -> JSONResponse:
+    raw = await request.body()
+    try:
+        req = msgspec.json.decode(raw, type=RecommendRequest)
+    except Exception:
+        raise HTTPException(status_code=400, detail="malformed request body")
+
+    try:
+        race_data = await racing_api.get_race(req.race_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Racing API error: {exc}") from exc
+
+    try:
+        analysis = await secretariat.analyze_race(race_data, mode="balanced")
+        recommendation = await secretariat.recommend_bet_type(
+            req.bankroll, req.risk_tolerance, req.experience_level, analysis
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI error: {exc}") from exc
+
+    return JSONResponse(recommendation)
 
 
 @router.post("/ask")
-async def ask(request: Request):
-    return {"answer": ""}
+async def ask(request: Request) -> JSONResponse:
+    raw = await request.body()
+    try:
+        req = msgspec.json.decode(raw, type=AskRequest)
+    except Exception:
+        raise HTTPException(status_code=400, detail="malformed request body")
+
+    try:
+        answer = await secretariat.answer_betting_question(req.question, req.context)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI error: {exc}") from exc
+
+    return JSONResponse({"answer": answer})
