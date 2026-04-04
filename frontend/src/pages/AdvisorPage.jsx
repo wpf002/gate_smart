@@ -1,0 +1,216 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { askAdvisor } from '../utils/api';
+import { useAppStore } from '../store';
+import PageHeader from '../components/common/PageHeader';
+
+const SUGGESTED_QUESTIONS = [
+  'What does each way mean?',
+  'How do I read a form guide?',
+  'What is a trifecta bet?',
+  'How should I size my bets?',
+  'What is track bias?',
+  'Explain SP odds to me',
+];
+
+function Message({ msg }) {
+  const isUser = msg.role === 'user';
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: isUser ? 'flex-end' : 'flex-start',
+      marginBottom: 12,
+    }}>
+      {!isUser && (
+        <div style={{
+          width: 28, height: 28,
+          borderRadius: '50%',
+          background: 'rgba(201,162,39,0.15)',
+          border: '1px solid var(--border-gold)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 14,
+          marginRight: 8,
+          flexShrink: 0,
+          marginTop: 2,
+        }}>
+          🤖
+        </div>
+      )}
+      <div style={{
+        maxWidth: '80%',
+        padding: '10px 14px',
+        borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+        background: isUser ? 'rgba(201,162,39,0.15)' : 'var(--bg-card)',
+        border: `1px solid ${isUser ? 'var(--border-gold)' : 'var(--border-subtle)'}`,
+        fontSize: 14,
+        lineHeight: 1.6,
+        color: 'var(--text-primary)',
+        whiteSpace: 'pre-wrap',
+      }}>
+        {msg.content}
+      </div>
+    </div>
+  );
+}
+
+export default function AdvisorPage() {
+  const { advisorMessages, addAdvisorMessage, clearAdvisorMessages } = useAppStore();
+  const [input, setInput] = useState('');
+  const bottomRef = useRef(null);
+
+  const askMutation = useMutation({
+    mutationFn: (question) => askAdvisor(question),
+    onSuccess: (data) => {
+      addAdvisorMessage({ role: 'assistant', content: data.answer || data });
+    },
+  });
+
+  const handleSend = () => {
+    const q = input.trim();
+    if (!q) return;
+    addAdvisorMessage({ role: 'user', content: q });
+    setInput('');
+    askMutation.mutate(q);
+  };
+
+  const handleSuggestion = (q) => {
+    addAdvisorMessage({ role: 'user', content: q });
+    askMutation.mutate(q);
+  };
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [advisorMessages, askMutation.isPending]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <PageHeader
+        title="SECRETARIAT"
+        subtitle="Your AI racing advisor"
+        right={
+          advisorMessages.length > 0 ? (
+            <button
+              onClick={clearAdvisorMessages}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}
+            >
+              Clear
+            </button>
+          ) : null
+        }
+      />
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+        {advisorMessages.length === 0 && (
+          <div>
+            <div style={{
+              textAlign: 'center',
+              padding: '24px 0 20px',
+              color: 'var(--text-muted)',
+            }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>🏇</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent-gold)', marginBottom: 6 }}>
+                Ask Secretariat
+              </div>
+              <div style={{ fontSize: 13 }}>
+                Get expert handicapping advice, betting education, and race analysis.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {SUGGESTED_QUESTIONS.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => handleSuggestion(q)}
+                  disabled={askMutation.isPending}
+                  style={{
+                    textAlign: 'left',
+                    padding: '10px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-secondary)',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-body)',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {advisorMessages.map((msg, i) => (
+          <Message key={i} msg={msg} />
+        ))}
+
+        {askMutation.isPending && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: '50%',
+              background: 'rgba(201,162,39,0.15)',
+              border: '1px solid var(--border-gold)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14,
+            }}>
+              🤖
+            </div>
+            <div style={{
+              padding: '10px 14px',
+              borderRadius: '16px 16px 16px 4px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex', gap: 4, alignItems: 'center',
+            }}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: 'var(--accent-gold)',
+                  animation: `pulse 1s infinite ${i * 0.2}s`,
+                }} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{
+        padding: '12px 16px',
+        borderTop: '1px solid var(--border-subtle)',
+        background: 'var(--bg-secondary)',
+        display: 'flex',
+        gap: 10,
+      }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+          placeholder="Ask about racing, horses, bets…"
+          disabled={askMutation.isPending}
+          style={{
+            flex: 1,
+            padding: '10px 14px',
+            fontSize: 14,
+            borderRadius: 'var(--radius-md)',
+          }}
+        />
+        <button
+          onClick={handleSend}
+          disabled={!input.trim() || askMutation.isPending}
+          className="btn btn-primary"
+          style={{ padding: '10px 16px' }}
+        >
+          →
+        </button>
+      </div>
+    </div>
+  );
+}

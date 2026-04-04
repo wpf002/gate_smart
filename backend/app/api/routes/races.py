@@ -6,7 +6,7 @@ router = APIRouter()
 
 
 @router.get("/today")
-async def races_today(region: str = "gb"):
+async def races_today(region: str = None):
     try:
         return await racing_api.get_racecards(region=region)
     except HTTPException:
@@ -16,7 +16,7 @@ async def races_today(region: str = "gb"):
 
 
 @router.get("/results/today")
-async def results_today(region: str = "gb"):
+async def results_today(region: str = None):
     try:
         return await racing_api.get_results(region=region)
     except HTTPException:
@@ -26,7 +26,7 @@ async def results_today(region: str = "gb"):
 
 
 @router.get("/results/{result_date}")
-async def results_by_date(result_date: str, region: str = "gb"):
+async def results_by_date(result_date: str, region: str = None):
     try:
         return await racing_api.get_results(date=result_date, region=region)
     except HTTPException:
@@ -36,7 +36,7 @@ async def results_by_date(result_date: str, region: str = "gb"):
 
 
 @router.get("/date/{race_date}")
-async def races_by_date(race_date: str, region: str = "gb"):
+async def races_by_date(race_date: str, region: str = None):
     try:
         return await racing_api.get_racecards(date=race_date, region=region)
     except HTTPException:
