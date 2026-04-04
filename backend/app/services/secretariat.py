@@ -7,7 +7,7 @@ import anthropic
 import json
 from app.core.config import settings
 
-client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 SECRETARIAT_SYSTEM = """You are Secretariat, an elite horse racing handicapper and betting strategist with encyclopedic knowledge of horse racing worldwide. You have decades of experience analyzing racing forms, speed figures, pace scenarios, trainer/jockey statistics, track biases, class levels, and value betting.
 
@@ -181,7 +181,7 @@ Return a JSON object with this exact structure:
   "beginner_tip": "One specific tip for someone new to betting based on this race"
 }}"""
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-opus-4-20250514",
         max_tokens=4000,
         system=SECRETARIAT_SYSTEM,
@@ -222,7 +222,7 @@ Return JSON:
   "beginner_explanation": "Explain this horse to someone who has never bet before"
 }}"""
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-opus-4-20250514",
         max_tokens=1500,
         system=SECRETARIAT_SYSTEM,
@@ -278,7 +278,7 @@ Return JSON:
   "bet_sizing_explanation": "Explain to the user why these stake amounts make sense for their bankroll"
 }}"""
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-opus-4-20250514",
         max_tokens=1500,
         system=SECRETARIAT_SYSTEM,
@@ -311,7 +311,7 @@ Return JSON:
   "positive_signs": ["any good patterns"]
 }}"""
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-opus-4-20250514",
         max_tokens=800,
         system=SECRETARIAT_SYSTEM,
@@ -335,7 +335,7 @@ Question: {question}
 
 Answer clearly and helpfully. If it's a beginner question, start with the basics. Keep it under 300 words. No jargon without explanation."""
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-opus-4-20250514",
         max_tokens=600,
         system=SECRETARIAT_SYSTEM,

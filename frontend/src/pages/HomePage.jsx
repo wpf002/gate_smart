@@ -1,57 +1,91 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getRacesToday, getRacesByDate } from '../utils/api';
 import { RaceCard, RaceCardSkeleton } from '../components/races/RaceCard';
 import PageHeader from '../components/common/PageHeader';
 
-function DateTabs({ selected, onChange }) {
-  const today = new Date();
-  const tabs = [-1, 0, 1].map((offset) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + offset);
-    const iso = d.toISOString().split('T')[0];
-    const label = offset === 0 ? 'Today' : offset === -1 ? 'Yesterday' : 'Tomorrow';
-    return { iso, label };
-  });
+const DATE_TABS = [
+  { key: 'today', label: 'Today' },
+  { key: 'tomorrow', label: 'Tomorrow' },
+];
 
+function TrackSection({ course, races }) {
+  const [collapsed, setCollapsed] = useState(false);
   return (
-    <div style={{ display: 'flex', gap: 6, padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-      {tabs.map(({ iso, label }) => (
-        <button
-          key={iso}
-          onClick={() => onChange(iso)}
-          style={{
-            flex: 1,
-            padding: '6px 0',
-            borderRadius: 8,
-            border: 'none',
-            background: selected === iso ? 'rgba(201,162,39,0.15)' : 'transparent',
-            color: selected === iso ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
-            fontFamily: 'var(--font-body)',
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          {label}
-        </button>
-      ))}
+    <div style={{ marginBottom: 24 }}>
+      <button
+        onClick={() => setCollapsed(c => !c)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '6px 0 10px',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 20,
+          color: 'var(--accent-gold)',
+          letterSpacing: '0.06em',
+          flex: 1,
+        }}>
+          {course}
+        </span>
+        <span style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          fontWeight: 600,
+          background: 'var(--bg-elevated)',
+          padding: '2px 8px',
+          borderRadius: 10,
+        }}>
+          {races.length} {races.length === 1 ? 'race' : 'races'}
+        </span>
+        <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+          {collapsed ? '▶' : '▼'}
+        </span>
+      </button>
+
+      {!collapsed && (
+        <div className="race-grid">
+          {races.map(race => (
+            <RaceCard key={race.race_id} race={race} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 export default function HomePage() {
-  const today = new Date().toISOString().split('T')[0];
-  const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedDay, setSelectedDay] = useState('today');
 
-  const isToday = selectedDate === today;
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['races', selectedDate],
-    queryFn: () => isToday ? getRacesToday() : getRacesByDate(selectedDate),
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['races', selectedDay],
+    queryFn: () => selectedDay === 'today' ? getRacesToday() : getRacesByDate('tomorrow'),
   });
 
-  const races = data?.racecards ?? data?.races ?? data ?? [];
+  const races = data?.racecards ?? [];
+
+  // Group by course, sort courses alphabetically
+  const byTrack = races.reduce((acc, race) => {
+    const course = race.course || 'Unknown';
+    if (!acc[course]) acc[course] = [];
+    acc[course].push(race);
+    return acc;
+  }, {});
+
+  const tracks = Object.keys(byTrack).sort((a, b) => a.localeCompare(b));
+
+  // Sort races within each track by time
+  tracks.forEach(t => {
+    byTrack[t].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  });
 
   return (
     <div>
@@ -60,7 +94,7 @@ export default function HomePage() {
         subtitle="AI-powered racing intelligence"
         right={
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => refetch()}
             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18 }}
           >
             ↻
@@ -68,9 +102,32 @@ export default function HomePage() {
         }
       />
 
-      <DateTabs selected={selectedDate} onChange={setSelectedDate} />
+      {/* Date tabs */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border-subtle)' }}>
+        {DATE_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setSelectedDay(key)}
+            style={{
+              flex: 1,
+              padding: '10px 0',
+              background: 'none',
+              border: 'none',
+              borderBottom: selectedDay === key ? '2px solid var(--accent-gold)' : '2px solid transparent',
+              color: selectedDay === key ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-body)',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'color 0.15s',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      <div style={{ padding: '12px 16px' }}>
+      <div style={{ padding: '16px 20px' }}>
         {isError && (
           <div style={{
             padding: 16,
@@ -78,28 +135,38 @@ export default function HomePage() {
             borderRadius: 'var(--radius-md)',
             color: 'var(--accent-red-bright)',
             fontSize: 13,
-            marginBottom: 12,
+            marginBottom: 16,
           }}>
-            Failed to load races. Check your connection.
+            Failed to load races. Check your connection and try again.
           </div>
         )}
 
         {isLoading ? (
-          [...Array(6)].map((_, i) => <RaceCardSkeleton key={i} />)
-        ) : races.length === 0 ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '40px 20px',
-            color: 'var(--text-muted)',
-          }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🏇</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>No races found</div>
-            <div style={{ fontSize: 13, marginTop: 6 }}>Try a different date</div>
+          <div>
+            {[...Array(3)].map((_, t) => (
+              <div key={t} style={{ marginBottom: 24 }}>
+                <div className="skeleton" style={{ height: 24, width: 200, borderRadius: 6, marginBottom: 12 }} />
+                <div className="race-grid">
+                  {[...Array(2)].map((_, i) => <RaceCardSkeleton key={i} />)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : tracks.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🏇</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22 }}>No races scheduled</div>
+            <div style={{ fontSize: 13, marginTop: 6 }}>Check back later or try another day</div>
           </div>
         ) : (
-          races.map((race) => (
-            <RaceCard key={race.race_id || race.id} race={race} />
-          ))
+          <>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+              {races.length} races across {tracks.length} tracks
+            </div>
+            {tracks.map(course => (
+              <TrackSection key={course} course={course} races={byTrack[course]} />
+            ))}
+          </>
         )}
       </div>
     </div>

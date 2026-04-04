@@ -33,7 +33,7 @@
   --radius-lg: 16px;
 
   --bottom-nav-height: 64px;
-  --mobile-max: 430px;
+  --sidebar-width: 220px;
 }
 
 /* ─── Reset ─────────────────────────────────────────────────────────────── */
@@ -47,7 +47,6 @@
 html, body, #root {
   height: 100%;
   width: 100%;
-  overflow: hidden;
 }
 
 body {
@@ -56,12 +55,11 @@ body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
 }
 
-/* ─── App Shell ──────────────────────────────────────────────────────────── */
+/* ─── App Shell — Mobile ────────────────────────────────────────────────── */
 .app-shell {
-  max-width: var(--mobile-max);
-  margin: 0 auto;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -76,6 +74,118 @@ body {
   overflow-x: hidden;
   padding-bottom: calc(var(--bottom-nav-height) + 16px);
   -webkit-overflow-scrolling: touch;
+}
+
+/* ─── App Shell — Desktop (≥768px) ─────────────────────────────────────── */
+@media (min-width: 768px) {
+  body {
+    overflow: auto;
+  }
+
+  .app-shell {
+    flex-direction: row;
+    max-width: 1400px;
+    margin: 0 auto;
+    height: 100vh;
+  }
+
+  .page-content {
+    flex: 1;
+    padding-bottom: 24px;
+    max-width: 100%;
+  }
+
+  /* hide bottom nav on desktop — sidebar takes over */
+  .bottom-nav {
+    display: none !important;
+  }
+
+  /* show sidebar only on desktop */
+  .side-nav {
+    display: flex !important;
+  }
+}
+
+/* ─── Sidebar nav (desktop only, hidden on mobile) ─────────────────────── */
+.side-nav {
+  display: none;
+  width: var(--sidebar-width);
+  flex-direction: column;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+  padding: 20px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.side-nav-logo {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--accent-gold);
+  letter-spacing: 0.06em;
+  padding: 0 20px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+}
+
+.side-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  width: 100%;
+  text-align: left;
+  transition: all 0.15s;
+  border-radius: 0;
+  position: relative;
+}
+
+.side-nav-item:hover {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.03);
+}
+
+.side-nav-item.active {
+  color: var(--accent-gold-bright);
+  background: rgba(201,162,39,0.08);
+}
+
+.side-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: var(--accent-gold);
+  border-radius: 0 2px 2px 0;
+}
+
+.side-nav-icon {
+  font-size: 18px;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ─── Bottom nav (mobile only) ──────────────────────────────────────────── */
+.bottom-nav {
+  height: var(--bottom-nav-height);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
 }
 
 /* ─── Cards ──────────────────────────────────────────────────────────────── */
@@ -274,6 +384,15 @@ input:focus, textarea:focus {
 
 input::placeholder, textarea::placeholder {
   color: var(--text-muted);
+}
+
+/* ─── Race grid on desktop ───────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .race-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
 }
 
 /* ─── Utility ────────────────────────────────────────────────────────────── */

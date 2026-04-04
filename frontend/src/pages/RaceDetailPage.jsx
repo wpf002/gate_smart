@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getRaceDetail, analyzeRace } from '../utils/api';
@@ -153,9 +153,19 @@ export default function RaceDetailPage() {
     queryFn: () => getRaceDetail(raceId),
   });
 
+  const [analyzeError, setAnalyzeError] = useState(null);
+
   const analyzeMutation = useMutation({
     mutationFn: () => analyzeRace(raceId, analysisMode, userProfile.bankroll),
-    onSuccess: setAnalysis,
+    onSuccess: (data) => { setAnalysis(data); setAnalyzeError(null); },
+    onError: (err) => {
+      const detail = err?.response?.data?.detail || err.message || 'Unknown error';
+      setAnalyzeError(
+        detail.includes('credit')
+          ? 'Secretariat needs Anthropic API credits. Add credits at console.anthropic.com.'
+          : `Analysis failed: ${detail}`
+      );
+    },
   });
 
   return (
@@ -248,6 +258,19 @@ export default function RaceDetailPage() {
             </div>
           )}
 
+          {analyzeError && (
+            <div style={{
+              padding: '10px 14px',
+              background: 'rgba(192,57,43,0.08)',
+              border: '1px solid rgba(192,57,43,0.25)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 13,
+              color: 'var(--accent-red-bright)',
+              marginBottom: 12,
+            }}>
+              ⚠️ {analyzeError}
+            </div>
+          )}
           <AnalysisPanel analysis={analysis} loading={analyzeMutation.isPending} />
         </div>
 

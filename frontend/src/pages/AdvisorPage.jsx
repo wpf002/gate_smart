@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { askAdvisor } from '../utils/api';
 import { useAppStore } from '../store';
@@ -11,10 +11,13 @@ const SUGGESTED_QUESTIONS = [
   'How should I size my bets?',
   'What is track bias?',
   'Explain SP odds to me',
+  'What is a Superfecta?',
+  'How does parimutuel betting work?',
 ];
 
 function Message({ msg }) {
   const isUser = msg.role === 'user';
+  const isError = msg.role === 'error';
   return (
     <div style={{
       display: 'flex',
@@ -25,28 +28,30 @@ function Message({ msg }) {
         <div style={{
           width: 28, height: 28,
           borderRadius: '50%',
-          background: 'rgba(201,162,39,0.15)',
-          border: '1px solid var(--border-gold)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          background: isError ? 'rgba(192,57,43,0.15)' : 'rgba(201,162,39,0.15)',
+          border: `1px solid ${isError ? 'rgba(192,57,43,0.3)' : 'var(--border-gold)'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 14,
           marginRight: 8,
           flexShrink: 0,
           marginTop: 2,
         }}>
-          🤖
+          {isError ? '⚠️' : '🤖'}
         </div>
       )}
       <div style={{
         maxWidth: '80%',
         padding: '10px 14px',
         borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-        background: isUser ? 'rgba(201,162,39,0.15)' : 'var(--bg-card)',
-        border: `1px solid ${isUser ? 'var(--border-gold)' : 'var(--border-subtle)'}`,
+        background: isUser
+          ? 'rgba(201,162,39,0.15)'
+          : isError
+            ? 'rgba(192,57,43,0.08)'
+            : 'var(--bg-card)',
+        border: `1px solid ${isUser ? 'var(--border-gold)' : isError ? 'rgba(192,57,43,0.25)' : 'var(--border-subtle)'}`,
         fontSize: 14,
         lineHeight: 1.6,
-        color: 'var(--text-primary)',
+        color: isError ? 'var(--accent-red-bright)' : 'var(--text-primary)',
         whiteSpace: 'pre-wrap',
       }}>
         {msg.content}
@@ -65,17 +70,25 @@ export default function AdvisorPage() {
     onSuccess: (data) => {
       addAdvisorMessage({ role: 'assistant', content: data.answer || data });
     },
+    onError: (err) => {
+      const detail = err?.response?.data?.detail || '';
+      const msg = detail.includes('credit')
+        ? 'Secretariat needs Anthropic API credits to respond. Add credits at console.anthropic.com then restart the server.'
+        : `Secretariat is unavailable right now. (${detail || err.message})`;
+      addAdvisorMessage({ role: 'error', content: msg });
+    },
   });
 
   const handleSend = () => {
     const q = input.trim();
-    if (!q) return;
+    if (!q || askMutation.isPending) return;
     addAdvisorMessage({ role: 'user', content: q });
     setInput('');
     askMutation.mutate(q);
   };
 
   const handleSuggestion = (q) => {
+    if (askMutation.isPending) return;
     addAdvisorMessage({ role: 'user', content: q });
     askMutation.mutate(q);
   };
@@ -83,6 +96,8 @@ export default function AdvisorPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [advisorMessages, askMutation.isPending]);
+
+  const showSuggestions = advisorMessages.length === 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -101,30 +116,23 @@ export default function AdvisorPage() {
         }
       />
 
-      {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-        {advisorMessages.length === 0 && (
+        {showSuggestions && (
           <div>
-            <div style={{
-              textAlign: 'center',
-              padding: '24px 0 20px',
-              color: 'var(--text-muted)',
-            }}>
+            <div style={{ textAlign: 'center', padding: '24px 0 20px', color: 'var(--text-muted)' }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>🏇</div>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent-gold)', marginBottom: 6 }}>
                 Ask Secretariat
               </div>
               <div style={{ fontSize: 13 }}>
-                Get expert handicapping advice, betting education, and race analysis.
+                Get expert handicapping advice, bet education, and race breakdowns.
               </div>
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
               {SUGGESTED_QUESTIONS.map((q) => (
                 <button
                   key={q}
                   onClick={() => handleSuggestion(q)}
-                  disabled={askMutation.isPending}
                   style={{
                     textAlign: 'left',
                     padding: '10px 14px',
@@ -137,6 +145,8 @@ export default function AdvisorPage() {
                     fontFamily: 'var(--font-body)',
                     transition: 'all 0.15s',
                   }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-gold-dim)'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
                 >
                   {q}
                 </button>
@@ -157,9 +167,7 @@ export default function AdvisorPage() {
               border: '1px solid var(--border-gold)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 14,
-            }}>
-              🤖
-            </div>
+            }}>🤖</div>
             <div style={{
               padding: '10px 14px',
               borderRadius: '16px 16px 16px 4px',
@@ -177,11 +185,9 @@ export default function AdvisorPage() {
             </div>
           </div>
         )}
-
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <div style={{
         padding: '12px 16px',
         borderTop: '1px solid var(--border-subtle)',
@@ -195,12 +201,7 @@ export default function AdvisorPage() {
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
           placeholder="Ask about racing, horses, bets…"
           disabled={askMutation.isPending}
-          style={{
-            flex: 1,
-            padding: '10px 14px',
-            fontSize: 14,
-            borderRadius: 'var(--radius-md)',
-          }}
+          style={{ flex: 1, padding: '10px 14px', fontSize: 14, borderRadius: 'var(--radius-md)' }}
         />
         <button
           onClick={handleSend}
