@@ -9,24 +9,48 @@ from app.core.config import settings
 
 client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
-SECRETARIAT_SYSTEM = """You are Secretariat, an elite horse racing handicapper and betting strategist with encyclopedic knowledge of horse racing worldwide. You have decades of experience analyzing racing forms, speed figures, pace scenarios, trainer/jockey statistics, track biases, class levels, and value betting.
+
+def _parse_json(text: str) -> dict:
+    """Strip markdown fences and parse JSON from a Claude response."""
+    text = text.strip()
+    if text.startswith("```"):
+        parts = text.split("```")
+        text = parts[1] if len(parts) > 1 else text
+        if text.startswith("json"):
+            text = text[4:]
+    # Find the outermost JSON object in case Claude prepended text
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    if start != -1 and end > start:
+        text = text[start:end]
+    return json.loads(text.strip())
+
+
+SECRETARIAT_SYSTEM = """You are Secretariat, an elite horse racing handicapper and betting strategist. Your primary expertise is North American thoroughbred racing — US tracks, US trainers, US jockeys, and US betting markets. You also have strong working knowledge of UK, Irish, and international racing.
 
 Your job inside GateSmart is to analyze races and give users clear, honest, actionable betting intelligence.
 
-Your expertise covers:
-- Past performance interpretation (form cycles, class changes, layoffs, surface/distance suitability)
-- Speed figure analysis (Beyer, Timeform, RPR)
-- Pace shape (front-runners, closers, mid-packers) and pace scenario prediction
-- Trainer and jockey patterns, hot streaks, and course records
-- Track bias (rail position, going, weather effects)
-- Value identification (when a horse's fair odds are better than market odds)
-- Bet construction (win, place, show, exacta, trifecta, daily doubles, pick sequences)
-- Bankroll management and stake sizing
-- Beginner education — you explain everything in plain English
+US RACING EXPERTISE (primary focus):
+- Beyer Speed Figures — the gold standard for US handicapping. Always reference Beyers when available.
+- Dirt vs turf bias at specific US tracks (e.g. Keeneland favors closers on turf, Aqueduct outer dirt is speed-biased)
+- US trainer/jockey stats — Bob Baffert, Chad Brown, Todd Pletcher, Bill Mott, Irad Ortiz Jr, Flavien Prat, John Velazquez patterns
+- US class ladder: maiden special weight → allowance → stakes → graded stakes (G3 → G2 → G1)
+- US bet types: win, place, show, exacta, trifecta, superfecta, daily double, pick 3/4/5/6
+- US going terms: Fast, Good, Yielding, Muddy, Sloppy, Sealed (dirt); Firm, Good, Yielding (turf)
+- US morning line odds and tote board reading
+- Kentucky Derby prep races and points system
 
-Your tone: direct, confident, no fluff. Like a sharp handicapper explaining picks to a friend. You don't hedge unnecessarily but you're honest about uncertainty.
+INTERNATIONAL EXPERTISE (secondary):
+- UK/Irish racing: form strings, Racing Post Ratings, fractional odds, going descriptions
+- Pace shape, class changes, layoffs universally applied
 
-CRITICAL: Always explain WHY. Never give a pick without the reasoning. Beginners should be able to understand your analysis even if they've never bet before.
+BEGINNER EDUCATION:
+- Always explain US-specific terms when they appear (Beyer, claiming race, allowance, etc.)
+- Explain bet types in plain English with examples
+
+Your tone: direct, confident, no fluff. Like a sharp US handicapper explaining picks to a friend.
+
+CRITICAL: Always explain WHY. Never give a pick without reasoning. Beginners must be able to follow along.
 
 Always respond in valid JSON as specified in each prompt. No markdown, no extra text outside JSON."""
 
@@ -121,6 +145,18 @@ async def get_tracksense_context(horses: list[dict]) -> dict[str, str]:
     return result
 
 
+def _slim_race_for_prompt(race_data: dict) -> dict:
+    """Strip bulky fields that add tokens without helping Claude handicap."""
+    _RUNNER_DROP = {"odds_list", "silk_url", "horse", "number", "draw", "ofr", "lbs", "spotlight", "comment"}
+    _RACE_DROP = {"raw", "big_race", "type_of_race"}
+    slim = {k: v for k, v in race_data.items() if k not in _RACE_DROP and k != "runners"}
+    slim["runners"] = [
+        {k: v for k, v in r.items() if k not in _RUNNER_DROP and v not in (None, "", [])}
+        for r in race_data.get("runners", [])
+    ]
+    return slim
+
+
 async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None) -> dict:
     """
     Full race analysis — Secretariat's core function.
@@ -136,7 +172,7 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
     prompt = f"""Analyze this horse race and return a complete handicapping analysis.
 
 Race Data:
-{json.dumps(race_data, indent=2)}{ts_block}
+{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
 
 Betting Mode: {mode} (safe=minimize risk, balanced=value+safety, aggressive=maximize upside, longshot=overlay value)
 User Bankroll: {f'${bankroll:.2f}' if bankroll else 'Not specified'}
@@ -153,10 +189,10 @@ Return a JSON object with this exact structure:
       "horse_name": "name",
       "contender_score": 0-100,
       "value_score": 0-100,
-      "strengths": ["list of positives"],
-      "weaknesses": ["list of negatives"],
-      "summary": "2-3 sentence assessment",
-      "fair_odds": "e.g. 3/1 — your estimated fair price",
+      "strengths": ["max 2 key positives"],
+      "weaknesses": ["max 2 key negatives"],
+      "summary": "1 sentence assessment",
+      "fair_odds": "e.g. 3/1",
       "recommended_bet": "win/place/show/avoid/use-in-exotics or null"
     }}
   ],
@@ -182,18 +218,13 @@ Return a JSON object with this exact structure:
 }}"""
 
     response = await client.messages.create(
-        model="claude-opus-4-20250514",
-        max_tokens=4000,
+        model="claude-sonnet-4-6",
+        max_tokens=5000,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
 
-    text = response.content[0].text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    return json.loads(text.strip())
+    return _parse_json(response.content[0].text)
 
 
 async def explain_horse(horse_data: dict, race_context: dict = None) -> dict:
@@ -211,30 +242,25 @@ Horse Data:
 
 {"Race Context:" + json.dumps(race_context, indent=2) if race_context else ""}{ts_block}
 
-Return JSON:
+Return JSON (all fields required, verdict MUST be a non-empty string):
 {{
+  "verdict": "REQUIRED — 1-2 sentence plain English verdict on whether this horse is worth backing",
   "form_summary": "Plain English explanation of recent form",
   "key_stats": ["3-4 most important facts about this horse"],
   "strengths": ["positives"],
   "concerns": ["negatives or risks"],
-  "verdict": "1-2 sentence plain English verdict",
-  "good_for_beginners": true/false,
+  "good_for_beginners": true,
   "beginner_explanation": "Explain this horse to someone who has never bet before"
 }}"""
 
     response = await client.messages.create(
-        model="claude-opus-4-20250514",
-        max_tokens=1500,
+        model="claude-sonnet-4-6",
+        max_tokens=2500,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
 
-    text = response.content[0].text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    return json.loads(text.strip())
+    return _parse_json(response.content[0].text)
 
 
 async def recommend_bet_type(
@@ -279,18 +305,13 @@ Return JSON:
 }}"""
 
     response = await client.messages.create(
-        model="claude-opus-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=1500,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
 
-    text = response.content[0].text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    return json.loads(text.strip())
+    return _parse_json(response.content[0].text)
 
 
 async def explain_form_string(form_string: str, horse_name: str) -> dict:
@@ -300,30 +321,29 @@ async def explain_form_string(form_string: str, horse_name: str) -> dict:
 Horse: {horse_name}
 Form String: {form_string}
 
+CRITICAL READING DIRECTION: UK Racing Post form strings are ALWAYS ordered oldest run FIRST (leftmost character) to most recent run LAST (rightmost character). Read strictly left-to-right when describing the sequence. For example, form "1142" means: oldest run=1st (win), second run=1st (win), third run=4th, most recent run=2nd.
+
+The decoded array must list runs in the same left-to-right order (index 0 = oldest, last index = most recent).
+
 Return JSON:
 {{
   "decoded": [
-    {{"result": "1", "meaning": "Won", "notes": "most recent first or last? — clarify"}}
+    {{"result": "1", "meaning": "Won", "notes": "brief context"}}
   ],
-  "plain_english": "What this form tells us about the horse",
+  "plain_english": "Description reading oldest run first through to most recent",
   "trend": "improving/declining/consistent/mixed",
   "red_flags": ["any worrying patterns"],
   "positive_signs": ["any good patterns"]
 }}"""
 
     response = await client.messages.create(
-        model="claude-opus-4-20250514",
-        max_tokens=800,
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1200,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
 
-    text = response.content[0].text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    return json.loads(text.strip())
+    return _parse_json(response.content[0].text)
 
 
 async def answer_betting_question(question: str, context: dict = None) -> str:
@@ -333,12 +353,16 @@ async def answer_betting_question(question: str, context: dict = None) -> str:
 Question: {question}
 {"Context: " + json.dumps(context) if context else ""}
 
-Answer clearly and helpfully. If it's a beginner question, start with the basics. Keep it under 300 words. No jargon without explanation."""
+Answer clearly and helpfully. If it's a beginner question, start with the basics. Keep it under 300 words. No jargon without explanation.
+
+Return JSON: {{"answer": "your full answer here"}}"""
 
     response = await client.messages.create(
-        model="claude-opus-4-20250514",
-        max_tokens=600,
+        model="claude-haiku-4-5-20251001",
+        max_tokens=800,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
-    return response.content[0].text.strip()
+
+    parsed = _parse_json(response.content[0].text)
+    return parsed.get("answer", "") if isinstance(parsed, dict) else str(parsed)

@@ -1,15 +1,31 @@
 """
 Tests for GET /api/horses/* — racing_api and secretariat are mocked.
+Routes now use _find_runner_in_racecards (get_racecards lookup) instead of
+get_horse/get_horse_results. Search uses ?q= and the /results route is removed.
 """
 import pytest
 import pytest_asyncio
-from fastapi import HTTPException
 from unittest.mock import AsyncMock, patch
 from httpx import ASGITransport, AsyncClient
 
-FAKE_HORSE = {"horse_id": "h1", "horse": "Arkle", "age": "7", "form": "1-1-1"}
-FAKE_RESULTS = {"results": [{"position": 1, "race": "Gold Cup"}]}
-FAKE_SEARCH = {"horses": [{"horse_id": "h1", "horse": "Arkle"}]}
+FAKE_RUNNER = {
+    "horse_id": "h1",
+    "horse": "Arkle",
+    "horse_name": "Arkle",
+    "age": "7",
+    "form": "1-1-1",
+}
+FAKE_RACECARD_DATA = {
+    "racecards": [{
+        "race_id": "race1",
+        "course": "Cheltenham",
+        "time": "14:00",
+        "title": "Gold Cup",
+        "runners": [FAKE_RUNNER],
+    }]
+}
+EMPTY_RACECARD = {"racecards": []}
+FAKE_SEARCH = {"horses": [{"horse_id": "h1", "horse": "Arkle"}], "total": 1}
 FAKE_EXPLANATION = {
     "form_summary": "Brilliant recent form",
     "key_stats": ["3 wins from 3"],
@@ -36,25 +52,62 @@ async def client():
 
 
 # ---------------------------------------------------------------------------
-# GET /horses/search
+# GET /horses/search?q=
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_horse_search_returns_data(client):
+async def test_horse_search_returns_api_results(client):
+    """API path: when search_horses returns results, return them with source=api."""
     mock = AsyncMock(return_value=FAKE_SEARCH)
     with patch("app.api.routes.horses.racing_api.search_horses", new=mock):
-        r = await client.get("/api/horses/search?name=Arkle")
+        r = await client.get("/api/horses/search?q=Arkle")
     assert r.status_code == 200
-    assert r.json() == FAKE_SEARCH
+    data = r.json()
+    assert data["horses"] == FAKE_SEARCH["horses"]
+    assert data["source"] == "api"
     mock.assert_called_once_with("Arkle")
 
 
 @pytest.mark.asyncio
-async def test_horse_search_propagates_502(client):
+async def test_horse_search_falls_back_to_local(client):
+    """When API search returns no horses, fall back to racecard name search."""
     with patch("app.api.routes.horses.racing_api.search_horses",
-               new=AsyncMock(side_effect=HTTPException(502, "Racing API error: 401"))):
-        r = await client.get("/api/horses/search?name=x")
-    assert r.status_code == 502
+               new=AsyncMock(return_value={"horses": [], "total": 0})), \
+         patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)):
+        r = await client.get("/api/horses/search?q=Arkle")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["source"] == "local"
+    assert any(h["horse_name"] == "Arkle" for h in data["horses"])
+
+
+@pytest.mark.asyncio
+async def test_horse_search_falls_back_to_local_on_api_error(client):
+    """When API search raises, fall back to racecard search."""
+    with patch("app.api.routes.horses.racing_api.search_horses",
+               new=AsyncMock(side_effect=Exception("network error"))), \
+         patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)):
+        r = await client.get("/api/horses/search?q=Arkle")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["source"] == "local"
+
+
+@pytest.mark.asyncio
+async def test_horse_search_empty_for_short_query(client):
+    """Queries shorter than 2 chars return empty without calling APIs."""
+    r = await client.get("/api/horses/search?q=A")
+    assert r.status_code == 200
+    assert r.json() == {"horses": [], "total": 0}
+
+
+@pytest.mark.asyncio
+async def test_horse_search_empty_for_missing_query(client):
+    r = await client.get("/api/horses/search")
+    assert r.status_code == 200
+    assert r.json() == {"horses": [], "total": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -63,50 +116,46 @@ async def test_horse_search_propagates_502(client):
 
 @pytest.mark.asyncio
 async def test_horse_profile_returns_data(client):
-    mock = AsyncMock(return_value=FAKE_HORSE)
-    with patch("app.api.routes.horses.racing_api.get_horse", new=mock):
+    """Profile is found via racecard runner lookup."""
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)):
         r = await client.get("/api/horses/h1")
     assert r.status_code == 200
-    assert r.json() == FAKE_HORSE
-    mock.assert_called_once_with("h1")
+    body = r.json()
+    assert body["horse_id"] == "h1"
+    assert body["horse_name"] == "Arkle"
 
 
 @pytest.mark.asyncio
-async def test_horse_profile_propagates_502(client):
-    with patch("app.api.routes.horses.racing_api.get_horse",
-               new=AsyncMock(side_effect=HTTPException(502, "Racing API error: 404"))):
+async def test_horse_profile_includes_race_context(client):
+    """Profile response includes race_context from the parent race."""
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)):
+        r = await client.get("/api/horses/h1")
+    body = r.json()
+    assert "race_context" in body
+    assert body["race_context"]["course"] == "Cheltenham"
+    assert "runners" not in body["race_context"]
+
+
+@pytest.mark.asyncio
+async def test_horse_profile_404_when_not_in_racecards(client):
+    """Returns 404 if the horse_id isn't found in today's or tomorrow's cards."""
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=EMPTY_RACECARD)):
         r = await client.get("/api/horses/unknown")
-    assert r.status_code == 502
+    assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------
-# GET /horses/{horse_id}/results
+# /horses/{horse_id}/results — route removed (requires Pro plan)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_horse_results_returns_data(client):
-    mock = AsyncMock(return_value=FAKE_RESULTS)
-    with patch("app.api.routes.horses.racing_api.get_horse_results", new=mock):
-        r = await client.get("/api/horses/h1/results")
-    assert r.status_code == 200
-    assert r.json() == FAKE_RESULTS
-    mock.assert_called_once_with("h1", limit=10)
-
-
-@pytest.mark.asyncio
-async def test_horse_results_respects_limit_param(client):
-    mock = AsyncMock(return_value=FAKE_RESULTS)
-    with patch("app.api.routes.horses.racing_api.get_horse_results", new=mock):
-        await client.get("/api/horses/h1/results?limit=5")
-    mock.assert_called_once_with("h1", limit=5)
-
-
-@pytest.mark.asyncio
-async def test_horse_results_propagates_502(client):
-    with patch("app.api.routes.horses.racing_api.get_horse_results",
-               new=AsyncMock(side_effect=HTTPException(502, "Racing API error: 500"))):
-        r = await client.get("/api/horses/h1/results")
-    assert r.status_code == 502
+async def test_horse_results_route_removed(client):
+    """/results sub-route no longer exists; FastAPI returns 404 or 405."""
+    r = await client.get("/api/horses/h1/results")
+    assert r.status_code in (404, 405)
 
 
 # ---------------------------------------------------------------------------
@@ -115,10 +164,8 @@ async def test_horse_results_propagates_502(client):
 
 @pytest.mark.asyncio
 async def test_horse_explain_returns_analysis(client):
-    with patch("app.api.routes.horses.racing_api.get_horse",
-               new=AsyncMock(return_value=dict(FAKE_HORSE))), \
-         patch("app.api.routes.horses.racing_api.get_horse_results",
-               new=AsyncMock(return_value=FAKE_RESULTS)), \
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)), \
          patch("app.api.routes.horses.secretariat.explain_horse",
                new=AsyncMock(return_value=FAKE_EXPLANATION)):
         r = await client.get("/api/horses/h1/explain")
@@ -129,35 +176,30 @@ async def test_horse_explain_returns_analysis(client):
 
 
 @pytest.mark.asyncio
-async def test_horse_explain_merges_results_into_horse_data(client):
-    """explain_horse() must be called with recent_results attached."""
-    horse_data = dict(FAKE_HORSE)
+async def test_horse_explain_passes_runner_and_race_context(client):
+    """secretariat.explain_horse is called with the runner dict and race context."""
     explain_mock = AsyncMock(return_value=FAKE_EXPLANATION)
-    with patch("app.api.routes.horses.racing_api.get_horse",
-               new=AsyncMock(return_value=horse_data)), \
-         patch("app.api.routes.horses.racing_api.get_horse_results",
-               new=AsyncMock(return_value=FAKE_RESULTS)), \
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)), \
          patch("app.api.routes.horses.secretariat.explain_horse", new=explain_mock):
         await client.get("/api/horses/h1/explain")
-    called_with = explain_mock.call_args[0][0]
-    assert "recent_results" in called_with
-    assert called_with["recent_results"] == FAKE_RESULTS
+    runner_arg, race_ctx_arg = explain_mock.call_args[0]
+    assert runner_arg["horse_id"] == "h1"
+    assert race_ctx_arg["course"] == "Cheltenham"
 
 
 @pytest.mark.asyncio
-async def test_horse_explain_propagates_racing_api_502(client):
-    with patch("app.api.routes.horses.racing_api.get_horse",
-               new=AsyncMock(side_effect=HTTPException(502, "Racing API error: 404"))):
-        r = await client.get("/api/horses/h1/explain")
-    assert r.status_code == 502
+async def test_horse_explain_404_when_not_found(client):
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=EMPTY_RACECARD)):
+        r = await client.get("/api/horses/unknown/explain")
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_horse_explain_wraps_secretariat_error(client):
-    with patch("app.api.routes.horses.racing_api.get_horse",
-               new=AsyncMock(return_value=dict(FAKE_HORSE))), \
-         patch("app.api.routes.horses.racing_api.get_horse_results",
-               new=AsyncMock(return_value=FAKE_RESULTS)), \
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)), \
          patch("app.api.routes.horses.secretariat.explain_horse",
                new=AsyncMock(side_effect=RuntimeError("claude timeout"))):
         r = await client.get("/api/horses/h1/explain")
@@ -170,8 +212,8 @@ async def test_horse_explain_wraps_secretariat_error(client):
 
 @pytest.mark.asyncio
 async def test_form_decode_returns_data(client):
-    with patch("app.api.routes.horses.racing_api.get_horse",
-               new=AsyncMock(return_value=FAKE_HORSE)), \
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)), \
          patch("app.api.routes.horses.secretariat.explain_form_string",
                new=AsyncMock(return_value=FAKE_FORM_DECODE)):
         r = await client.get("/api/horses/h1/form/decode?form=1-1-1")
@@ -185,21 +227,45 @@ async def test_form_decode_returns_data(client):
 @pytest.mark.asyncio
 async def test_form_decode_passes_horse_name_to_secretariat(client):
     form_mock = AsyncMock(return_value=FAKE_FORM_DECODE)
-    with patch("app.api.routes.horses.racing_api.get_horse",
-               new=AsyncMock(return_value=FAKE_HORSE)), \
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)), \
          patch("app.api.routes.horses.secretariat.explain_form_string", new=form_mock):
         await client.get("/api/horses/h1/form/decode?form=1-1-F")
     form_mock.assert_called_once_with("1-1-F", "Arkle")
 
 
 @pytest.mark.asyncio
-async def test_form_decode_falls_back_to_horse_id_if_no_name(client):
+async def test_form_decode_uses_runner_form_when_no_param(client):
+    """When no ?form= param is given, uses the runner's own form string."""
     form_mock = AsyncMock(return_value=FAKE_FORM_DECODE)
-    with patch("app.api.routes.horses.racing_api.get_horse",
-               new=AsyncMock(return_value={"horse_id": "h1"})), \
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)), \
          patch("app.api.routes.horses.secretariat.explain_form_string", new=form_mock):
-        await client.get("/api/horses/h1/form/decode?form=1-2")
-    form_mock.assert_called_once_with("1-2", "h1")
+        await client.get("/api/horses/h1/form/decode")
+    form_mock.assert_called_once_with("1-1-1", "Arkle")  # "1-1-1" from FAKE_RUNNER
+
+
+@pytest.mark.asyncio
+async def test_form_decode_400_when_no_form_available(client):
+    """When runner has no form and no ?form= param, returns 400."""
+    runner_no_form = {**FAKE_RUNNER, "form": ""}
+    racecard_no_form = {
+        "racecards": [{"race_id": "race1", "course": "Cheltenham", "runners": [runner_no_form]}]
+    }
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=racecard_no_form)):
+        r = await client.get("/api/horses/h1/form/decode")
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_form_decode_wraps_secretariat_error(client):
+    with patch("app.api.routes.horses.racing_api.get_racecards",
+               new=AsyncMock(return_value=FAKE_RACECARD_DATA)), \
+         patch("app.api.routes.horses.secretariat.explain_form_string",
+               new=AsyncMock(side_effect=RuntimeError("timeout"))):
+        r = await client.get("/api/horses/h1/form/decode?form=1-1-1")
+    assert r.status_code == 502
 
 
 # ---------------------------------------------------------------------------
@@ -208,10 +274,14 @@ async def test_form_decode_falls_back_to_horse_id_if_no_name(client):
 
 @pytest.mark.asyncio
 async def test_search_not_captured_by_horse_id_wildcard(client):
+    """/horses/search?q=... must hit horse_search(), not horse_profile()."""
     search_mock = AsyncMock(return_value=FAKE_SEARCH)
-    profile_mock = AsyncMock(return_value=FAKE_HORSE)
+    racecards_mock = AsyncMock(return_value=EMPTY_RACECARD)
     with patch("app.api.routes.horses.racing_api.search_horses", new=search_mock), \
-         patch("app.api.routes.horses.racing_api.get_horse", new=profile_mock):
-        await client.get("/api/horses/search?name=Arkle")
+         patch("app.api.routes.horses.racing_api.get_racecards", new=racecards_mock):
+        r = await client.get("/api/horses/search?q=Arkle")
+    assert r.status_code == 200
     search_mock.assert_called_once()
-    profile_mock.assert_not_called()
+    # get_racecards is the profile wildcard path — should NOT be called
+    # (API search returned results so no local fallback needed)
+    racecards_mock.assert_not_called()

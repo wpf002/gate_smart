@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 export const useAppStore = create(
   persist(
-    (set, get) => ({
+    (set) => ({
       // User profile
       userProfile: {
         bankroll: 500,
@@ -51,11 +51,11 @@ export const useAppStore = create(
       clearAdvisorMessages: () => set({ advisorMessages: [] }),
     }),
     {
-      name: 'gatesmart-store',
+      name: 'gatesmart-v2',
       partialize: (state) => ({
         userProfile: state.userProfile,
         betSlip: state.betSlip,
-        advisorMessages: state.advisorMessages,
+        // advisorMessages intentionally not persisted — resets on each session
       }),
     }
   )

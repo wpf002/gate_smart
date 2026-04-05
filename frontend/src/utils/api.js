@@ -2,16 +2,16 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 90000,
   headers: { 'Content-Type': 'application/json' },
 });
 
 // ── Races ────────────────────────────────────────────────────────────────────
-export const getRacesToday = () =>
-  api.get('/races/today').then((r) => r.data);
+export const getRacesToday = (region = null) =>
+  api.get('/races/today', { params: region ? { region } : {} }).then((r) => r.data);
 
-export const getRacesByDate = (date) =>
-  api.get(`/races/date/${date}`).then((r) => r.data);
+export const getRacesByDate = (date, region = null) =>
+  api.get(`/races/date/${date}`, { params: region ? { region } : {} }).then((r) => r.data);
 
 export const getRaceDetail = (raceId) =>
   api.get(`/races/${raceId}`).then((r) => r.data);
@@ -27,7 +27,7 @@ export const getHorse = (horseId) =>
   api.get(`/horses/${horseId}`).then((r) => r.data);
 
 export const explainHorse = (horseId) =>
-  api.get(`/horses/${horseId}/explain`).then((r) => r.data);
+  api.get(`/horses/${horseId}/explain`).then((r) => r.data.analysis);
 
 export const searchHorses = (query) =>
   api.get('/horses/search', { params: { q: query } }).then((r) => r.data);
@@ -40,7 +40,7 @@ export const analyzeRace = (raceId, mode = 'balanced', bankroll = null) =>
 
 export const recommendBet = (raceId, bankroll, riskTolerance, experienceLevel) =>
   api
-    .post('/advisor/recommend', {
+    .post('/advisor/recommend-bet', {
       race_id: raceId,
       bankroll,
       risk_tolerance: riskTolerance,
@@ -67,15 +67,18 @@ export const explainFormString = (formString, horseName) =>
     .then((r) => r.data);
 
 // ── Betting utilities ─────────────────────────────────────────────────────────
-export const convertOdds = (odds, toFormat) =>
+export const convertOdds = (fractional, stake = 10) =>
   api
-    .get('/betting/convert', { params: { odds, to_format: toFormat } })
+    .post('/betting/odds/convert', { fractional, stake })
     .then((r) => r.data);
 
 export const calculatePayout = (stake, odds, betType = 'win', eachWay = false) =>
   api
-    .get('/betting/payout', {
-      params: { stake, odds, bet_type: betType, each_way: eachWay },
+    .post('/betting/payout/calculate', {
+      stake,
+      odds: [odds],
+      bet_type: betType,
+      each_way: eachWay,
     })
     .then((r) => r.data);
 

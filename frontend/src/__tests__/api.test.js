@@ -40,6 +40,10 @@ const {
 // Grab the mocked axios instance created inside api.js
 const mockAxios = axios.create();
 
+// Capture the config axios.create was called with *before* beforeEach clears mocks.
+// calls[0] = api.js init call, calls[1] = the line above.
+const axiosInitConfig = axios.create.mock.calls[0]?.[0] ?? {};
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -51,22 +55,46 @@ function mockPost(data) {
   mockAxios.post.mockResolvedValueOnce({ data });
 }
 
+// ── Axios instance config ─────────────────────────────────────────────────────
+
+describe('axios instance config', () => {
+  it('sets timeout to 90000ms so Claude API calls do not abort early', () => {
+    expect(axiosInitConfig.timeout).toBe(90000);
+  });
+
+  it('sets baseURL to /api', () => {
+    expect(axiosInitConfig.baseURL).toBe('/api');
+  });
+});
+
 // ── Races ─────────────────────────────────────────────────────────────────────
 
 describe('getRacesToday', () => {
-  it('calls GET /races/today and returns data', async () => {
+  it('calls GET /races/today with no params when no region given', async () => {
     mockGet({ racecards: [] });
     const result = await getRacesToday();
-    expect(mockAxios.get).toHaveBeenCalledWith('/races/today');
+    expect(mockAxios.get).toHaveBeenCalledWith('/races/today', { params: {} });
     expect(result).toEqual({ racecards: [] });
+  });
+
+  it('passes region param when region is specified', async () => {
+    mockGet({ racecards: [] });
+    await getRacesToday('USA,CAN');
+    expect(mockAxios.get).toHaveBeenCalledWith('/races/today', { params: { region: 'USA,CAN' } });
   });
 });
 
 describe('getRacesByDate', () => {
-  it('calls GET /races/date/:date', async () => {
+  it('calls GET /races/date/:date with no params when no region given', async () => {
     mockGet({ racecards: [] });
     await getRacesByDate('2025-06-01');
-    expect(mockAxios.get).toHaveBeenCalledWith('/races/date/2025-06-01');
+    expect(mockAxios.get).toHaveBeenCalledWith('/races/date/2025-06-01', { params: {} });
+  });
+
+  it('passes region param when region is specified', async () => {
+    mockGet({ racecards: [] });
+    await getRacesByDate('2025-06-01', 'GB,IRE');
+    expect(mockAxios.get).toHaveBeenCalledWith('/races/date/2025-06-01', { params: { region: 'GB,IRE' } });
   });
 });
 
@@ -142,10 +170,10 @@ describe('analyzeRace', () => {
 });
 
 describe('recommendBet', () => {
-  it('calls POST /advisor/recommend with snake_case keys', async () => {
+  it('calls POST /advisor/recommend-bet with snake_case keys', async () => {
     mockPost({});
     await recommendBet('r1', 200, 'low', 'beginner');
-    expect(mockAxios.post).toHaveBeenCalledWith('/advisor/recommend', {
+    expect(mockAxios.post).toHaveBeenCalledWith('/advisor/recommend-bet', {
       race_id: 'r1',
       bankroll: 200,
       risk_tolerance: 'low',
@@ -203,29 +231,56 @@ describe('getBankrollGuide', () => {
 // ── Betting utilities ─────────────────────────────────────────────────────────
 
 describe('convertOdds', () => {
-  it('calls GET /betting/convert with correct params', async () => {
-    mockGet({ decimal: 3.5 });
-    await convertOdds('5/2', 'decimal');
-    expect(mockAxios.get).toHaveBeenCalledWith('/betting/convert', {
-      params: { odds: '5/2', to_format: 'decimal' },
+  it('calls POST /betting/odds/convert with fractional and stake', async () => {
+    mockPost({ decimal: 3.5, fractional: '5/2' });
+    await convertOdds('5/2', 20);
+    expect(mockAxios.post).toHaveBeenCalledWith('/betting/odds/convert', {
+      fractional: '5/2',
+      stake: 20,
+    });
+  });
+
+  it('uses default stake of 10 when not provided', async () => {
+    mockPost({ decimal: 3.5 });
+    await convertOdds('5/2');
+    expect(mockAxios.post).toHaveBeenCalledWith('/betting/odds/convert', {
+      fractional: '5/2',
+      stake: 10,
     });
   });
 });
 
 describe('calculatePayout', () => {
-  it('calls GET /betting/payout with defaults', async () => {
-    mockGet({ total_return: 35, profit: 25 });
+  it('calls POST /betting/payout/calculate with defaults', async () => {
+    mockPost({ estimated_return: 35, estimated_profit: 25 });
     await calculatePayout(10, '5/2');
-    expect(mockAxios.get).toHaveBeenCalledWith('/betting/payout', {
-      params: { stake: 10, odds: '5/2', bet_type: 'win', each_way: false },
+    expect(mockAxios.post).toHaveBeenCalledWith('/betting/payout/calculate', {
+      stake: 10,
+      odds: ['5/2'],
+      bet_type: 'win',
+      each_way: false,
     });
   });
 
   it('passes each_way flag when true', async () => {
-    mockGet({ total_return: 22, profit: 12 });
+    mockPost({ estimated_return: 22, estimated_profit: 12 });
     await calculatePayout(10, '5/2', 'win', true);
-    expect(mockAxios.get).toHaveBeenCalledWith('/betting/payout', {
-      params: { stake: 10, odds: '5/2', bet_type: 'win', each_way: true },
+    expect(mockAxios.post).toHaveBeenCalledWith('/betting/payout/calculate', {
+      stake: 10,
+      odds: ['5/2'],
+      bet_type: 'win',
+      each_way: true,
+    });
+  });
+
+  it('passes custom bet type', async () => {
+    mockPost({ estimated_return: 150, estimated_profit: 140 });
+    await calculatePayout(10, '5/2', 'exacta', false);
+    expect(mockAxios.post).toHaveBeenCalledWith('/betting/payout/calculate', {
+      stake: 10,
+      odds: ['5/2'],
+      bet_type: 'exacta',
+      each_way: false,
     });
   });
 });

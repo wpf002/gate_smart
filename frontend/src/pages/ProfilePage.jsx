@@ -77,7 +77,7 @@ export default function ProfilePage() {
         {/* Bankroll */}
         <SectionLabel>Betting Bankroll</SectionLabel>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--text-muted)' }}>£</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--text-muted)' }}>$</span>
           <input
             type="number"
             min="0"
@@ -118,7 +118,7 @@ export default function ProfilePage() {
             YOUR BETTING PROFILE
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            <div>💰 Bankroll: <strong style={{ color: 'var(--text-primary)' }}>£{userProfile.bankroll.toFixed(2)}</strong></div>
+            <div>💰 Bankroll: <strong style={{ color: 'var(--text-primary)' }}>${userProfile.bankroll.toFixed(2)}</strong></div>
             <div>⚡ Risk: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.riskTolerance}</strong></div>
             <div>📚 Level: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.experienceLevel}</strong></div>
           </div>

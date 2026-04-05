@@ -9,7 +9,13 @@ const DATE_TABS = [
   { key: 'tomorrow', label: 'Tomorrow' },
 ];
 
-function TrackSection({ course, races }) {
+const REGION_TABS = [
+  { key: 'USA,CAN', label: '🇺🇸 USA' },
+  { key: 'GB,IRE', label: '🇬🇧 UK & IRE' },
+  { key: null, label: 'All' },
+];
+
+function TrackSection({ course, races, isTomorrow }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div style={{ marginBottom: 24 }}>
@@ -54,7 +60,7 @@ function TrackSection({ course, races }) {
       {!collapsed && (
         <div className="race-grid">
           {races.map(race => (
-            <RaceCard key={race.race_id} race={race} />
+            <RaceCard key={race.race_id} race={race} isTomorrow={isTomorrow} />
           ))}
         </div>
       )}
@@ -64,10 +70,14 @@ function TrackSection({ course, races }) {
 
 export default function HomePage() {
   const [selectedDay, setSelectedDay] = useState('today');
+  const [selectedRegion, setSelectedRegion] = useState('USA,CAN');
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['races', selectedDay],
-    queryFn: () => selectedDay === 'today' ? getRacesToday() : getRacesByDate('tomorrow'),
+    queryKey: ['races', selectedDay, selectedRegion],
+    queryFn: () =>
+      selectedDay === 'today'
+        ? getRacesToday(selectedRegion)
+        : getRacesByDate('tomorrow', selectedRegion),
   });
 
   const races = data?.racecards ?? [];
@@ -82,9 +92,12 @@ export default function HomePage() {
 
   const tracks = Object.keys(byTrack).sort((a, b) => a.localeCompare(b));
 
-  // Sort races within each track by time
+  // Sort races within each track by off_dt (accurate) then time string fallback
   tracks.forEach(t => {
-    byTrack[t].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    byTrack[t].sort((a, b) => {
+      if (a.off_dt && b.off_dt) return new Date(a.off_dt) - new Date(b.off_dt);
+      return (a.time || '').localeCompare(b.time || '');
+    });
   });
 
   return (
@@ -120,6 +133,30 @@ export default function HomePage() {
               fontWeight: 600,
               cursor: 'pointer',
               transition: 'color 0.15s',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Region tabs */}
+      <div style={{ display: 'flex', gap: 6, padding: '10px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+        {REGION_TABS.map(({ key, label }) => (
+          <button
+            key={String(key)}
+            onClick={() => setSelectedRegion(key)}
+            style={{
+              padding: '5px 14px',
+              borderRadius: 20,
+              border: '1px solid',
+              borderColor: selectedRegion === key ? 'var(--accent-gold)' : 'var(--border-subtle)',
+              background: selectedRegion === key ? 'rgba(201,162,39,0.12)' : 'transparent',
+              color: selectedRegion === key ? 'var(--accent-gold-bright)' : 'var(--text-muted)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s',
             }}
           >
             {label}
@@ -164,7 +201,7 @@ export default function HomePage() {
               {races.length} races across {tracks.length} tracks
             </div>
             {tracks.map(course => (
-              <TrackSection key={course} course={course} races={byTrack[course]} />
+              <TrackSection key={course} course={course} races={byTrack[course]} isTomorrow={selectedDay === 'tomorrow'} />
             ))}
           </>
         )}

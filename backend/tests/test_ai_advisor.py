@@ -26,6 +26,13 @@ FAKE_ANALYSIS = {
     "confidence": "high",
     "beginner_tip": "Bet the favourite",
 }
+FAKE_FORM_DECODE = {
+    "decoded": [{"result": "1", "meaning": "Won"}],
+    "plain_english": "All wins recently",
+    "trend": "consistent",
+    "red_flags": [],
+    "positive_signs": ["Always wins"],
+}
 FAKE_RECOMMENDATION = {
     "primary_bet": {"type": "Win", "selection": "Arkle", "stake": 10.0,
                     "reasoning": "Best form", "expected_value": "positive", "payout_if_wins": "$60"},
@@ -290,6 +297,68 @@ async def test_ask_502_on_secretariat_error(client):
                new=AsyncMock(side_effect=RuntimeError("timeout"))):
         r = await client.post("/api/advisor/ask",
                               content=_body({"question": "help"}),
+                              headers={"Content-Type": "application/json"})
+    assert r.status_code == 502
+    assert "AI error" in r.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# POST /advisor/explain-form
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_explain_form_returns_decoded_result(client):
+    with patch("app.api.routes.ai_advisor.secretariat.explain_form_string",
+               new=AsyncMock(return_value=FAKE_FORM_DECODE)):
+        r = await client.post("/api/advisor/explain-form",
+                              content=_body({"form_string": "1-1-2", "horse_name": "Arkle"}),
+                              headers={"Content-Type": "application/json"})
+    assert r.status_code == 200
+    assert r.json() == FAKE_FORM_DECODE
+
+
+@pytest.mark.asyncio
+async def test_explain_form_passes_form_and_name_to_secretariat(client):
+    mock = AsyncMock(return_value=FAKE_FORM_DECODE)
+    with patch("app.api.routes.ai_advisor.secretariat.explain_form_string", new=mock):
+        await client.post("/api/advisor/explain-form",
+                          content=_body({"form_string": "1-F-2", "horse_name": "Desert Orchid"}),
+                          headers={"Content-Type": "application/json"})
+    mock.assert_called_once_with("1-F-2", "Desert Orchid")
+
+
+@pytest.mark.asyncio
+async def test_explain_form_uses_form_string_as_name_when_name_omitted(client):
+    mock = AsyncMock(return_value=FAKE_FORM_DECODE)
+    with patch("app.api.routes.ai_advisor.secretariat.explain_form_string", new=mock):
+        await client.post("/api/advisor/explain-form",
+                          content=_body({"form_string": "1-2-3"}),
+                          headers={"Content-Type": "application/json"})
+    mock.assert_called_once_with("1-2-3", "1-2-3")
+
+
+@pytest.mark.asyncio
+async def test_explain_form_400_on_empty_form_string(client):
+    r = await client.post("/api/advisor/explain-form",
+                          content=_body({"form_string": "", "horse_name": "Arkle"}),
+                          headers={"Content-Type": "application/json"})
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_explain_form_400_on_bad_body(client):
+    r = await client.post("/api/advisor/explain-form",
+                          content=b"not json",
+                          headers={"Content-Type": "application/json"})
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_explain_form_502_on_secretariat_error(client):
+    with patch("app.api.routes.ai_advisor.secretariat.explain_form_string",
+               new=AsyncMock(side_effect=RuntimeError("claude timeout"))):
+        r = await client.post("/api/advisor/explain-form",
+                              content=_body({"form_string": "1-1-1", "horse_name": "Arkle"}),
                               headers={"Content-Type": "application/json"})
     assert r.status_code == 502
     assert "AI error" in r.json()["detail"]

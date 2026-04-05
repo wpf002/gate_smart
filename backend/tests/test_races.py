@@ -41,11 +41,11 @@ async def test_races_today_passes_region(client):
 
 
 @pytest.mark.asyncio
-async def test_races_today_defaults_region_to_gb(client):
+async def test_races_today_defaults_region_to_none(client):
     mock = AsyncMock(return_value=FAKE_RACECARDS)
     with patch("app.api.routes.races.racing_api.get_racecards", new=mock):
         await client.get("/api/races/today")
-    mock.assert_called_once_with(region="gb")
+    mock.assert_called_once_with(region=None)
 
 
 @pytest.mark.asyncio

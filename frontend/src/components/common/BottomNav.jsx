@@ -1,4 +1,3 @@
-import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '../../store';
 
@@ -16,7 +15,7 @@ export default function BottomNav() {
   const betSlip = useAppStore((s) => s.betSlip);
 
   return (
-    <nav style={{
+    <nav className="bottom-nav" style={{
       height: 'var(--bottom-nav-height)',
       borderTop: '1px solid var(--border-subtle)',
       background: 'var(--bg-secondary)',

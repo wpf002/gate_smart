@@ -104,21 +104,30 @@ def _normalize_race(r: dict) -> dict:
 # ── Racecards ─────────────────────────────────────────────────────────────────
 
 async def get_racecards(date: str = None, region: str = None) -> dict:
-    """Standard plan: /racecards/standard accepts day=today|tomorrow."""
+    """Standard plan: /racecards/standard accepts day=today|tomorrow.
+
+    Always fetches and caches the full card (all regions) to avoid redundant
+    API calls. Region filtering is applied in-memory after the cache read.
+    Region codes match the API's own field values: GB, IRE, USA, CAN, AUS, etc.
+    Multiple regions can be passed comma-separated, e.g. "USA,CAN".
+    """
     if date and date not in ("today", "tomorrow"):
         return {"racecards": [], "total": 0}
 
-    params = {"day": date or "today"}
-    if region:
-        params["region"] = region
+    day_key = date or "today"
 
     raw = await _get(
         "/racecards/standard",
-        params=params,
-        cache_key=f"racecards:{region or 'all'}:{date or 'today'}",
+        params={"day": day_key},
+        cache_key=f"racecards:all:{day_key}",
         ttl=600,
     )
     races = [_normalize_race(r) for r in raw.get("racecards", [])]
+
+    if region:
+        codes = {r.strip().upper() for r in region.split(",")}
+        races = [r for r in races if r.get("region", "").upper() in codes]
+
     return {"racecards": races, "total": len(races)}
 
 

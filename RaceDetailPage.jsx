@@ -245,7 +245,7 @@ export default function RaceDetailPage() {
                 onClick={() => analyzeMutation.mutate()}
                 disabled={isLoading}
               >
-                🤖 Analyze with Secretariat
+                Analyze
               </button>
             </div>
           )}

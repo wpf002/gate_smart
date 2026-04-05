@@ -74,8 +74,23 @@ export default function SearchPage() {
           <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
             <div style={{ fontSize: 40, marginBottom: 10 }}>🔍</div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>No horses found</div>
-            <div style={{ fontSize: 13, marginTop: 6 }}>
-              Try a partial name — searches today's & tomorrow's entries only
+            <div style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6, maxWidth: 300, margin: '8px auto 0' }}>
+              <strong style={{ color: 'var(--text-secondary)' }}>{submitted}</strong> isn't entered in today's or tomorrow's races.
+            </div>
+            <div style={{
+              marginTop: 14,
+              padding: '10px 14px',
+              background: 'var(--bg-elevated)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 12,
+              lineHeight: 1.6,
+              textAlign: 'left',
+              maxWidth: 320,
+              margin: '14px auto 0',
+            }}>
+              <strong style={{ color: 'var(--text-secondary)' }}>Why?</strong> Horse search only works for runners
+              actively entered in upcoming races. Historical horses and those
+              not currently entered won't appear — check back on their race day.
             </div>
           </div>
         )}
@@ -118,8 +133,14 @@ export default function SearchPage() {
                   ].filter(Boolean).join('  ·  ')}
                 </div>
                 {horse.form && (
-                  <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-gold)' }}>
-                    Form: {horse.form}
+                  <div style={{ marginTop: 4 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Form (oldest→newest): </span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)', letterSpacing: '0.12em' }}>
+                      {horse.form}
+                    </span>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                      1=won · 2–9=position · P=pulled up · F=fell · -/=season break
+                    </div>
                   </div>
                 )}
               </div>

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getRaceDetail, analyzeRace } from '../utils/api';
 import { HorseRow, HorseRowSkeleton } from '../components/races/HorseRow';
+import { getDisplayTime, formatDistance, formatPurse } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
 
 const MODES = [
@@ -187,16 +188,25 @@ export default function RaceDetailPage() {
         >
           ←
         </button>
-        {race && (
-          <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent-gold)' }}>
-              {race.time} · {race.course}
+        {race && (() => {
+          const { time: displayTime, label: timeLabel } = getDisplayTime(race);
+          return (
+            <div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent-gold)' }}>
+                {displayTime}
+                {timeLabel && (
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-body)', color: 'var(--text-muted)', marginLeft: 4 }}>
+                    {timeLabel}
+                  </span>
+                )}
+                {' · '}{race.course}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1 }}>
+                {race.title || race.race_name}
+              </div>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1 }}>
-              {race.title || race.race_name}
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       <div style={{ padding: '16px' }}>
@@ -209,10 +219,10 @@ export default function RaceDetailPage() {
             fontSize: 13,
             color: 'var(--text-secondary)',
           }}>
-            {race.distance && <span>📏 {race.distance}</span>}
+            {(race.distance || race.distance_f) && <span>📏 {formatDistance(race.distance, race.distance_f)}</span>}
             {race.surface && <span>🌿 {race.surface}</span>}
             {race.going && <span>⛅ Going: {race.going}</span>}
-            {race.purse && <span>💰 {race.purse}</span>}
+            {formatPurse(race) && <span>💰 {formatPurse(race)}</span>}
             {race.runners?.length && <span>🏇 {race.runners.length} runners</span>}
           </div>
         )}
@@ -253,7 +263,7 @@ export default function RaceDetailPage() {
                 onClick={() => analyzeMutation.mutate()}
                 disabled={isLoading}
               >
-                🤖 Analyze with Secretariat
+                Analyze
               </button>
             </div>
           )}

@@ -28,6 +28,11 @@ class AskRequest(msgspec.Struct):
     context: Optional[dict] = None
 
 
+class ExplainFormRequest(msgspec.Struct):
+    form_string: str
+    horse_name: str = ""
+
+
 @router.post("/analyze")
 async def analyze_race(request: Request) -> JSONResponse:
     raw = await request.body()
@@ -97,3 +102,22 @@ async def ask(request: Request) -> JSONResponse:
         raise HTTPException(status_code=502, detail=f"AI error: {exc}") from exc
 
     return JSONResponse({"answer": answer})
+
+
+@router.post("/explain-form")
+async def explain_form(request: Request) -> JSONResponse:
+    raw = await request.body()
+    try:
+        req = msgspec.json.decode(raw, type=ExplainFormRequest)
+    except Exception:
+        raise HTTPException(status_code=400, detail="malformed request body")
+
+    if not req.form_string:
+        raise HTTPException(status_code=400, detail="form_string is required")
+
+    try:
+        result = await secretariat.explain_form_string(req.form_string, req.horse_name or req.form_string)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI error: {exc}") from exc
+
+    return JSONResponse(result)

@@ -50,11 +50,22 @@ function Message({ msg }) {
             : 'var(--bg-card)',
         border: `1px solid ${isUser ? 'var(--border-gold)' : isError ? 'rgba(192,57,43,0.25)' : 'var(--border-subtle)'}`,
         fontSize: 14,
-        lineHeight: 1.6,
+        lineHeight: 1.7,
         color: isError ? 'var(--accent-red-bright)' : 'var(--text-primary)',
-        whiteSpace: 'pre-wrap',
       }}>
-        {msg.content}
+        {isUser || isError
+          ? msg.content
+          : msg.content.split('\n\n').map((para, i) => (
+              <p key={i} style={{ margin: i === 0 ? 0 : '10px 0 0' }}>
+                {para.split('\n').map((line, j) => (
+                  <span key={j}>
+                    {j > 0 && <br />}
+                    {line}
+                  </span>
+                ))}
+              </p>
+            ))
+        }
       </div>
     </div>
   );

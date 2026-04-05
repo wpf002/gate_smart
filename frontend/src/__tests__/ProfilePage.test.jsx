@@ -94,7 +94,7 @@ describe('ProfilePage', () => {
 
   it('shows profile summary with current values', () => {
     renderPage();
-    expect(screen.getByText(/£500\.00/)).toBeInTheDocument();
+    expect(screen.getByText(/\$500\.00/)).toBeInTheDocument();
     // Risk and level shown in summary
     const mediumEls = screen.getAllByText(/medium/i);
     expect(mediumEls.length).toBeGreaterThan(0);
