@@ -162,6 +162,7 @@ async def unsubscribe_alerts(race_id: str, request: Request) -> JSONResponse:
     return JSONResponse({"unsubscribed": True})
 
 
+
 @router.get("/race/{race_id}")
 async def race_fair_prices(race_id: str) -> JSONResponse:
     """Return all stored fair prices for a race."""
