@@ -141,17 +141,31 @@ async def get_race(race_id: str) -> dict:
                 if r.get("race_id") == race_id:
                     return _normalize_race(r)
 
-    # Cache miss — fetch today's cards
+    # Cache miss — fetch today's standard cards
     data = await get_racecards()
     for r in data.get("racecards", []):
         if r.get("race_id") == race_id:
             return r
 
-    # Try tomorrow
+    # Try tomorrow's standard cards
     data = await get_racecards(date="tomorrow")
     for r in data.get("racecards", []):
         if r.get("race_id") == race_id:
             return r
+
+    # NA race — ID format is "{MEET_ID}-{race_number}", e.g. "IND_1775520000000-1"
+    # meet_id is everything before the final "-"
+    if "-" in race_id:
+        meet_id = race_id.rsplit("-", 1)[0]
+        try:
+            entries_data = await get_na_meet_entries(meet_id)
+            meet_info = {k: v for k, v in entries_data.items() if k != "races"}
+            for race in entries_data.get("races", []):
+                normalized = _normalize_na_race(race, meet_info)
+                if normalized.get("race_id") == race_id:
+                    return normalized
+        except Exception:
+            pass
 
     raise HTTPException(status_code=404, detail="Race not found")
 
@@ -261,43 +275,136 @@ async def get_na_meet_results(meet_id: str) -> dict:
     )
 
 
+def _parse_na_distance_furlongs(description: str, dist_value=None, dist_unit: str = "") -> float | None:
+    """
+    Parse NA distance description to decimal furlongs, handling mixed fractions.
+    "5 1/2 Furlongs" → 5.5    "1 1/16 Miles"  → 8.5    "6 Furlongs"    → 6.0
+    "1 Mile"         → 8.0    "300 Yards"      → ~1.36
+    Falls back to dist_value + dist_unit if description can't be parsed.
+    """
+    import re
+    from fractions import Fraction
+    if description:
+        desc = description.strip()
+        # Handle "X Miles Y Yards" (e.g. "1 Mile 70 Yards")
+        m2 = re.match(
+            r'^(\d+)(?:\s+(\d+)/(\d+))?\s+miles?\s+(\d+)\s+yards?$',
+            desc, re.IGNORECASE,
+        )
+        if m2:
+            whole = int(m2.group(1))
+            frac = Fraction(int(m2.group(2)), int(m2.group(3))) if m2.group(2) else Fraction(0)
+            yards = int(m2.group(4))
+            return float((Fraction(whole) + frac) * 8 + Fraction(yards, 220))
+        # Handle "X [Furlongs|Miles|Yards]" with optional fraction
+        m = re.match(
+            r'^(\d+)(?:\s+(\d+)/(\d+))?\s+(furlong|mile|yard)s?$',
+            desc, re.IGNORECASE,
+        )
+        if m:
+            whole = int(m.group(1))
+            frac = Fraction(int(m.group(2)), int(m.group(3))) if m.group(2) else Fraction(0)
+            total = Fraction(whole) + frac
+            unit = m.group(4).lower()
+            if unit == "furlong":
+                return float(total)
+            if unit == "mile":
+                return float(total * 8)
+            if unit == "yard":
+                return float(total / 220)
+    # Fallback: integer distance_value (loses fractions but better than nothing)
+    if dist_value is not None:
+        try:
+            v = float(dist_value)
+            u = (dist_unit or "").upper()
+            if u == "F":
+                return v
+            if u == "M":
+                return v * 8
+            if u == "Y":
+                return v / 220
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
 def _normalize_na_race(race: dict, meet: dict) -> dict:
     """Normalize a NA race entry to match GateSmart's internal race schema."""
+    from datetime import datetime, timezone as tz
+
+    # race_key is an object like {"race_number": "1", "day_evening": "D"}
+    race_key = race.get("race_key") or {}
+    race_number = race_key.get("race_number", "") if isinstance(race_key, dict) else ""
+    race_id = f"{meet.get('meet_id', '')}-{race_number}" if race_number else meet.get("meet_id", "")
+
+    # post_time_long is Unix milliseconds; convert to ISO-8601
+    post_time_long = race.get("post_time_long")
+    off_dt = ""
+    if post_time_long:
+        try:
+            off_dt = datetime.fromtimestamp(int(post_time_long) / 1000, tz=tz.utc).isoformat()
+        except Exception:
+            pass
+
+    # Distance in furlongs — parse description for fractional accuracy
+    # e.g. "5 1/2 Furlongs" → 5.5, "1 1/16 Miles" → 8.5, "300 Yards" → 1.36
+    distance_f = _parse_na_distance_furlongs(
+        race.get("distance_description", ""),
+        race.get("distance_value"),
+        race.get("distance_unit", ""),
+    )
+
     runners = []
-    for entry in race.get("entries", []):
+    for entry in race.get("runners", []):
+        jockey = entry.get("jockey") or {}
+        trainer = entry.get("trainer") or {}
+        if isinstance(jockey, dict):
+            jockey_name = jockey.get("alias") or (
+                f"{jockey.get('first_name', '')} {jockey.get('last_name', '')}".strip()
+            )
+        else:
+            jockey_name = str(jockey)
+
+        if isinstance(trainer, dict):
+            trainer_name = trainer.get("alias") or (
+                f"{trainer.get('first_name', '')} {trainer.get('last_name', '')}".strip()
+            )
+        else:
+            trainer_name = str(trainer)
+
         runners.append({
-            "horse_id": entry.get("horse_id", ""),
+            "horse_id": str(entry.get("registration_number", "")),
             "horse_name": entry.get("horse_name", ""),
             "horse": entry.get("horse_name", ""),
-            "jockey": entry.get("jockey", ""),
-            "trainer": entry.get("trainer", ""),
-            "number": str(entry.get("programme_number", "")),
-            "cloth_number": str(entry.get("programme_number", "")),
-            "age": str(entry.get("age", "")),
-            "sex": entry.get("sex", ""),
-            "weight": entry.get("weight_lbs", ""),
-            "form": entry.get("form", ""),
+            "jockey": jockey_name,
+            "trainer": trainer_name,
+            "number": str(entry.get("program_number", "")),
+            "cloth_number": str(entry.get("program_number", "")),
+            "age": "",
+            "sex": "",
+            "weight": entry.get("weight", ""),
+            "form": "",
             "odds": entry.get("morning_line_odds", ""),
             "sp": entry.get("morning_line_odds", ""),
-            "official_rating": entry.get("official_rating", None),
+            "official_rating": None,
         })
 
     return {
-        "race_id": race.get("race_id", ""),
-        "course": meet.get("track_name", ""),
+        "race_id": race_id,
+        "course": race.get("track_name") or meet.get("track_name", ""),
         "course_id": meet.get("track_id", ""),
         "date": meet.get("date", ""),
         "time": race.get("post_time", ""),
         "off_time": race.get("post_time", ""),
-        "off_dt": race.get("post_time_utc", ""),
+        "off_dt": off_dt,
         "title": race.get("race_name", ""),
         "race_name": race.get("race_name", ""),
-        "distance": race.get("distance", ""),
-        "distance_f": race.get("distance_furlongs", None),
-        "surface": race.get("surface", ""),
+        "distance": race.get("distance_description", ""),
+        "distance_f": distance_f,
+        "surface": race.get("surface_description", ""),
         "going": race.get("track_condition", ""),
-        "prize": race.get("purse", ""),
-        "race_class": race.get("race_type", ""),
+        "prize": race.get("purse"),
+        "race_class": race.get("race_class", ""),
         "pattern": race.get("grade", ""),
         "region": "USA",
         "runners": runners,
@@ -321,8 +428,10 @@ async def get_na_racecards_full(date: str = None) -> dict:
         try:
             entries_data = await get_na_meet_entries(meet_id)
             races = entries_data.get("races", [])
+            # entries_data carries track_name, track_id, date, meet_id
+            meet_info = {k: v for k, v in entries_data.items() if k != "races"}
             for race in races:
-                all_races.append(_normalize_na_race(race, meet))
+                all_races.append(_normalize_na_race(race, meet_info))
         except Exception:
             continue
 

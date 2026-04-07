@@ -24,9 +24,12 @@ export function getDisplayTime(race) {
  */
 export function formatPurse(race) {
   const raw = race.prize || race.purse;
-  if (!raw) return null;
+  if (raw == null || raw === '') return null;
   const isNorthAmerica = ['USA', 'CAN'].includes((race.region || '').toUpperCase());
-  return isNorthAmerica ? raw.replace(/£/g, '$') : raw;
+  if (typeof raw === 'number') {
+    return isNorthAmerica ? `$${raw.toLocaleString('en-US')}` : `£${raw.toLocaleString('en-US')}`;
+  }
+  return isNorthAmerica ? String(raw).replace(/£/g, '$') : String(raw);
 }
 
 /**
@@ -57,25 +60,22 @@ export function isRacePast(race) {
  *      distanceF=8  (1m)   → "1m"
  *      distanceF=7  (7f)   → "7f"  (sub-mile shown in furlongs only)
  */
-export function formatDistance(dist, distanceF) {
-  const totalF = distanceF ? parseFloat(distanceF) : null;
+export function formatDistance(dist, distanceF, region) {
+  // US races: show the raw description (e.g. "5 1/2 Furlongs", "1 1/16 Miles")
+  if (['USA', 'CAN'].includes((region || '').toUpperCase())) {
+    return dist || (distanceF != null ? `${distanceF}f` : '');
+  }
+
+  const totalF = distanceF != null ? parseFloat(distanceF) : null;
   if (!totalF && !dist) return '';
   if (!totalF) return dist || '';
 
   const wholeMiles = Math.floor(totalF / 8);
-  const remainderF = totalF % 8;
+  const remainderF = Math.round((totalF - wholeMiles * 8) * 10) / 10;
 
-  if (wholeMiles === 0) {
-    return `${totalF}f`;
-  }
-
-  const decimalMiles = totalF / 8;
-  const milesStr = Number.isInteger(decimalMiles) ? `${decimalMiles}m` : `${decimalMiles}m`;
-
-  if (remainderF === 0) return milesStr;
-
-  const remStr = `${Number.isInteger(remainderF) ? remainderF : remainderF}f`;
-  return `${milesStr} / ${remStr}`;
+  if (wholeMiles === 0) return `${remainderF}f`;
+  if (remainderF === 0) return `${wholeMiles}m`;
+  return `${wholeMiles}m / ${remainderF}f`;
 }
 
 export function RaceCardSkeleton() {
@@ -156,7 +156,7 @@ export function RaceCard({ race, isTomorrow = false }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {(race.distance || race.distance_f) && (
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            📏 {formatDistance(race.distance, race.distance_f)}
+            📏 {formatDistance(race.distance, race.distance_f, race.region)}
           </span>
         )}
         {race.surface && (

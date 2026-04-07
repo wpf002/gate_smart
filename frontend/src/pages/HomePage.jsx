@@ -72,15 +72,32 @@ export default function HomePage() {
   const [selectedDay, setSelectedDay] = useState('today');
   const [selectedRegion, setSelectedRegion] = useState('USA,CAN');
 
+  const isAll = selectedRegion === null;
+
+  // Standard (UK/IRE/etc.) fetch — always runs
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['races', selectedDay, selectedRegion],
     queryFn: () =>
       selectedDay === 'today'
-        ? getRacesToday(selectedRegion)
-        : getRacesByDate('tomorrow', selectedRegion),
+        ? getRacesToday(isAll ? null : selectedRegion)
+        : getRacesByDate('tomorrow', isAll ? null : selectedRegion),
   });
 
-  const races = data?.racecards ?? [];
+  // NA fetch — only runs when "All" is selected
+  const { data: naData, refetch: naRefetch } = useQuery({
+    queryKey: ['races', selectedDay, 'USA,CAN'],
+    queryFn: () =>
+      selectedDay === 'today'
+        ? getRacesToday('USA,CAN')
+        : getRacesByDate('tomorrow', 'USA,CAN'),
+    enabled: isAll,
+  });
+
+  const handleRefetch = () => { refetch(); if (isAll) naRefetch(); };
+
+  const races = isAll
+    ? [...(data?.racecards ?? []), ...(naData?.racecards ?? [])]
+    : (data?.racecards ?? []);
 
   // Group by course, sort courses alphabetically
   const byTrack = races.reduce((acc, race) => {
@@ -107,7 +124,7 @@ export default function HomePage() {
         subtitle="AI-powered racing intelligence"
         right={
           <button
-            onClick={() => refetch()}
+            onClick={handleRefetch}
             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18 }}
           >
             ↻
