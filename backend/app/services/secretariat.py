@@ -13,12 +13,14 @@ client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 def _parse_json(text: str) -> dict:
     """Strip markdown fences and parse JSON from a Claude response."""
     text = text.strip()
+    # Strip markdown fences robustly — don't split on ``` inside values
     if text.startswith("```"):
-        parts = text.split("```")
-        text = parts[1] if len(parts) > 1 else text
-        if text.startswith("json"):
-            text = text[4:]
-    # Find the outermost JSON object in case Claude prepended text
+        # Remove opening fence line
+        text = text[text.find("\n") + 1:] if "\n" in text else text[3:]
+        # Remove closing fence if present
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3]
+    # Extract outermost JSON object
     start = text.find("{")
     end = text.rfind("}") + 1
     if start != -1 and end > start:
@@ -48,11 +50,9 @@ BEGINNER EDUCATION:
 - Always explain US-specific terms when they appear (Beyer, claiming race, allowance, etc.)
 - Explain bet types in plain English with examples
 
-Your tone: direct, confident, no fluff. Like a sharp US handicapper explaining picks to a friend.
+Your tone: direct, confident. Sharp handicapper, no padding.
 
-CRITICAL: Always explain WHY. Never give a pick without reasoning. Beginners must be able to follow along.
-
-Always respond in valid JSON as specified in each prompt. No markdown, no extra text outside JSON."""
+Always respond in valid JSON as specified in each prompt. No markdown inside string values. No extra text outside the JSON object."""
 
 
 async def get_tracksense_context(horses: list[dict]) -> dict[str, str]:
@@ -145,10 +145,73 @@ async def get_tracksense_context(horses: list[dict]) -> dict[str, str]:
     return result
 
 
+def _trunc(s: str, limit: int) -> str:
+    """Cut a string at the nearest word boundary below limit."""
+    if not isinstance(s, str) or len(s) <= limit:
+        return s
+    cut = s[:limit].rsplit(' ', 1)[0]
+    return cut.rstrip('.,;') + '.'
+
+
+def _truncate_analysis(data: dict) -> dict:
+    """Hard-cap field lengths after Claude generation — prompt instructions can't guarantee this."""
+    SENT = 180   # one sentence
+    PHRASE = 60  # short phrase
+
+    data['race_summary'] = _trunc(data.get('race_summary', ''), SENT)
+    data['pace_scenario'] = _trunc(data.get('pace_scenario', ''), SENT)
+    data['overall_summary'] = _trunc(data.get('overall_summary', ''), SENT)
+
+    la = data.get('longshot_alert') or {}
+    la['reason'] = _trunc(la.get('reason', ''), SENT)
+
+    for r in data.get('runners', []):
+        r['summary'] = _trunc(r.get('summary', ''), SENT)
+        r['strengths'] = [_trunc(s, PHRASE) for s in r.get('strengths', [])]
+        r['weaknesses'] = [_trunc(s, PHRASE) for s in r.get('weaknesses', [])]
+
+    for b in data.get('recommended_bets', []):
+        b['reasoning'] = _trunc(b.get('reasoning', ''), SENT)
+
+    return data
+
+
+def _truncate_horse(data: dict) -> dict:
+    """Hard-cap field lengths on explain_horse output."""
+    SENT = 180
+    PHRASE = 60
+    data['verdict'] = _trunc(data.get('verdict', ''), SENT)
+    data['form_summary'] = _trunc(data.get('form_summary', ''), SENT)
+    data['key_stats'] = [_trunc(s, PHRASE) for s in data.get('key_stats', [])]
+    data['strengths'] = [_trunc(s, PHRASE) for s in data.get('strengths', [])]
+    data['concerns'] = [_trunc(s, PHRASE) for s in data.get('concerns', [])]
+    return data
+
+
+_HORSE_EXPLAIN_KEEP = {
+    "horse_id", "horse_name", "horse", "age", "weight", "form", "odds", "sp",
+    "jockey", "trainer", "trainer_14_day_percent", "trainer_14_day_runs",
+    "official_rating", "rpr", "ts", "beyer", "last_ran_days_ago",
+    "distance_winner", "course_winner", "going_winner", "headgear",
+    "headgear_first_time", "non_runner", "cloth_number", "stall_number",
+}
+
+
+def _slim_horse_for_explain(horse_data: dict) -> dict:
+    """Keep only the fields that matter for single-horse explanation."""
+    return {k: v for k, v in horse_data.items()
+            if k in _HORSE_EXPLAIN_KEEP and v not in (None, "", [])}
+
+
 def _slim_race_for_prompt(race_data: dict) -> dict:
     """Strip bulky fields that add tokens without helping Claude handicap."""
-    _RUNNER_DROP = {"odds_list", "silk_url", "horse", "number", "draw", "ofr", "lbs", "spotlight", "comment"}
-    _RACE_DROP = {"raw", "big_race", "type_of_race"}
+    _RUNNER_DROP = {
+        "odds_list", "silk_url", "horse", "number", "draw", "ofr", "lbs",
+        "spotlight", "comment", "dob", "colour", "sex", "sire", "dam",
+        "dam_sire", "owner", "bred", "prize", "or_adjusted",
+    }
+    _RACE_DROP = {"raw", "big_race", "type_of_race", "region", "pattern",
+                  "age_band", "sex_restriction", "field_size"}
     slim = {k: v for k, v in race_data.items() if k not in _RACE_DROP and k != "runners"}
     slim["runners"] = [
         {k: v for k, v in r.items() if k not in _RUNNER_DROP and v not in (None, "", [])}
@@ -169,62 +232,126 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
     if ts_context:
         ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values())
 
-    prompt = f"""Analyze this horse race and return a complete handicapping analysis.
+    prompt = f"""Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
 
-Betting Mode: {mode} (safe=minimize risk, balanced=value+safety, aggressive=maximize upside, longshot=overlay value)
-User Bankroll: {f'${bankroll:.2f}' if bankroll else 'Not specified'}
+Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else 'unspecified'}
 
-Return a JSON object with this exact structure:
+Return this JSON exactly:
 {{
-  "race_summary": "1-2 sentence overview of this race",
-  "pace_scenario": "Who will likely lead, what pace shape, how this affects the outcome",
-  "track_bias_notes": "Any relevant track/going/surface bias considerations",
-  "vulnerable_favorite": "horse name or null — is the favorite beatable?",
+  "race_summary": "one sentence",
+  "pace_scenario": "one sentence",
+  "vulnerable_favorite": "horse name or null",
   "runners": [
     {{
-      "horse_id": "id from input",
+      "horse_id": "id",
       "horse_name": "name",
       "contender_score": 0-100,
       "value_score": 0-100,
-      "strengths": ["max 2 key positives"],
-      "weaknesses": ["max 2 key negatives"],
-      "summary": "1 sentence assessment",
+      "strengths": ["short phrase"],
+      "weaknesses": ["short phrase"],
+      "summary": "one sentence",
       "fair_odds": "e.g. 3/1",
       "recommended_bet": "win/place/show/avoid/use-in-exotics or null"
     }}
   ],
-  "top_contenders": ["horse_name_1", "horse_name_2"],
+  "top_contenders": ["name1", "name2"],
   "longshot_alert": {{
     "horse_name": "name or null",
-    "reason": "why this is a live longshot",
+    "reason": "one sentence",
     "odds": "current odds"
   }},
   "recommended_bets": [
     {{
-      "bet_type": "Win/Exacta/Trifecta/etc",
-      "selection": "e.g. Horse A to win or Horse A/B exacta",
-      "reasoning": "why this bet",
-      "suggested_stake": "e.g. 2% of bankroll or $10",
-      "risk_level": "low/medium/high",
-      "potential_payout_description": "rough payout estimate"
+      "bet_type": "Win/Exacta/etc",
+      "selection": "horse(s)",
+      "reasoning": "one sentence",
+      "suggested_stake": "e.g. $10",
+      "risk_level": "low/medium/high"
     }}
   ],
-  "overall_summary": "2-3 sentence plain English summary a beginner can understand",
-  "confidence": "low/medium/high",
-  "beginner_tip": "One specific tip for someone new to betting based on this race"
+  "overall_summary": "one sentence",
+  "confidence": "low/medium/high"
 }}"""
 
     response = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=5000,
+        model="claude-haiku-4-5-20251001",
+        max_tokens=4096,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
 
-    return _parse_json(response.content[0].text)
+    return _truncate_analysis(_parse_json(response.content[0].text))
+
+
+async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None):
+    """
+    Async generator for streaming race analysis.
+    Yields ("chunk", str) during generation, then ("result", dict) when done.
+    """
+    runners = race_data.get("runners", [])
+    ts_context = await get_tracksense_context(runners)
+    ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values()) if ts_context else ""
+
+    prompt = f"""Analyze this race. One sentence per field. Short phrases in arrays.
+
+Race Data:
+{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
+
+Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else 'unspecified'}
+
+Return this JSON exactly:
+{{
+  "race_summary": "one sentence",
+  "pace_scenario": "one sentence",
+  "vulnerable_favorite": "horse name or null",
+  "runners": [
+    {{
+      "horse_id": "id",
+      "horse_name": "name",
+      "contender_score": 0-100,
+      "value_score": 0-100,
+      "strengths": ["short phrase"],
+      "weaknesses": ["short phrase"],
+      "summary": "one sentence",
+      "fair_odds": "e.g. 3/1",
+      "recommended_bet": "win/place/show/avoid/use-in-exotics or null"
+    }}
+  ],
+  "top_contenders": ["name1", "name2"],
+  "longshot_alert": {{
+    "horse_name": "name or null",
+    "reason": "one sentence",
+    "odds": "current odds"
+  }},
+  "recommended_bets": [
+    {{
+      "bet_type": "Win/Exacta/etc",
+      "selection": "horse(s)",
+      "reasoning": "one sentence",
+      "suggested_stake": "e.g. $10",
+      "risk_level": "low/medium/high"
+    }}
+  ],
+  "overall_summary": "one sentence",
+  "confidence": "low/medium/high"
+}}"""
+
+    full_text = ""
+    async with client.messages.stream(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=4096,
+        system=SECRETARIAT_SYSTEM,
+        messages=[{"role": "user", "content": prompt}]
+    ) as stream:
+        async for text in stream.text_stream:
+            full_text += text
+            yield ("chunk", text)
+
+    result = _truncate_analysis(_parse_json(full_text))
+    yield ("result", result)
 
 
 async def explain_horse(horse_data: dict, race_context: dict = None) -> dict:
@@ -235,32 +362,29 @@ async def explain_horse(horse_data: dict, race_context: dict = None) -> dict:
     if horse_name in ts_context:
         ts_block = "\n\n" + ts_context[horse_name]
 
-    prompt = f"""Explain this horse's form and prospects in plain English for a betting app user.
+    prompt = f"""Assess this horse. Phrases only, no sentences in arrays.
 
-Horse Data:
-{json.dumps(horse_data, indent=2)}
+Horse: {json.dumps(_slim_horse_for_explain(horse_data))}
+{f"Race: {json.dumps({k: race_context[k] for k in ('course','distance','going','surface','race_class') if k in race_context})}" if race_context else ""}{ts_block}
 
-{"Race Context:" + json.dumps(race_context, indent=2) if race_context else ""}{ts_block}
-
-Return JSON (all fields required, verdict MUST be a non-empty string):
+Return this JSON exactly:
 {{
-  "verdict": "REQUIRED — 1-2 sentence plain English verdict on whether this horse is worth backing",
-  "form_summary": "Plain English explanation of recent form",
-  "key_stats": ["3-4 most important facts about this horse"],
-  "strengths": ["positives"],
-  "concerns": ["negatives or risks"],
-  "good_for_beginners": true,
-  "beginner_explanation": "Explain this horse to someone who has never bet before"
+  "verdict": "one sentence — back it or not and why",
+  "form_summary": "one sentence on recent form",
+  "key_stats": ["short phrase", "short phrase"],
+  "strengths": ["short phrase", "short phrase"],
+  "concerns": ["short phrase", "short phrase"],
+  "good_for_beginners": true
 }}"""
 
     response = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2500,
+        model="claude-haiku-4-5-20251001",
+        max_tokens=500,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
 
-    return _parse_json(response.content[0].text)
+    return _truncate_horse(_parse_json(response.content[0].text))
 
 
 async def recommend_bet_type(
@@ -346,20 +470,131 @@ Return JSON:
     return _parse_json(response.content[0].text)
 
 
+async def score_horse(horse_data: dict, race_context: dict) -> dict:
+    """
+    Score a single horse across 6 dimensions for the Score Card.
+    Returns structured JSON with scores 0-100 per dimension.
+    """
+    prompt = f"""Score this horse across exactly 6 handicapping dimensions.
+
+Horse Data:
+{json.dumps(horse_data, indent=2)}
+
+Race Context:
+{json.dumps(race_context, indent=2)}
+
+Return a JSON object with EXACTLY this structure, no extra fields:
+{{
+  "horse_id": "from input",
+  "horse_name": "from input",
+  "scores": {{
+    "speed": 0-100,
+    "class": 0-100,
+    "form": 0-100,
+    "pace_fit": 0-100,
+    "value": 0-100,
+    "trainer_jockey": 0-100
+  }},
+  "score_notes": {{
+    "speed": "one sentence explaining this score",
+    "class": "one sentence explaining this score",
+    "form": "one sentence explaining this score",
+    "pace_fit": "one sentence explaining this score",
+    "value": "one sentence explaining this score",
+    "trainer_jockey": "one sentence explaining this score"
+  }},
+  "overall": 0-100,
+  "verdict": "one sentence plain English verdict on this horse"
+}}
+
+Scoring guide:
+- speed: based on speed figures, time comparisons, distance suitability
+- class: based on race class history, level drops/rises, competition quality
+- form: based on recent finishing positions, trajectory, consistency
+- pace_fit: based on running style vs expected pace scenario in this race
+- value: based on current odds vs estimated true probability (overlay=high score)
+- trainer_jockey: based on trainer strike rate, jockey record, combo history
+
+Be honest. A 50 is average. Reserve 80+ for genuinely strong attributes.
+A horse can score 90 on speed and 20 on value — that's fine and useful."""
+
+    response = await client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1000,
+        system=SECRETARIAT_SYSTEM,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return _parse_json(response.content[0].text)
+
+
+async def score_race(race_data: dict) -> dict:
+    """
+    Score all horses in a race concurrently. Returns list of score cards.
+    Called from the /advisor/scorecard endpoint.
+    """
+    import asyncio
+
+    runners = race_data.get("runners", [])
+    if not runners:
+        return {"race_id": race_data.get("race_id", ""), "scorecards": []}
+
+    race_context = {
+        "race_id": race_data.get("race_id", ""),
+        "course": race_data.get("course", ""),
+        "distance": race_data.get("distance", ""),
+        "surface": race_data.get("surface", ""),
+        "going": race_data.get("going", ""),
+        "race_class": race_data.get("race_class", ""),
+        "field_size": len(runners),
+        "runners_summary": [
+            {
+                "horse_id": r.get("horse_id", ""),
+                "horse": r.get("horse", ""),
+                "odds": r.get("odds", ""),
+                "number": r.get("number", "")
+            }
+            for r in runners
+        ]
+    }
+
+    async def _score_safe(horse: dict) -> dict:
+        try:
+            return await score_horse(horse, race_context)
+        except Exception as e:
+            return {
+                "horse_id": horse.get("horse_id", ""),
+                "horse_name": horse.get("horse", ""),
+                "scores": {
+                    "speed": 0, "class": 0, "form": 0,
+                    "pace_fit": 0, "value": 0, "trainer_jockey": 0
+                },
+                "score_notes": {},
+                "overall": 0,
+                "verdict": "Score unavailable",
+                "error": str(e)
+            }
+
+    scorecards = await asyncio.gather(*[_score_safe(h) for h in runners])
+
+    return {
+        "race_id": race_data.get("race_id", ""),
+        "course": race_data.get("course", ""),
+        "scorecards": list(scorecards)
+    }
+
+
 async def answer_betting_question(question: str, context: dict = None) -> str:
     """Free-form Q&A — user can ask Secretariat anything about horse racing."""
-    prompt = f"""A user is asking a horse racing / betting question.
+    prompt = f"""Racing Q&A. Answer in 2-4 sentences. Plain prose only — no bullet points, no bold, no dashes, no lists, no headers. Define jargon inline when needed.
 
 Question: {question}
 {"Context: " + json.dumps(context) if context else ""}
 
-Answer clearly and helpfully. If it's a beginner question, start with the basics. Keep it under 300 words. No jargon without explanation.
-
-Return JSON: {{"answer": "your full answer here"}}"""
+Return JSON: {{"answer": "2-4 sentence plain prose answer here"}}"""
 
     response = await client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=800,
+        max_tokens=300,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )

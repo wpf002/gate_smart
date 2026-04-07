@@ -24,7 +24,7 @@ _GLOSSARY = {
         {"term": "Wheel", "definition": "Using one or more horses in one leg of a multi-race bet while covering all others in the remaining legs. e.g., 'wheel the 3 with all in the double.'", "category": "Bet Types"},
         {"term": "Box", "definition": "Covering all combinations of your selected horses in an exacta, trifecta, or superfecta. A 3-horse exacta box covers all 6 possible orders.", "category": "Bet Types"},
         {"term": "Key Horse", "definition": "A single horse you use in every combination of an exotic bet. e.g., '3 key with 1, 2, 4 in the trifecta' means 3 must win, others fill 2nd/3rd.", "category": "Bet Types"},
-        {"term": "Each Way (UK/Ireland)", "definition": "A two-part bet: Win + Place. Standard in UK/Irish betting, roughly equivalent to US Win + Place bets combined.", "category": "Bet Types"},
+        {"term": "Each Way", "definition": "A two-part bet: Win + Place. Standard in UK/Irish betting, roughly equivalent to US Win + Place bets combined.", "category": "Bet Types"},
 
         # ── RACE TYPES ──────────────────────────────────────────────────────
         {"term": "Maiden Race", "definition": "A race restricted to horses that have never won. Maiden Special Weight (MSW) is for unraced/lightly raced horses; Maiden Claiming is lower quality.", "category": "Race Types"},
@@ -36,7 +36,7 @@ _GLOSSARY = {
         {"term": "Grade 1 (G1)", "definition": "The highest classification of race. Examples: Kentucky Derby, Breeders' Cup Classic, Belmont Stakes, Preakness Stakes.", "category": "Race Types"},
         {"term": "Grade 2 (G2)", "definition": "Second tier stakes race. Highly competitive — G2 winners are often G1 contenders.", "category": "Race Types"},
         {"term": "Grade 3 (G3)", "definition": "Third tier stakes race. Often used as prep races for bigger spots. Winning a G3 is still a significant accomplishment.", "category": "Race Types"},
-        {"term": "Handicap Race", "definition": "Horses carry different weights assigned by the track handicapper to equalize chances. Higher-rated horses carry more weight. Common in UK/Ireland.", "category": "Race Types"},
+        {"term": "Handicap", "definition": "Horses carry different weights assigned by the track handicapper to equalize chances. Higher-rated horses carry more weight. Common in UK/Ireland.", "category": "Race Types"},
         {"term": "Starter Allowance / Starter Handicap", "definition": "A race for horses that have previously started in a claiming race at or below a certain price. A step up from claiming, below open allowance.", "category": "Race Types"},
 
         # ── SPEED & FORM ─────────────────────────────────────────────────────
@@ -45,9 +45,11 @@ _GLOSSARY = {
         {"term": "RPR", "definition": "Racing Post Rating — UK/Ireland horse quality rating assigned by Racing Post handicappers after each run.", "category": "Speed & Form"},
         {"term": "Speed Figure", "definition": "Any numerical rating of how fast a horse ran, adjusted for track condition and bias. Allows comparison across different tracks and surfaces.", "category": "Speed & Form"},
         {"term": "Track Variant", "definition": "A correction applied to a day's times to account for whether the track was playing fast or slow. Essential for accurate speed figures.", "category": "Speed & Form"},
-        {"term": "Form String", "definition": "A horse's recent results shown as a sequence, oldest to newest. In the US: 1=win, 2–9=finishing position. UK uses same plus P=pulled up, F=fell. '-' or '/' = season break.", "category": "Speed & Form"},
+        {"term": "Form", "definition": "A horse's recent results shown as a sequence, oldest to newest. In the US: 1=win, 2–9=finishing position. UK uses same plus P=pulled up, F=fell. '-' or '/' = season break.", "category": "Speed & Form"},
         {"term": "Last Run / Days Since Last Race", "definition": "How many days since the horse's most recent race. Horses returning after 60+ days are 'freshened.' Can be a positive (rested) or negative (rusty) depending on trainer patterns.", "category": "Speed & Form"},
         {"term": "Workout", "definition": "A timed training run at the track. Bullet workouts (fastest of the day at a distance) are a positive sign. Reported in the Daily Racing Form as 'blowouts' (short) or full works.", "category": "Speed & Form"},
+
+        {"term": "Furlong", "definition": "The unit of distance in horse racing. 1 furlong = 1/8 of a mile = 220 yards. A 6-furlong sprint takes roughly 1 minute 10 seconds. The Kentucky Derby is 10 furlongs (1.25 miles).", "category": "Speed & Form"},
 
         # ── PACE & RUNNING STYLE ─────────────────────────────────────────────
         {"term": "Pace", "definition": "The speed at which the early fractions of a race are run. Affects which running styles (front-runners vs closers) are favoured.", "category": "Pace"},
@@ -60,6 +62,7 @@ _GLOSSARY = {
         {"term": "Pace Scenario", "definition": "The predicted flow of a race based on which horses want to run early. Contested pace (multiple front-runners) often sets up closers; uncontested pace sets up the lone speed horse.", "category": "Pace"},
 
         # ── TRACK & CONDITIONS ───────────────────────────────────────────────
+        {"term": "Going", "definition": "The condition of the racing surface. US dirt: Fast, Good, Sloppy, Muddy, Sealed. Turf: Firm, Good, Yielding, Soft. A horse's going preference is one of the most important form factors.", "category": "Track & Conditions"},
         {"term": "Track Bias", "definition": "A consistent advantage for horses running in a specific part of the track (inside rail, outside path) or using a specific running style. Must be identified and exploited.", "category": "Track & Conditions"},
         {"term": "Rail Bias", "definition": "When horses running on the inside (rail) have a consistent advantage or disadvantage. Varies by track and weather.", "category": "Track & Conditions"},
         {"term": "Fast (Going)", "definition": "US dirt track condition — firm, dry surface. Favours front-runners and speed horses. Opposite of Sloppy.", "category": "Track & Conditions"},
@@ -85,7 +88,7 @@ _GLOSSARY = {
         {"term": "Morning Line", "definition": "Estimated odds set by the track handicapper before betting opens. Not a prediction — a rough guide. Actual odds shift based on betting action.", "category": "Odds & Value"},
         {"term": "Tote / Pari-Mutuel", "definition": "US betting system where all bets go into a pool, the track takes its cut (takeout), and remaining money is divided among winners. Odds aren't fixed until the race goes off.", "category": "Odds & Value"},
         {"term": "Takeout", "definition": "The percentage the track keeps from each betting pool. Win/Place/Show: ~17–18%. Exotics: 20–25%. Lower takeout = better value for bettors.", "category": "Odds & Value"},
-        {"term": "SP (Starting Price)", "definition": "The final odds when the race begins. UK/Ireland standard for settling bets without a fixed price.", "category": "Odds & Value"},
+        {"term": "SP", "definition": "Starting Price — the final odds when the race begins. UK/Ireland standard for settling bets without a fixed price.", "category": "Odds & Value"},
         {"term": "Overlay", "definition": "A horse priced higher (longer odds) than its true probability warrants — a value bet. If you think a horse has a 25% chance but it's 6/1 (14%), it's an overlay.", "category": "Odds & Value"},
         {"term": "Underlay", "definition": "A horse priced lower (shorter odds) than its true probability warrants — poor value. The public favorite is often underlaid.", "category": "Odds & Value"},
         {"term": "Dead Heat", "definition": "A tie between two or more horses at the finish line. Winnings are split proportionally.", "category": "Odds & Value"},
@@ -160,12 +163,6 @@ _BEGINNER_GUIDE = {
             "title": "Class — The Most Underrated Factor",
             "content": "The class ladder from bottom to top: Maiden Claiming → Maiden Special Weight → Claiming → Allowance → Optional Claimer → Stakes → Graded Stakes (G3, G2, G1). A horse dropping from a $50,000 claimer to a $25,000 claimer is a class drop — often a positive sign. A horse moving from an allowance to a G3 stakes is a big class rise — a negative unless it has shown top-class ability.",
             "key_point": "Class drops are betting opportunities. When a horse tries a lower level than it's been running, it's often physically compromised — but the trainer still thinks it can win there.",
-        },
-        {
-            "step": 8,
-            "title": "Using GateSmart (Secretariat)",
-            "content": "Secretariat analyzes each race using form, Beyer figures, pace scenarios, trainer/jockey stats, and track bias. It gives every horse a Contender Score and Value Score, highlights the best bets, and flags live longshots. Use it as your starting point. Read the reasoning — that's how you learn to handicap.",
-            "key_point": "Secretariat explains WHY it likes a horse. Understanding the reasoning makes you a better handicapper, not just a tip-follower.",
         },
     ],
     "golden_rules": [

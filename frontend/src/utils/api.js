@@ -51,6 +51,9 @@ export const recommendBet = (raceId, bankroll, riskTolerance, experienceLevel) =
 export const askAdvisor = (question, context = null) =>
   api.post('/advisor/ask', { question, context }).then((r) => r.data);
 
+export const getScoreCard = (raceId) =>
+  api.post('/advisor/scorecard', { race_id: raceId }).then((r) => r.data);
+
 // ── Education ────────────────────────────────────────────────────────────────
 export const getGlossary = () =>
   api.get('/education/glossary').then((r) => r.data);

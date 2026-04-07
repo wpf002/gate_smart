@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store';
+import RadarChart from './RadarChart';
 
 export function HorseRowSkeleton() {
   return (
@@ -22,24 +23,37 @@ export function HorseRowSkeleton() {
   );
 }
 
-export function HorseRow({ horse, analysis, raceId }) {
+/**
+ * Single runner row.
+ *
+ * Props:
+ *   horse      {object}   runner data from the race API
+ *   analysis   {object}   full Secretariat analysis (optional)
+ *   raceId     {string}
+ *   scorecards {array}    array of scorecards from /advisor/scorecard (optional)
+ */
+export function HorseRow({ horse, analysis, raceId, scorecards = [] }) {
   const navigate = useNavigate();
   const addToBetSlip = useAppStore((s) => s.addToBetSlip);
   const betSlip = useAppStore((s) => s.betSlip);
+  const [expanded, setExpanded] = useState(false);
   const [added, setAdded] = useState(false);
 
-  // Find this horse in analysis runners if available
+  // Match analysis runner
   const analysisData = analysis?.runners?.find(
     (r) => r.horse_id === horse.horse_id || r.horse_name === horse.horse_name
+  );
+
+  // Match scorecard
+  const scorecard = scorecards.find(
+    (sc) => sc.horse_id === horse.horse_id || sc.horse_name === horse.horse_name
   );
 
   const score = analysisData?.contender_score;
   const scoreClass =
     score >= 70 ? 'score-high' : score >= 40 ? 'score-med' : score != null ? 'score-low' : null;
 
-  const isInSlip = betSlip.some(
-    (b) => b.horse_id === horse.horse_id
-  );
+  const isInSlip = betSlip.some((b) => b.horse_id === horse.horse_id);
 
   const handleAddBet = (e) => {
     e.stopPropagation();
@@ -55,30 +69,45 @@ export function HorseRow({ horse, analysis, raceId }) {
     setTimeout(() => setAdded(false), 1500);
   };
 
+  const hasExpandedContent = analysisData?.summary || scorecard;
+
   return (
     <div
       style={{
         background: 'var(--bg-card)',
         borderRadius: 'var(--radius-md)',
-        padding: '12px',
         border: '1px solid var(--border-subtle)',
-        cursor: 'pointer',
+        overflow: 'hidden',
         transition: 'background 0.15s',
       }}
-      onClick={() => navigate(`/horse/${horse.horse_id}`)}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-card-hover)')}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-card)')}
     >
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        {/* Score ring */}
+      {/* ── Header row (always visible) ─────────────────────────────── */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 12,
+          alignItems: 'center',
+          padding: '12px',
+          cursor: hasExpandedContent ? 'pointer' : 'default',
+        }}
+        onClick={() => { if (hasExpandedContent) setExpanded(e => !e); }}
+        onMouseEnter={e => { if (hasExpandedContent) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        {/* Score ring or stall number */}
         {scoreClass ? (
           <div className={`score-ring ${scoreClass}`}>{score}</div>
         ) : (
           <div style={{
-            width: 40, height: 40, borderRadius: '50%',
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
             background: 'var(--bg-elevated)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'var(--font-display)', fontSize: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'var(--font-display)',
+            fontSize: 16,
             color: 'var(--text-muted)',
             flexShrink: 0,
           }}>
@@ -104,7 +133,7 @@ export function HorseRow({ horse, analysis, raceId }) {
             <div style={{ marginTop: 4 }}>
               <span className={`badge badge-${
                 analysisData.recommended_bet === 'avoid' ? 'red' :
-                analysisData.recommended_bet === 'win' ? 'green' : 'gold'
+                analysisData.recommended_bet === 'win'   ? 'green' : 'gold'
               }`}>
                 {analysisData.recommended_bet}
               </span>
@@ -112,7 +141,7 @@ export function HorseRow({ horse, analysis, raceId }) {
           )}
         </div>
 
-        {/* Odds + add button */}
+        {/* Odds + actions */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
           {(horse.odds || horse.sp) && (
             <span className="odds-chip">{horse.odds || horse.sp}</span>
@@ -138,21 +167,84 @@ export function HorseRow({ horse, analysis, raceId }) {
           {isInSlip && (
             <span style={{ fontSize: 11, color: 'var(--accent-green-bright)' }}>✓ In slip</span>
           )}
+          {hasExpandedContent && (
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+              {expanded ? '▲' : '▼'}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Analysis summary if available */}
-      {analysisData?.summary && (
-        <p style={{
-          marginTop: 10,
-          paddingTop: 10,
+      {/* ── Expanded section ─────────────────────────────────────────── */}
+      {expanded && (
+        <div style={{
           borderTop: '1px solid var(--border-subtle)',
-          fontSize: 12,
-          color: 'var(--text-secondary)',
-          lineHeight: 1.5,
+          padding: '12px',
+          background: 'var(--bg-secondary)',
         }}>
-          {analysisData.summary}
-        </p>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            {/* Analysis text */}
+            {analysisData?.summary && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {analysisData.strengths?.length > 0 && (
+                  <div style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-green-bright)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
+                      Strengths
+                    </div>
+                    {analysisData.strengths.map((s, i) => (
+                      <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>· {s}</div>
+                    ))}
+                  </div>
+                )}
+                {analysisData.weaknesses?.length > 0 && (
+                  <div style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-red-bright)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
+                      Concerns
+                    </div>
+                    {analysisData.weaknesses.map((w, i) => (
+                      <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>· {w}</div>
+                    ))}
+                  </div>
+                )}
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  {analysisData.summary}
+                </p>
+              </div>
+            )}
+
+            {/* Compact radar fingerprint (visual only — no labels, no overall text) */}
+            {scorecard && (
+              <div style={{ flexShrink: 0 }}>
+                <RadarChart
+                  scores={scorecard.scores}
+                  overall={scorecard.overall}
+                  size={120}
+                  animate={false}
+                  showLabels={false}
+                  showOverall={false}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* View horse profile link */}
+          <button
+            onClick={(e) => { e.stopPropagation(); navigate(`/horse/${horse.horse_id}`); }}
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              fontWeight: 600,
+              color: 'var(--text-muted)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              textDecoration: 'underline',
+            }}
+          >
+            View horse profile →
+          </button>
+        </div>
       )}
     </div>
   );
