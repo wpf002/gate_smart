@@ -283,24 +283,24 @@ async def test_webhook_accepts_valid_hmac_signature(client_with_secret):
 
 
 # ---------------------------------------------------------------------------
-# Part 3 — get_tracksense_context
+# Part 3 — get_hardware_and_historical_context
 #
-# `get_tracksense_context` does `from app.core.cache import cache_get` as a
+# `get_hardware_and_historical_context` does `from app.core.cache import cache_get` as a
 # local import inside the function, so the correct patch target is
 # `app.core.cache.cache_get` (the function is looked up fresh each call).
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_context_returns_empty_for_unmapped_horse():
-    from app.services.secretariat import get_tracksense_context
+    from app.services.secretariat import get_hardware_and_historical_context
     with patch("app.core.cache.cache_get", new=AsyncMock(return_value=None)):
-        result = await get_tracksense_context([{"horse_id": "unknown", "horse": "Ghost"}])
+        result = await get_hardware_and_historical_context([{"horse_id": "unknown", "horse": "Ghost"}])
     assert result == {}
 
 
 @pytest.mark.asyncio
 async def test_context_returns_empty_when_no_sectionals():
-    from app.services.secretariat import get_tracksense_context
+    from app.services.secretariat import get_hardware_and_historical_context
 
     async def fake_get(key):
         if "map:" in key:
@@ -308,13 +308,13 @@ async def test_context_returns_empty_when_no_sectionals():
         return None
 
     with patch("app.core.cache.cache_get", new=fake_get):
-        result = await get_tracksense_context([{"horse_id": HORSE_ID, "horse": HORSE_NAME}])
+        result = await get_hardware_and_historical_context([{"horse_id": HORSE_ID, "horse": HORSE_NAME}])
     assert result == {}
 
 
 @pytest.mark.asyncio
 async def test_context_builds_context_string():
-    from app.services.secretariat import get_tracksense_context
+    from app.services.secretariat import get_hardware_and_historical_context
 
     sectionals_data = [
         {
@@ -335,7 +335,7 @@ async def test_context_builds_context_string():
         return None
 
     with patch("app.core.cache.cache_get", new=fake_get):
-        result = await get_tracksense_context([{"horse_id": HORSE_ID, "horse": HORSE_NAME}])
+        result = await get_hardware_and_historical_context([{"horse_id": HORSE_ID, "horse": HORSE_NAME}])
 
     assert HORSE_NAME in result
     ctx = result[HORSE_NAME]
@@ -347,19 +347,19 @@ async def test_context_builds_context_string():
 
 @pytest.mark.asyncio
 async def test_context_never_raises():
-    from app.services.secretariat import get_tracksense_context
+    from app.services.secretariat import get_hardware_and_historical_context
 
     async def exploding_get(key):
         raise RuntimeError("redis exploded")
 
     with patch("app.core.cache.cache_get", new=exploding_get):
-        result = await get_tracksense_context([{"horse_id": HORSE_ID, "horse": HORSE_NAME}])
+        result = await get_hardware_and_historical_context([{"horse_id": HORSE_ID, "horse": HORSE_NAME}])
     assert result == {}
 
 
 @pytest.mark.asyncio
 async def test_context_trend_improving():
-    from app.services.secretariat import get_tracksense_context
+    from app.services.secretariat import get_hardware_and_historical_context
 
     # Speeds 48, 49, 50, 51, 52, 53 → career avg 50.5, last-3 avg 52.0 → improving
     sectionals_data = [
@@ -376,21 +376,21 @@ async def test_context_trend_improving():
         return None
 
     with patch("app.core.cache.cache_get", new=fake_get):
-        result = await get_tracksense_context([{"horse_id": HORSE_ID, "horse": HORSE_NAME}])
+        result = await get_hardware_and_historical_context([{"horse_id": HORSE_ID, "horse": HORSE_NAME}])
 
     assert "improving" in result[HORSE_NAME]
 
 
 @pytest.mark.asyncio
 async def test_context_skips_horse_with_no_id():
-    from app.services.secretariat import get_tracksense_context
-    result = await get_tracksense_context([{"horse": "No ID Horse"}])
+    from app.services.secretariat import get_hardware_and_historical_context
+    result = await get_hardware_and_historical_context([{"horse": "No ID Horse"}])
     assert result == {}
 
 
 @pytest.mark.asyncio
 async def test_context_uses_horse_name_key():
-    from app.services.secretariat import get_tracksense_context
+    from app.services.secretariat import get_hardware_and_historical_context
 
     sectionals_data = [
         {"race_name": "X", "completed_at": "2026-01-01",
@@ -405,7 +405,7 @@ async def test_context_uses_horse_name_key():
         return None
 
     with patch("app.core.cache.cache_get", new=fake_get):
-        result = await get_tracksense_context([{"horse_id": HORSE_ID, "horse": HORSE_NAME}])
+        result = await get_hardware_and_historical_context([{"horse_id": HORSE_ID, "horse": HORSE_NAME}])
 
     assert HORSE_NAME in result
     assert len(result) == 1

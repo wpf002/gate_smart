@@ -55,89 +55,132 @@ Your tone: direct, confident. Sharp handicapper, no padding.
 Always respond in valid JSON as specified in each prompt. No markdown inside string values. No extra text outside the JSON object."""
 
 
-async def get_tracksense_context(horses: list[dict]) -> dict[str, str]:
+async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, str]:
     """
-    For each horse dict in the list (expects keys: horse_id, horse or horse_name),
-    check Redis for tracksense:map:{horse_id}.
-    If mapping exists, fetch tracksense:sectionals:{epc}.
-    If sectional data exists (at least 1 race), compute:
-      - Average speed_kmh per gate_name across all stored races
-      - Best single sectional across career (highest speed_kmh, note gate and date)
-      - Last 3 races average speed vs overall career average (trend direction)
-    Return dict keyed by horse_name (string) → formatted context string.
-    Horses with no TrackSense data are not included in the return dict.
-    This function must never raise — catch all exceptions and return empty dict.
+    For each horse, gather two data sources and merge into a single context string:
+      1. TrackSense real-time sectional data (RFID gate timings)
+      2. Equibase historical speed figures (2023 US result charts)
+    Returns dict keyed by horse_name → merged context string.
+    Horses with no data from either source are not included.
+    Never raises — catch all exceptions and return empty dict.
     """
+    import re
     from app.core.cache import cache_get
 
     result = {}
+
     for horse in horses:
         try:
-            horse_id = horse.get("horse_id") or horse.get("id", "")
             horse_name = horse.get("horse") or horse.get("horse_name", "unknown")
-            if not horse_id:
-                continue
+            tracksense_ctx = None
+            equibase_ctx = None
 
-            mapping = await cache_get(f"tracksense:map:{horse_id}")
-            if not mapping:
-                continue
+            # ── TrackSense ────────────────────────────────────────────────────
+            horse_id = horse.get("horse_id") or horse.get("id", "")
+            if horse_id:
+                try:
+                    mapping = await cache_get(f"tracksense:map:{horse_id}")
+                    if mapping:
+                        epc = mapping.get("epc")
+                        if epc:
+                            sectionals_data = await cache_get(f"tracksense:sectionals:{epc}")
+                            if sectionals_data and len(sectionals_data) > 0:
+                                gate_speeds: dict[str, list[float]] = {}
+                                for race in sectionals_data:
+                                    for s in race.get("sectionals", []):
+                                        gname = s["gate_name"]
+                                        if gname not in gate_speeds:
+                                            gate_speeds[gname] = []
+                                        gate_speeds[gname].append(s["speed_kmh"])
 
-            epc = mapping.get("epc")
-            if not epc:
-                continue
+                                avg_by_gate = {g: round(sum(v) / len(v), 1) for g, v in gate_speeds.items()}
 
-            sectionals_data = await cache_get(f"tracksense:sectionals:{epc}")
-            if not sectionals_data or len(sectionals_data) == 0:
-                continue
+                                best = None
+                                for race in sectionals_data:
+                                    for s in race.get("sectionals", []):
+                                        if best is None or s["speed_kmh"] > best["speed_kmh"]:
+                                            best = {**s, "race_name": race.get("race_name", ""), "completed_at": race.get("completed_at", "")}
 
-            # compute averages per gate
-            gate_speeds: dict[str, list[float]] = {}
-            for race in sectionals_data:
-                for s in race.get("sectionals", []):
-                    gname = s["gate_name"]
-                    if gname not in gate_speeds:
-                        gate_speeds[gname] = []
-                    gate_speeds[gname].append(s["speed_kmh"])
+                                all_race_avgs = []
+                                for race in sectionals_data:
+                                    sects = race.get("sectionals", [])
+                                    if sects:
+                                        all_race_avgs.append(sum(s["speed_kmh"] for s in sects) / len(sects))
 
-            avg_by_gate = {g: round(sum(v) / len(v), 1) for g, v in gate_speeds.items()}
+                                career_avg = round(sum(all_race_avgs) / len(all_race_avgs), 1) if all_race_avgs else 0
+                                recent_avg = round(sum(all_race_avgs[-3:]) / len(all_race_avgs[-3:]), 1) if len(all_race_avgs) >= 1 else 0
+                                if recent_avg > career_avg + 0.5:
+                                    trend = f"improving ({recent_avg} km/h recent vs {career_avg} km/h career)"
+                                elif recent_avg < career_avg - 0.5:
+                                    trend = f"declining ({recent_avg} km/h recent vs {career_avg} km/h career)"
+                                else:
+                                    trend = f"stable ({recent_avg} km/h recent vs {career_avg} km/h career)"
 
-            # best single sectional
-            best = None
-            for race in sectionals_data:
-                for s in race.get("sectionals", []):
-                    if best is None or s["speed_kmh"] > best["speed_kmh"]:
-                        best = {**s, "race_name": race.get("race_name", ""), "completed_at": race.get("completed_at", "")}
+                                n_races = len(sectionals_data)
+                                gate_summary = ", ".join([f"{g}: {v} km/h" for g, v in avg_by_gate.items()])
+                                best_summary = (
+                                    f"{best['gate_name']} at {best['speed_kmh']} km/h ({best.get('race_name', '')})"
+                                    if best else "n/a"
+                                )
 
-            # trend: last 3 vs career
-            all_race_avgs = []
-            for race in sectionals_data:
-                sects = race.get("sectionals", [])
-                if sects:
-                    all_race_avgs.append(sum(s["speed_kmh"] for s in sects) / len(sects))
+                                tracksense_ctx = (
+                                    f"TRACKSENSE HARDWARE DATA (real sectional timing from RFID gate network):\n"
+                                    f"{horse_name} career sectionals ({n_races} races):\n"
+                                    f"- Average speed by segment: {gate_summary}\n"
+                                    f"- Best sectional: {best_summary}\n"
+                                    f"- Recent trend: {trend}\n"
+                                    f"Note: This data is sourced from physical RFID timing gates and is more "
+                                    f"accurate than standard form guide speed estimates."
+                                )
+                except Exception:
+                    pass
 
-            career_avg = round(sum(all_race_avgs) / len(all_race_avgs), 1) if all_race_avgs else 0
-            recent_avg = round(sum(all_race_avgs[-3:]) / len(all_race_avgs[-3:]), 1) if len(all_race_avgs) >= 1 else 0
-            if recent_avg > career_avg + 0.5:
-                trend = f"improving ({recent_avg} km/h recent vs {career_avg} km/h career)"
-            elif recent_avg < career_avg - 0.5:
-                trend = f"declining ({recent_avg} km/h recent vs {career_avg} km/h career)"
-            else:
-                trend = f"stable ({recent_avg} km/h recent vs {career_avg} km/h career)"
+            # ── Equibase historical speed figures ─────────────────────────────
+            try:
+                eq_key = horse_name.lower().replace(" ", "_")
+                eq_key = re.sub(r"[^a-z0-9_]", "", eq_key)
+                equibase_data = await cache_get(f"equibase:horse:{eq_key}")
+                if equibase_data and isinstance(equibase_data, list) and len(equibase_data) > 0:
+                    ratings = [r["speed_rating"] for r in equibase_data if r.get("speed_rating") is not None]
+                    if ratings:
+                        best_rating = max(ratings)
+                        avg_rating = round(sum(ratings) / len(ratings), 1)
+                        recent_rating = equibase_data[0].get("speed_rating")
+                        n_races_eq = len(equibase_data)
 
-            n_races = len(sectionals_data)
-            gate_summary = ", ".join([f"{g}: {v} km/h" for g, v in avg_by_gate.items()])
-            best_summary = f"{best['gate_name']} at {best['speed_kmh']} km/h ({best.get('race_name', '')})" if best else "n/a"
+                        best_race = max(
+                            (r for r in equibase_data if r.get("speed_rating") is not None),
+                            key=lambda x: x["speed_rating"],
+                        )
 
-            context = (
-                f"TRACKSENSE HARDWARE DATA (real sectional timing from RFID gate network):\n"
-                f"{horse_name} career sectionals ({n_races} races):\n"
-                f"- Average speed by segment: {gate_summary}\n"
-                f"- Best sectional: {best_summary}\n"
-                f"- Recent trend: {trend}\n"
-                f"Note: This data is sourced from physical RFID timing gates and is more "
-                f"accurate than standard form guide speed estimates."
-            )
-            result[horse_name] = context
+                        equibase_ctx = (
+                            f"EQUIBASE HISTORICAL DATA (2023 US result charts):\n"
+                            f"{horse_name} — {n_races_eq} races in dataset:\n"
+                            f"- Best speed rating: {best_rating} (TrackMaster figure)\n"
+                            f"- Recent speed rating: {recent_rating} (most recent 2023 race)\n"
+                            f"- Average speed rating: {avg_rating}\n"
+                            f"- Best performance: {best_race['race_type']} at {best_race['track_name']}, "
+                            f"{best_race['race_date']}, finished {best_race['official_finish']}, "
+                            f"rating {best_race['speed_rating']}\n"
+                            f"Note: Speed ratings are TrackMaster figures. "
+                            f"Higher = faster. 100+ = stakes quality. "
+                            f"80-99 = allowance/claiming competitive. "
+                            f"Below 70 = bottom-level."
+                        )
+            except Exception:
+                pass
+
+            # ── Merge ─────────────────────────────────────────────────────────
+            if tracksense_ctx and equibase_ctx:
+                result[horse_name] = (
+                    "HARDWARE & HISTORICAL DATA:\n"
+                    + tracksense_ctx + "\n\n"
+                    + equibase_ctx
+                )
+            elif tracksense_ctx:
+                result[horse_name] = tracksense_ctx
+            elif equibase_ctx:
+                result[horse_name] = equibase_ctx
 
         except Exception:
             continue
@@ -226,7 +269,7 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
     Returns structured analysis of all runners and recommended bets.
     """
     runners = race_data.get("runners", [])
-    ts_context = await get_tracksense_context(runners)
+    ts_context = await get_hardware_and_historical_context(runners)
 
     ts_block = ""
     if ts_context:
@@ -297,7 +340,7 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
     Yields ("chunk", str) during generation, then ("result", dict) when done.
     """
     runners = race_data.get("runners", [])
-    ts_context = await get_tracksense_context(runners)
+    ts_context = await get_hardware_and_historical_context(runners)
     ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values()) if ts_context else ""
 
     prompt = f"""Analyze this race. One sentence per field. Short phrases in arrays.
@@ -361,7 +404,7 @@ Return this JSON exactly:
 
 async def explain_horse(horse_data: dict, race_context: dict = None) -> dict:
     """Explain a single horse's form and prospects in plain English."""
-    ts_context = await get_tracksense_context([horse_data])
+    ts_context = await get_hardware_and_historical_context([horse_data])
     horse_name = horse_data.get("horse") or horse_data.get("horse_name", "")
     ts_block = ""
     if horse_name in ts_context:
