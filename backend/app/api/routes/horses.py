@@ -6,7 +6,7 @@ router = APIRouter()
 
 
 async def _find_runner_in_racecards(horse_id: str) -> tuple[dict | None, dict | None]:
-    """Search today's and tomorrow's racecards for a runner by horse_id."""
+    """Search today's and tomorrow's racecards for a runner by horse_id (UK/IRE + NA)."""
     for day in (None, "tomorrow"):
         try:
             data = await racing_api.get_racecards(date=day)
@@ -17,6 +17,19 @@ async def _find_runner_in_racecards(horse_id: str) -> tuple[dict | None, dict | 
                         return runner, race_ctx
         except Exception:
             continue
+
+    # Also search NA racecards
+    for day in (None, "tomorrow"):
+        try:
+            data = await racing_api.get_na_racecards_full(date=day)
+            for race in data.get("racecards", []):
+                for runner in race.get("runners", []):
+                    if runner.get("horse_id") == horse_id:
+                        race_ctx = {k: v for k, v in race.items() if k != "runners"}
+                        return runner, race_ctx
+        except Exception:
+            continue
+
     return None, None
 
 
