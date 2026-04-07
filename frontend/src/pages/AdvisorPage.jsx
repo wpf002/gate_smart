@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { askAdvisor } from '../utils/api';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
+import AccuracyBadge from '../components/common/AccuracyBadge';
 
 const SUGGESTED_QUESTIONS = [
   'What does each way mean?',
@@ -130,6 +131,7 @@ export default function AdvisorPage() {
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
         {showSuggestions && (
           <div>
+            <AccuracyBadge />
             <div style={{ textAlign: 'center', padding: '24px 0 20px', color: 'var(--text-muted)' }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>🏇</div>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent-gold)', marginBottom: 6 }}>

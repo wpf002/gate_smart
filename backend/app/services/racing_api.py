@@ -231,6 +231,130 @@ async def get_horse_results(horse_id: str, limit: int = 10) -> dict:
 
 # ── Jockeys & Trainers ────────────────────────────────────────────────────────
 
+async def get_na_meets(date: str = None) -> dict:
+    """Get all North America race meets for a given date (requires NA add-on)."""
+    from datetime import date as date_cls
+    race_date = date or date_cls.today().isoformat()
+    return await _get(
+        "/north-america/meets",
+        params={"start_date": race_date, "end_date": race_date},
+        cache_key=f"na:meets:{race_date}",
+        ttl=600,
+    )
+
+
+async def get_na_meet_entries(meet_id: str) -> dict:
+    """Get all horse entries for a North America meet."""
+    return await _get(
+        f"/north-america/meets/{meet_id}/entries",
+        cache_key=f"na:entries:{meet_id}",
+        ttl=600,
+    )
+
+
+async def get_na_meet_results(meet_id: str) -> dict:
+    """Get results for a North America meet."""
+    return await _get(
+        f"/north-america/meets/{meet_id}/results",
+        cache_key=f"na:results:{meet_id}",
+        ttl=3600,
+    )
+
+
+def _normalize_na_race(race: dict, meet: dict) -> dict:
+    """Normalize a NA race entry to match GateSmart's internal race schema."""
+    runners = []
+    for entry in race.get("entries", []):
+        runners.append({
+            "horse_id": entry.get("horse_id", ""),
+            "horse_name": entry.get("horse_name", ""),
+            "horse": entry.get("horse_name", ""),
+            "jockey": entry.get("jockey", ""),
+            "trainer": entry.get("trainer", ""),
+            "number": str(entry.get("programme_number", "")),
+            "cloth_number": str(entry.get("programme_number", "")),
+            "age": str(entry.get("age", "")),
+            "sex": entry.get("sex", ""),
+            "weight": entry.get("weight_lbs", ""),
+            "form": entry.get("form", ""),
+            "odds": entry.get("morning_line_odds", ""),
+            "sp": entry.get("morning_line_odds", ""),
+            "official_rating": entry.get("official_rating", None),
+        })
+
+    return {
+        "race_id": race.get("race_id", ""),
+        "course": meet.get("track_name", ""),
+        "course_id": meet.get("track_id", ""),
+        "date": meet.get("date", ""),
+        "time": race.get("post_time", ""),
+        "off_time": race.get("post_time", ""),
+        "off_dt": race.get("post_time_utc", ""),
+        "title": race.get("race_name", ""),
+        "race_name": race.get("race_name", ""),
+        "distance": race.get("distance", ""),
+        "distance_f": race.get("distance_furlongs", None),
+        "surface": race.get("surface", ""),
+        "going": race.get("track_condition", ""),
+        "prize": race.get("purse", ""),
+        "race_class": race.get("race_type", ""),
+        "pattern": race.get("grade", ""),
+        "region": "USA",
+        "runners": runners,
+        "field_size": len(runners),
+    }
+
+
+async def get_na_racecards_full(date: str = None) -> dict:
+    """
+    Fetch all NA meets for a date and expand each with full entries.
+    Returns a unified structure matching the standard racecards format.
+    """
+    meets_data = await get_na_meets(date)
+    meets = meets_data.get("meets", [])
+
+    all_races = []
+    for meet in meets:
+        meet_id = meet.get("meet_id", "")
+        if not meet_id:
+            continue
+        try:
+            entries_data = await get_na_meet_entries(meet_id)
+            races = entries_data.get("races", [])
+            for race in races:
+                all_races.append(_normalize_na_race(race, meet))
+        except Exception:
+            continue
+
+    return {"racecards": all_races, "total": len(all_races), "region": "usa"}
+
+
+async def get_na_results_full(date: str = None) -> dict:
+    """Fetch all NA meet results for a date, unified into a results list."""
+    meets_data = await get_na_meets(date)
+    meets = meets_data.get("meets", [])
+
+    all_results = []
+    for meet in meets:
+        meet_id = meet.get("meet_id", "")
+        if not meet_id:
+            continue
+        try:
+            results_data = await get_na_meet_results(meet_id)
+            races = results_data.get("races", [])
+            for race in races:
+                normalized = _normalize_na_race(race, meet)
+                # Add result-specific fields from runners
+                for runner in normalized.get("runners", []):
+                    runner["position"] = runner.get("finish_position", "")
+                    runner["sp"] = runner.get("odds", "SP")
+                all_results.append(normalized)
+        except Exception:
+            continue
+
+    return {"results": all_results, "total": len(all_results)}
+
+
 async def search_jockeys(name: str) -> dict:
     return await _get(
         "/jockeys/search",

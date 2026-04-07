@@ -1,14 +1,17 @@
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import os
-from dotenv import load_dotenv
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 load_dotenv()
 
 from app.api.routes import races, horses, betting, ai_advisor, education, tracksense, simulator, alerts, affiliate
-from app.core.config import settings
 from app.core.cache import init_redis
+from app.core.config import settings
+from app.core.limiter import limiter
 
 
 @asynccontextmanager
@@ -24,9 +27,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,4 +51,17 @@ app.include_router(affiliate.router, prefix="/api/affiliate", tags=["Affiliate"]
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "GateSmart API"}
+    redis_ok = False
+    try:
+        from app.core.cache import _redis
+        if _redis:
+            await _redis.ping()
+            redis_ok = True
+    except Exception:
+        pass
+    return {
+        "status": "ok",
+        "environment": settings.ENVIRONMENT,
+        "redis": "connected" if redis_ok else "disconnected",
+        "version": "1.0.0",
+    }

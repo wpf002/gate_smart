@@ -24,5 +24,5 @@ async def log_click(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail="malformed request body")
 
     today = date.today().isoformat()
-    await cache_incr(f"affiliate:clicks:{req.affiliate_id}:{today}")
+    await cache_incr(f"affiliate:clicks:{req.affiliate_id}:{today}", ttl=86400)
     return JSONResponse({"logged": True})

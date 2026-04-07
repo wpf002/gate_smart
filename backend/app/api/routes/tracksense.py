@@ -90,9 +90,16 @@ async def get_horse_mapping(racing_api_horse_id: str) -> JSONResponse:
 async def webhook(request: Request) -> JSONResponse:
     raw_body = await request.body()
 
-    # DEV BYPASS: if TRACKSENSE_WEBHOOK_SECRET is not configured, skip
-    # signature verification so local testing works without a secret.
-    # Remove this bypass (or the empty-string branch) before going to production.
+    if not settings.TRACKSENSE_WEBHOOK_SECRET:
+        if settings.ENVIRONMENT == "production":
+            return JSONResponse(
+                {"error": "Webhook secret not configured"},
+                status_code=500,
+            )
+        import logging
+        logging.warning(
+            "TRACKSENSE_WEBHOOK_SECRET not set — bypassing verification (dev only)"
+        )
     if settings.TRACKSENSE_WEBHOOK_SECRET:
         sig_header = request.headers.get("X-TrackSense-Signature", "")
         if not sig_header.startswith("sha256="):

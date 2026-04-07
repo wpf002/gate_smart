@@ -1,7 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_URL
+    ? `${import.meta.env.VITE_API_URL}/api`
+    : '/api',
   timeout: 90000,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -103,6 +105,10 @@ export const checkValueAlerts = (raceId, horses) =>
 
 export const getRaceFairPrices = (raceId) =>
   api.get(`/alerts/race/${raceId}`).then((r) => r.data);
+
+// ── Secretariat Accuracy ──────────────────────────────────────────────────────
+export const getSecretariatAccuracy = () =>
+  api.get('/advisor/accuracy').then((r) => r.data);
 
 // ── Race Debrief ──────────────────────────────────────────────────────────────
 export const getRaceDebrief = (raceId) =>

@@ -177,7 +177,7 @@ async def test_analyze_wraps_secretariat_error_as_502(client):
                               content=_body({"race_id": "r1"}),
                               headers={"Content-Type": "application/json"})
     assert r.status_code == 502
-    assert "AI analysis error" in r.json()["detail"]
+    assert r.json()["detail"] == "AI analysis unavailable"
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +299,7 @@ async def test_ask_502_on_secretariat_error(client):
                               content=_body({"question": "help"}),
                               headers={"Content-Type": "application/json"})
     assert r.status_code == 502
-    assert "AI error" in r.json()["detail"]
+    assert r.json()["detail"] == "AI analysis unavailable"
 
 
 # ---------------------------------------------------------------------------
@@ -361,4 +361,4 @@ async def test_explain_form_502_on_secretariat_error(client):
                               content=_body({"form_string": "1-1-1", "horse_name": "Arkle"}),
                               headers={"Content-Type": "application/json"})
     assert r.status_code == 502
-    assert "AI error" in r.json()["detail"]
+    assert r.json()["detail"] == "AI analysis unavailable"

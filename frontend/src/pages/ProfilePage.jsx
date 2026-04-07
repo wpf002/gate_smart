@@ -1,6 +1,6 @@
-import React from 'react';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
+import AccuracyBadge from '../components/common/AccuracyBadge';
 
 const RISK_OPTIONS = ['low', 'medium', 'high'];
 const EXPERIENCE_OPTIONS = ['beginner', 'intermediate', 'advanced'];
@@ -105,6 +105,10 @@ export default function ProfilePage() {
           value={userProfile.experienceLevel}
           onChange={(v) => setUserProfile({ experienceLevel: v })}
         />
+
+        {/* Secretariat accuracy stats */}
+        <SectionLabel>Secretariat Performance</SectionLabel>
+        <AccuracyBadge />
 
         {/* Profile summary */}
         <div style={{

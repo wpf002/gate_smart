@@ -85,7 +85,7 @@ async def horse_explain(horse_id: str):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"AI error: {exc}") from exc
+        raise HTTPException(status_code=502, detail="AI analysis unavailable")
 
 
 @router.get("/{horse_id}/form/decode")
@@ -102,4 +102,4 @@ async def horse_form_decode(horse_id: str, form: str = ""):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"AI error: {exc}") from exc
+        raise HTTPException(status_code=502, detail="AI analysis unavailable")

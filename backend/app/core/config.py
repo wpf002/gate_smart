@@ -1,5 +1,4 @@
 import os
-from typing import List
 
 
 class Settings:
@@ -8,8 +7,14 @@ class Settings:
     RACING_API_PASSWORD: str = os.getenv("RACING_API_PASSWORD", "")
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret")
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
     TRACKSENSE_WEBHOOK_SECRET: str = os.getenv("TRACKSENSE_WEBHOOK_SECRET", "")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
 
 settings = Settings()

@@ -2,14 +2,20 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 function generateSessionId() {
-  return 'gs_' + Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
+  const array = new Uint8Array(24);
+  crypto.getRandomValues(array);
+  return Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export const useAppStore = create(
   persist(
     (set) => ({
-      // Session ID for paper trading (generated once, persisted)
-      sessionId: generateSessionId(),
+      // Session ID for paper trading — cryptographically random, stored separately
+      sessionId: localStorage.getItem('gs_session_id') || (() => {
+        const id = generateSessionId();
+        localStorage.setItem('gs_session_id', id);
+        return id;
+      })(),
 
       // Onboarding
       onboardingComplete: localStorage.getItem('gs_onboarded') === 'true',

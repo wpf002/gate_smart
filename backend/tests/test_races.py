@@ -62,7 +62,7 @@ async def test_races_today_wraps_unexpected_errors(client):
                new=AsyncMock(side_effect=RuntimeError("connection reset"))):
         r = await client.get("/api/races/today")
     assert r.status_code == 502
-    assert "Racing API error" in r.json()["detail"]
+    assert r.json()["detail"] == "Racing data unavailable"
 
 
 # ---------------------------------------------------------------------------

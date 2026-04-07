@@ -5,3 +5,4 @@ msgspec==0.20.0
 redis[asyncio]==5.2.1
 python-dotenv==1.0.1
 httpx==0.28.1
+slowapi==0.1.9
