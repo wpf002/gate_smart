@@ -57,9 +57,15 @@ describe('HorseRow', () => {
     expect(screen.getByText('3')).toBeInTheDocument();
   });
 
-  it('navigates to horse detail on click', () => {
-    renderRow();
+  it('navigates to horse detail via profile button in expanded row', () => {
+    const analysis = {
+      runners: [{ horse_id: 'h1', contender_score: 70, summary: 'Strong form.' }],
+    };
+    renderRow(baseHorse, analysis);
+    // Click the row to expand it
     fireEvent.click(screen.getByText('Frankel'));
+    // Then click the profile link inside the expanded section
+    fireEvent.click(screen.getByText('View horse profile →'));
     expect(mockNavigate).toHaveBeenCalledWith('/horse/h1');
   });
 
@@ -139,7 +145,7 @@ describe('HorseRow', () => {
     expect(screen.queryByText('+ Bet')).not.toBeInTheDocument();
   });
 
-  it('shows analysis summary when present', () => {
+  it('shows analysis summary when present after expanding row', () => {
     const analysis = {
       runners: [{
         horse_id: 'h1',
@@ -148,6 +154,8 @@ describe('HorseRow', () => {
       }],
     };
     renderRow(baseHorse, analysis);
+    // Summary is in the collapsed section — click to expand
+    fireEvent.click(screen.getByText('Frankel'));
     expect(screen.getByText('Consistent front-runner at this trip.')).toBeInTheDocument();
   });
 });

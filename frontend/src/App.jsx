@@ -8,11 +8,13 @@ import AdvisorPage from './pages/AdvisorPage';
 import BetSlipPage from './pages/BetSlipPage';
 import EducationPage from './pages/EducationPage';
 import ProfilePage from './pages/ProfilePage';
+import SimulatorPage from './pages/SimulatorPage';
 import { useAppStore } from './store';
 
 const NAV_ITEMS = [
   { path: '/', icon: '🏠', label: 'Races' },
   { path: '/search', icon: '🔍', label: 'Search' },
+  { path: '/simulator', icon: '📈', label: 'Simulator' },
   { path: '/advisor', icon: '🤖', label: 'Advisor' },
   { path: '/betslip', icon: '🎫', label: 'Bet Slip' },
   { path: '/education', icon: '📚', label: 'Learn' },
@@ -76,6 +78,7 @@ function AppShell() {
           <Route path="/advisor" element={<AdvisorPage />} />
           <Route path="/betslip" element={<BetSlipPage />} />
           <Route path="/education" element={<EducationPage />} />
+          <Route path="/simulator" element={<SimulatorPage />} />
           <Route path="/profile" element={<ProfilePage />} />
         </Routes>
       </div>

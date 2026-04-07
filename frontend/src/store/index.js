@@ -1,9 +1,16 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+function generateSessionId() {
+  return 'gs_' + Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
+}
+
 export const useAppStore = create(
   persist(
     (set) => ({
+      // Session ID for paper trading (generated once, persisted)
+      sessionId: generateSessionId(),
+
       // User profile
       userProfile: {
         bankroll: 500,
@@ -53,6 +60,7 @@ export const useAppStore = create(
     {
       name: 'gatesmart-v2',
       partialize: (state) => ({
+        sessionId: state.sessionId,
         userProfile: state.userProfile,
         betSlip: state.betSlip,
         // advisorMessages intentionally not persisted — resets on each session

@@ -1,6 +1,40 @@
-import React from 'react';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
+import { simPlaceBet } from '../utils/api';
+
+// Standalone helper so it can be called in the paper-trade handler
+async function paperTradeBets(betSlip, qc, setTrading, setTradeResult, navigate) {
+  setTrading(true);
+  setTradeResult(null);
+  let placed = 0;
+  let failed = 0;
+  for (const bet of betSlip) {
+    try {
+      await simPlaceBet({
+        race_id: bet.race_id,
+        horse_id: bet.horse_id,
+        horse_name: bet.horse_name,
+        bet_type: bet.bet_type,
+        odds: String(bet.odds),
+        stake: bet.stake,
+      });
+      placed++;
+    } catch {
+      failed++;
+    }
+  }
+  qc.invalidateQueries({ queryKey: ['sim-stats'] });
+  qc.invalidateQueries({ queryKey: ['sim-bets'] });
+  setTrading(false);
+  if (failed === 0) {
+    navigate('/simulator');
+  } else {
+    setTradeResult(`${placed} placed, ${failed} failed (check bank balance)`);
+  }
+}
 
 function parseFractionalOdds(odds) {
   if (!odds || odds === '?') return null;
@@ -84,6 +118,10 @@ function BetItem({ bet }) {
 
 export default function BetSlipPage() {
   const { betSlip, clearBetSlip } = useAppStore();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [trading, setTrading] = useState(false);
+  const [tradeResult, setTradeResult] = useState(null);
 
   const totalStake = betSlip.reduce((sum, b) => sum + (b.stake || 0), 0);
 
@@ -139,11 +177,24 @@ export default function BetSlipPage() {
               </div>
               <button
                 className="btn btn-primary btn-full"
-                style={{ fontSize: 15 }}
+                style={{ fontSize: 15, marginBottom: 8 }}
                 onClick={() => alert('Betting placement is for informational purposes only.')}
               >
                 Place Bets · £{totalStake.toFixed(2)}
               </button>
+              <button
+                className="btn btn-secondary btn-full"
+                style={{ fontSize: 14 }}
+                disabled={trading}
+                onClick={() => paperTradeBets(betSlip, qc, setTrading, setTradeResult, navigate)}
+              >
+                {trading ? 'Placing paper bets…' : 'Paper Trade These Bets'}
+              </button>
+              {tradeResult && (
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--accent-red-bright)', textAlign: 'center' }}>
+                  {tradeResult}
+                </div>
+              )}
             </div>
 
             <div style={{

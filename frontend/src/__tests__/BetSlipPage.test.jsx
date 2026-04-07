@@ -6,6 +6,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import BetSlipPage from '../pages/BetSlipPage';
 import { useAppStore } from '../store';
 
@@ -14,11 +15,19 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => vi.fn() };
 });
 
+vi.mock('../utils/api', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, simPlaceBet: vi.fn().mockResolvedValue({}) };
+});
+
 function renderPage() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
-      <BetSlipPage />
-    </MemoryRouter>
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>
+        <BetSlipPage />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
 

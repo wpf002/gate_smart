@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from app.api.routes import races, horses, betting, ai_advisor, education, tracksense
+from app.api.routes import races, horses, betting, ai_advisor, education, tracksense, simulator
 from app.core.config import settings
 from app.core.cache import init_redis
 
@@ -38,6 +38,7 @@ app.include_router(betting.router, prefix="/api/betting", tags=["Betting"])
 app.include_router(ai_advisor.router, prefix="/api/advisor", tags=["AI Advisor"])
 app.include_router(education.router, prefix="/api/education", tags=["Education"])
 app.include_router(tracksense.router, prefix="/api/tracksense", tags=["TrackSense"])
+app.include_router(simulator.router, prefix="/api/simulator", tags=["Simulator"])
 
 
 @app.get("/health")

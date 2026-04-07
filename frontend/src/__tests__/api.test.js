@@ -8,6 +8,10 @@ vi.mock('axios', () => {
   const instance = {
     get: vi.fn(),
     post: vi.fn(),
+    interceptors: {
+      request: { use: vi.fn() },
+      response: { use: vi.fn() },
+    },
   };
   return {
     default: {

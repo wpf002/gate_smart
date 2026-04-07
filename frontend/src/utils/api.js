@@ -6,6 +6,18 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Attach session ID to every request for paper trading
+api.interceptors.request.use((config) => {
+  try {
+    const stored = JSON.parse(localStorage.getItem('gatesmart-v2') || '{}');
+    const sid = stored?.state?.sessionId;
+    if (sid) config.headers['X-Session-ID'] = sid;
+  } catch {
+    // ignore
+  }
+  return config;
+});
+
 // ── Races ────────────────────────────────────────────────────────────────────
 export const getRacesToday = (region = null) =>
   api.get('/races/today', { params: region ? { region } : {} }).then((r) => r.data);
@@ -84,5 +96,27 @@ export const calculatePayout = (stake, odds, betType = 'win', eachWay = false) =
       each_way: eachWay,
     })
     .then((r) => r.data);
+
+// ── Paper Trading Simulator ───────────────────────────────────────────────────
+export const simPlaceBet = (bet) =>
+  api.post('/simulator/bet', bet).then((r) => r.data);
+
+export const simSettle = (raceId) =>
+  api.post(`/simulator/settle/${raceId}`).then((r) => r.data);
+
+export const simGetBets = () =>
+  api.get('/simulator/bets').then((r) => r.data);
+
+export const simGetBank = () =>
+  api.get('/simulator/bank').then((r) => r.data);
+
+export const simGetStats = () =>
+  api.get('/simulator/stats').then((r) => r.data);
+
+export const simReset = () =>
+  api.post('/simulator/reset').then((r) => r.data);
+
+export const simTopup = (amount) =>
+  api.post('/simulator/bank/topup', { amount }).then((r) => r.data);
 
 export default api;
