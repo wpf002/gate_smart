@@ -37,28 +37,40 @@ async def horse_search(q: str = ""):
     except Exception:
         pass
 
-    # Fallback: search through locally cached racecard runners
+    # Fallback: search through locally cached racecard runners (UK/IRE + NA)
     q_lower = q_stripped.lower()
     horses = []
     seen_ids: set[str] = set()
 
+    def _collect_runners(racecards: list) -> None:
+        for race in racecards:
+            for runner in race.get("runners", []):
+                horse_name = runner.get("horse_name") or runner.get("horse", "")
+                if q_lower in horse_name.lower():
+                    hid = runner.get("horse_id", horse_name)
+                    if hid not in seen_ids:
+                        seen_ids.add(hid)
+                        horses.append({
+                            **runner,
+                            "race_id": race.get("race_id"),
+                            "race_name": race.get("title") or race.get("race_name"),
+                            "course": race.get("course"),
+                            "off_time": race.get("time") or race.get("off_time"),
+                        })
+
+    # UK/IRE racecards
     for day in (None, "tomorrow"):
         try:
             data = await racing_api.get_racecards(date=day)
-            for race in data.get("racecards", []):
-                for runner in race.get("runners", []):
-                    horse_name = runner.get("horse_name") or runner.get("horse", "")
-                    if q_lower in horse_name.lower():
-                        hid = runner.get("horse_id", horse_name)
-                        if hid not in seen_ids:
-                            seen_ids.add(hid)
-                            horses.append({
-                                **runner,
-                                "race_id": race.get("race_id"),
-                                "race_name": race.get("title") or race.get("race_name"),
-                                "course": race.get("course"),
-                                "off_time": race.get("time") or race.get("off_time"),
-                            })
+            _collect_runners(data.get("racecards", []))
+        except Exception:
+            continue
+
+    # NA racecards (today + tomorrow)
+    for day in (None, "tomorrow"):
+        try:
+            data = await racing_api.get_na_racecards_full(date=day)
+            _collect_runners(data.get("racecards", []))
         except Exception:
             continue
 

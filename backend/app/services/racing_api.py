@@ -247,8 +247,13 @@ async def get_horse_results(horse_id: str, limit: int = 10) -> dict:
 
 async def get_na_meets(date: str = None) -> dict:
     """Get all North America race meets for a given date (requires NA add-on)."""
-    from datetime import date as date_cls
-    race_date = date or date_cls.today().isoformat()
+    from datetime import date as date_cls, timedelta
+    if not date or date == "today":
+        race_date = date_cls.today().isoformat()
+    elif date == "tomorrow":
+        race_date = (date_cls.today() + timedelta(days=1)).isoformat()
+    else:
+        race_date = date
     return await _get(
         "/north-america/meets",
         params={"start_date": race_date, "end_date": race_date},
