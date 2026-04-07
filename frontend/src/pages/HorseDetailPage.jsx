@@ -91,8 +91,27 @@ export default function HorseDetailPage() {
           <StatRow label="Jockey" value={horse?.jockey} />
           <StatRow label="Owner" value={horse?.owner} />
           <StatRow label="Weight" value={horse?.weight} />
+          <StatRow label="Program #" value={horse?.cloth_number || horse?.number} />
+          <StatRow label="Morning Line" value={horse?.odds !== 'SP' ? horse?.odds : null} />
           <StatRow label="Rating" value={horse?.rating || horse?.official_rating} />
+          <StatRow label="Race" value={horse?.race_context?.title || horse?.race_context?.race_name} />
+          <StatRow label="Course" value={horse?.race_context?.course} />
+          <StatRow label="Surface" value={horse?.race_context?.surface} />
+          <StatRow label="Distance" value={horse?.race_context?.distance} />
         </div>
+
+        {/* No form for US horses */}
+        {!horse?.form && !horse?.last_run_style && horse?.race_context?.region === 'USA' && (
+          <div className="card" style={{ marginBottom: 14, padding: '12px 14px' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--text-muted)', marginBottom: 6 }}>
+              PAST PERFORMANCES
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              Detailed past performance data for US horses isn't available on the current data plan.
+              Use <strong style={{ color: 'var(--text-secondary)' }}>Horse Analysis</strong> below for an AI-generated assessment.
+            </div>
+          </div>
+        )}
 
         {/* Form string */}
         {(horse?.form || horse?.last_run_style) && (
