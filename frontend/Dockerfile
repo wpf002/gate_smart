@@ -4,14 +4,11 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
-ARG VITE_API_URL
-ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
-# Serve stage
-FROM node:20-alpine
-WORKDIR /app
-RUN npm install -g serve
-COPY --from=builder /app/dist ./dist
+# Serve stage — nginx proxies /api to backend at runtime
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 EXPOSE $PORT
-CMD ["sh", "-c", "serve -s dist -l ${PORT:-5173}"]
+CMD ["sh", "-c", "envsubst '$PORT $VITE_API_URL' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
