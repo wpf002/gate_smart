@@ -283,7 +283,12 @@ Return this JSON exactly:
         messages=[{"role": "user", "content": prompt}]
     )
 
-    return _truncate_analysis(_parse_json(response.content[0].text))
+    result = _truncate_analysis(_parse_json(response.content[0].text))
+    try:
+        await extract_and_store_fair_prices(race_data.get("race_id", ""), result)
+    except Exception:
+        pass
+    return result
 
 
 async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None):
@@ -581,6 +586,95 @@ async def score_race(race_data: dict) -> dict:
         "course": race_data.get("course", ""),
         "scorecards": list(scorecards)
     }
+
+
+async def debrief_race(
+    race_id: str,
+    race_data: dict,
+    results: dict,
+    prior_analysis: dict = None,
+) -> dict:
+    """Post-race debrief. Explains the result in plain English."""
+    prior_block = (
+        "Prior Analysis (what Secretariat predicted before the race):\n"
+        + json.dumps(prior_analysis, indent=2)
+        if prior_analysis
+        else "No prior analysis available."
+    )
+
+    prompt = f"""You are Secretariat. A race has just finished.
+Give a post-race debrief for users who may have bet on this race.
+
+Race: {race_data.get('title', '')} at {race_data.get('course', '')}
+Distance: {race_data.get('distance', '')} | Going: {race_data.get('going', '')}
+
+Results:
+{json.dumps(results, indent=2)}
+
+{prior_block}
+
+Return a JSON object with EXACTLY this structure:
+{{
+  "winner": "horse name",
+  "winning_odds": "SP if available",
+  "headline": "One punchy sentence summarising the result",
+  "what_happened": "2-3 sentences explaining the race — pace, who led, how it unfolded",
+  "why_winner_won": "2 sentences on what made the winner successful today",
+  "prediction_accuracy": "hit/miss/partial — only if prior analysis exists, else null",
+  "prediction_notes": "1-2 sentences comparing prediction to result, null if no prior analysis",
+  "key_takeaway": "One lesson for bettors from this race result",
+  "notable_losers": [
+    {{
+      "horse": "name",
+      "note": "brief explanation of their run"
+    }}
+  ],
+  "beginner_lesson": "Plain English lesson a first-time bettor can learn from this race"
+}}"""
+
+    response = await client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
+        system=SECRETARIAT_SYSTEM,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    result = _parse_json(response.content[0].text)
+
+    from app.core.cache import cache_set
+    await cache_set(f"debrief:{race_id}", result, ex=86400)
+    return result
+
+
+async def extract_and_store_fair_prices(race_id: str, analysis: dict) -> None:
+    """
+    After a race analysis is generated, extract fair_odds per horse and store
+    them in Redis for value alert comparison.
+    Key: alerts:fair:{race_id}:{horse_id}
+    TTL: 14400 (4 hours)
+    """
+    from app.core.cache import cache_set
+    import datetime
+    runners = analysis.get("runners", [])
+    for runner in runners:
+        horse_id = runner.get("horse_id", "")
+        fair_odds = runner.get("fair_odds", "")
+        if not horse_id or not fair_odds:
+            continue
+        try:
+            if "/" in str(fair_odds):
+                n, d = str(fair_odds).split("/")
+                fair_decimal = (int(n) / int(d)) + 1
+            else:
+                fair_decimal = float(fair_odds)
+            key = f"alerts:fair:{race_id}:{horse_id}"
+            await cache_set(key, {
+                "horse_name": runner.get("horse_name", ""),
+                "fair_odds_fractional": fair_odds,
+                "fair_decimal": round(fair_decimal, 2),
+                "stored_at": datetime.datetime.utcnow().isoformat(),
+            }, ex=14400)
+        except Exception:
+            continue
 
 
 async def answer_betting_question(question: str, context: dict = None) -> str:

@@ -39,6 +39,10 @@ class ScoreCardRequest(msgspec.Struct):
     bankroll: Optional[float] = None
 
 
+class DebriefRequest(msgspec.Struct):
+    race_id: str
+
+
 @router.post("/analyze")
 async def analyze_race(request: Request) -> JSONResponse:
     raw = await request.body()
@@ -146,6 +150,10 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
 
             if result:
                 await cache_set(cache_key, result, ex=300)
+                try:
+                    await secretariat.extract_and_store_fair_prices(req.race_id, result)
+                except Exception:
+                    pass
                 yield f"data: {json.dumps({'result': result})}\n\n"
 
         except Exception as exc:
@@ -204,5 +212,51 @@ async def explain_form(request: Request) -> JSONResponse:
         result = await secretariat.explain_form_string(req.form_string, req.horse_name or req.form_string)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"AI error: {exc}") from exc
+
+    return JSONResponse(result)
+
+
+@router.post("/debrief")
+async def race_debrief(request: Request) -> JSONResponse:
+    raw = await request.body()
+    try:
+        req = msgspec.json.decode(raw, type=DebriefRequest)
+    except Exception:
+        raise HTTPException(status_code=400, detail="malformed request body")
+
+    # Cache hit
+    cached = await cache_get(f"debrief:{req.race_id}")
+    if cached is not None:
+        return JSONResponse(cached)
+
+    # Fetch race data
+    try:
+        race_data = await racing_api.get_race(req.race_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Racing API error: {exc}") from exc
+
+    # Fetch results and find this race
+    try:
+        results_data = await racing_api.get_results()
+        race_result = None
+        for r in results_data.get("results", []):
+            if r.get("race_id") == req.race_id:
+                race_result = r
+                break
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Results API error: {exc}") from exc
+
+    if not race_result:
+        raise HTTPException(status_code=404, detail="Results not yet available for this race")
+
+    # Prior analysis (optional)
+    prior_analysis = await cache_get(f"ai_analysis:{req.race_id}:balanced")
+
+    try:
+        result = await secretariat.debrief_race(req.race_id, race_data, race_result, prior_analysis)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI debrief error: {exc}") from exc
 
     return JSONResponse(result)

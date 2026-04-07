@@ -29,3 +29,18 @@ async def cache_set(key: str, value: Any, ex: Optional[int] = None) -> None:
         await _redis.set(key, data, ex=ex)
     else:
         await _redis.set(key, data)
+
+
+async def cache_keys(pattern: str) -> list:
+    if _redis is None:
+        return []
+    return await _redis.keys(pattern)
+
+
+async def cache_incr(key: str, ttl: int = 86400) -> int:
+    if _redis is None:
+        return 0
+    val = await _redis.incr(key)
+    if val == 1:
+        await _redis.expire(key, ttl)
+    return val

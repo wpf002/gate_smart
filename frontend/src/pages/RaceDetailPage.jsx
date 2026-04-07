@@ -1,10 +1,12 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { getRaceDetail, getScoreCard } from '../utils/api';
+import { getRaceDetail, getScoreCard, checkValueAlerts, getRaceDebrief } from '../utils/api';
 import { HorseRow, HorseRowSkeleton } from '../components/races/HorseRow';
 import ScorecardPanel from '../components/races/ScorecardPanel';
-import { getDisplayTime, formatDistance, formatPurse } from '../components/races/RaceCard';
+import ValueAlertBanner from '../components/races/ValueAlertBanner';
+import DebriefPanel from '../components/races/DebriefPanel';
+import { getDisplayTime, formatDistance, formatPurse, isRacePast } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
 
 const MODES = [
@@ -190,7 +192,47 @@ export default function RaceDetailPage() {
   const [analyzeError, setAnalyzeError] = useState(null);
   const [scoreError, setScoreError] = useState(null);
   const [activeTab, setActiveTab] = useState('analysis');
+  const [valueAlerts, setValueAlerts] = useState(null);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [debrief, setDebrief] = useState(null);
+  const [debriefLoading, setDebriefLoading] = useState(false);
+  const [debriefError, setDebriefError] = useState(null);
   const abortRef = useRef(null);
+
+  const runAlertCheck = async (raceData) => {
+    if (!raceData?.runners?.length) return;
+    setAlertsLoading(true);
+    try {
+      const horses = raceData.runners.map((r) => ({
+        horse_id: r.horse_id,
+        horse_name: r.horse_name || r.horse,
+        current_odds: r.odds || r.sp || '?',
+      }));
+      const result = await checkValueAlerts(raceId, horses);
+      setValueAlerts(result);
+    } catch {
+      // silently ignore — fair prices may not be stored yet
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
+  const runDebrief = async () => {
+    setDebriefLoading(true);
+    setDebriefError(null);
+    try {
+      const result = await getRaceDebrief(raceId);
+      setDebrief(result);
+      setActiveTab('debrief');
+    } catch (err) {
+      const detail = err?.response?.data?.detail || err.message || 'Unknown error';
+      setDebriefError(detail.includes('not yet available')
+        ? 'Results not yet available — check back after the race.'
+        : `Debrief failed: ${detail}`);
+    } finally {
+      setDebriefLoading(false);
+    }
+  };
 
   const { data: race, isLoading } = useQuery({
     queryKey: ['race', raceId],
@@ -229,7 +271,11 @@ export default function RaceDetailPage() {
           if (payload === '[DONE]') { setAnalysisStreaming(false); return; }
           try {
             const msg = JSON.parse(payload);
-            if (msg.result) { setAnalysis(msg.result); }
+            if (msg.result) {
+              setAnalysis(msg.result);
+              // Fire-and-forget alert check using current race data
+              if (race) runAlertCheck(race);
+            }
             if (msg.error) throw new Error(msg.error);
           } catch (e) { if (e.message !== 'JSON parse error') throw e; }
         }
@@ -270,16 +316,19 @@ export default function RaceDetailPage() {
   // What tabs exist right now
   const hasAnalysisTab = !!(analysis || analyzeMutation.isPending);
   const hasScorecardTab = !!(scorecardData || scoreMutation.isPending);
-  const showTabs = hasAnalysisTab || hasScorecardTab;
+  const hasDebriefTab = !!(debrief || debriefLoading);
+  const showTabs = hasAnalysisTab || hasScorecardTab || hasDebriefTab;
 
   // Which action buttons to show
   const showAnalyseBtn = !analysis && !analyzeMutation.isPending;
   const showScoreBtn   = !scorecardData && !scoreMutation.isPending;
-  const showActionArea = showAnalyseBtn || showScoreBtn;
+  const showDebriefBtn = !debrief && !debriefLoading && !!race && isRacePast(race);
+  const showActionArea = showAnalyseBtn || showScoreBtn || showDebriefBtn;
 
   const tabs = [
     ...(hasAnalysisTab  ? [{ id: 'analysis',  label: 'ANALYSIS'   }] : []),
     ...(hasScorecardTab ? [{ id: 'scorecard', label: 'SCORE CARD' }] : []),
+    ...(hasDebriefTab   ? [{ id: 'debrief',   label: 'DEBRIEF'    }] : []),
   ];
 
   // Keep activeTab valid whenever tabs change
@@ -380,7 +429,7 @@ export default function RaceDetailPage() {
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {showAnalyseBtn && (
                 <button
                   className="btn btn-primary btn-full"
@@ -397,6 +446,24 @@ export default function RaceDetailPage() {
                   disabled={isLoading}
                 >
                   Score the Field
+                </button>
+              )}
+              {showDebriefBtn && (
+                <button
+                  className="btn btn-secondary btn-full"
+                  onClick={runDebrief}
+                  disabled={isLoading}
+                >
+                  📋 Post-Race Debrief
+                </button>
+              )}
+              {analysis && !alertsLoading && (
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => race && runAlertCheck(race)}
+                  style={{ flexShrink: 0 }}
+                >
+                  ⚡ Check Value
                 </button>
               )}
             </div>
@@ -430,6 +497,22 @@ export default function RaceDetailPage() {
             ⚠️ {scoreError}
           </div>
         )}
+        {debriefError && (
+          <div style={{
+            padding: '10px 14px',
+            background: 'rgba(192,57,43,0.08)',
+            border: '1px solid rgba(192,57,43,0.25)',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 13,
+            color: 'var(--accent-red-bright)',
+            marginBottom: 12,
+          }}>
+            ⚠️ {debriefError}
+          </div>
+        )}
+
+        {/* ── Value alert banner ─────────────────────────────────────── */}
+        <ValueAlertBanner alerts={valueAlerts?.alerts} loading={alertsLoading} />
 
         {/* ── Tab panel ─────────────────────────────────────────────── */}
         {showTabs && (
@@ -442,6 +525,9 @@ export default function RaceDetailPage() {
             )}
             {validTab === 'scorecard' && (
               <ScorecardPanel raceScorecards={scorecardData} loading={scoreMutation.isPending} />
+            )}
+            {validTab === 'debrief' && (
+              <DebriefPanel debrief={debrief} loading={debriefLoading} />
             )}
           </div>
         )}

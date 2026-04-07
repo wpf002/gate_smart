@@ -9,6 +9,7 @@ import BetSlipPage from './pages/BetSlipPage';
 import EducationPage from './pages/EducationPage';
 import ProfilePage from './pages/ProfilePage';
 import SimulatorPage from './pages/SimulatorPage';
+import OnboardingFlow from './components/common/OnboardingFlow';
 import { useAppStore } from './store';
 
 const NAV_ITEMS = [
@@ -66,8 +67,11 @@ function SideNav() {
 }
 
 function AppShell() {
+  const onboardingComplete = useAppStore((s) => s.onboardingComplete);
+
   return (
     <div className="app-shell">
+      {!onboardingComplete && <OnboardingFlow />}
       <SideNav />
       <div className="page-content">
         <Routes>

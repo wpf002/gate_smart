@@ -11,11 +11,19 @@ export const useAppStore = create(
       // Session ID for paper trading (generated once, persisted)
       sessionId: generateSessionId(),
 
+      // Onboarding
+      onboardingComplete: localStorage.getItem('gs_onboarded') === 'true',
+      completeOnboarding: () => {
+        localStorage.setItem('gs_onboarded', 'true');
+        set({ onboardingComplete: true });
+      },
+
       // User profile
       userProfile: {
         bankroll: 500,
         riskTolerance: 'medium',
         experienceLevel: 'beginner',
+        region: 'usa',
         name: '',
       },
       setUserProfile: (updates) =>
@@ -56,6 +64,13 @@ export const useAppStore = create(
           advisorMessages: [...state.advisorMessages, message],
         })),
       clearAdvisorMessages: () => set({ advisorMessages: [] }),
+
+      // Value alerts keyed by race_id
+      valueAlerts: {},
+      setValueAlerts: (raceId, alerts) =>
+        set((state) => ({
+          valueAlerts: { ...state.valueAlerts, [raceId]: alerts },
+        })),
     }),
     {
       name: 'gatesmart-v2',
@@ -63,7 +78,7 @@ export const useAppStore = create(
         sessionId: state.sessionId,
         userProfile: state.userProfile,
         betSlip: state.betSlip,
-        // advisorMessages intentionally not persisted — resets on each session
+        // advisorMessages, valueAlerts intentionally not persisted
       }),
     }
   )

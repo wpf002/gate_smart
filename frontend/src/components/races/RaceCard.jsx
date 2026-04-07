@@ -34,7 +34,7 @@ export function formatPurse(race) {
  * available — it is timezone-correct regardless of where the race is held.
  * Fallback: compare HH:MM against current UK time (BST/GMT offset applied).
  */
-function isRacePast(race) {
+export function isRacePast(race) {
   if (race.off_dt) {
     return Date.now() > new Date(race.off_dt).getTime() + 5 * 60 * 1000;
   }

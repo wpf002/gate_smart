@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
+import AffiliateDrawer from '../components/common/AffiliateDrawer';
 import { simPlaceBet } from '../utils/api';
 
 // Standalone helper so it can be called in the paper-trade handler
@@ -117,21 +118,31 @@ function BetItem({ bet }) {
 }
 
 export default function BetSlipPage() {
-  const { betSlip, clearBetSlip } = useAppStore();
+  const { betSlip, clearBetSlip, userProfile } = useAppStore();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [trading, setTrading] = useState(false);
   const [tradeResult, setTradeResult] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const totalStake = betSlip.reduce((sum, b) => sum + (b.stake || 0), 0);
+  // Deduplicate by horse_id + bet_type in case of stale persisted state
+  const seen = new Set();
+  const dedupedSlip = betSlip.filter((b) => {
+    const key = `${b.horse_id}::${b.bet_type}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const totalStake = dedupedSlip.reduce((sum, b) => sum + (b.stake || 0), 0);
 
   return (
     <div>
       <PageHeader
         title="BET SLIP"
-        subtitle={betSlip.length > 0 ? `${betSlip.length} selection${betSlip.length !== 1 ? 's' : ''}` : 'No selections'}
+        subtitle={dedupedSlip.length > 0 ? `${dedupedSlip.length} selection${dedupedSlip.length !== 1 ? 's' : ''}` : 'No selections'}
         right={
-          betSlip.length > 0 ? (
+          dedupedSlip.length > 0 ? (
             <button
               onClick={clearBetSlip}
               style={{ background: 'none', border: 'none', color: 'var(--accent-red-bright)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
@@ -143,7 +154,7 @@ export default function BetSlipPage() {
       />
 
       <div style={{ padding: '16px' }}>
-        {betSlip.length === 0 ? (
+        {dedupedSlip.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>🎫</div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 6 }}>
@@ -155,7 +166,7 @@ export default function BetSlipPage() {
           </div>
         ) : (
           <>
-            {betSlip.map((bet, i) => (
+            {dedupedSlip.map((bet, i) => (
               <BetItem key={`${bet.horse_id}-${bet.bet_type}-${i}`} bet={bet} />
             ))}
 
@@ -178,7 +189,7 @@ export default function BetSlipPage() {
               <button
                 className="btn btn-primary btn-full"
                 style={{ fontSize: 15, marginBottom: 8 }}
-                onClick={() => alert('Betting placement is for informational purposes only.')}
+                onClick={() => setDrawerOpen(true)}
               >
                 Place Bets · £{totalStake.toFixed(2)}
               </button>
@@ -186,7 +197,7 @@ export default function BetSlipPage() {
                 className="btn btn-secondary btn-full"
                 style={{ fontSize: 14 }}
                 disabled={trading}
-                onClick={() => paperTradeBets(betSlip, qc, setTrading, setTradeResult, navigate)}
+                onClick={() => paperTradeBets(dedupedSlip, qc, setTrading, setTradeResult, navigate)}
               >
                 {trading ? 'Placing paper bets…' : 'Paper Trade These Bets'}
               </button>
@@ -211,6 +222,12 @@ export default function BetSlipPage() {
           </>
         )}
       </div>
+
+      <AffiliateDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        region={userProfile?.region || 'usa'}
+      />
     </div>
   );
 }

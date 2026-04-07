@@ -97,6 +97,22 @@ export const calculatePayout = (stake, odds, betType = 'win', eachWay = false) =
     })
     .then((r) => r.data);
 
+// ── Value Alerts ─────────────────────────────────────────────────────────────
+export const checkValueAlerts = (raceId, horses) =>
+  api.post('/alerts/check', { race_id: raceId, horses }).then((r) => r.data);
+
+export const getRaceFairPrices = (raceId) =>
+  api.get(`/alerts/race/${raceId}`).then((r) => r.data);
+
+// ── Race Debrief ──────────────────────────────────────────────────────────────
+export const getRaceDebrief = (raceId) =>
+  api.post('/advisor/debrief', { race_id: raceId }).then((r) => r.data);
+
+// ── Affiliate ─────────────────────────────────────────────────────────────────
+export const logAffiliateClick = (affiliateId, sessionId, raceId = '') =>
+  api.post('/affiliate/click', { affiliate_id: affiliateId, session_id: sessionId, race_id: raceId })
+    .then((r) => r.data).catch(() => null); // fire-and-forget, never throw
+
 // ── Paper Trading Simulator ───────────────────────────────────────────────────
 export const simPlaceBet = (bet) =>
   api.post('/simulator/bet', bet).then((r) => r.data);
