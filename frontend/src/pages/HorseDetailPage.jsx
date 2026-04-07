@@ -100,19 +100,6 @@ export default function HorseDetailPage() {
           <StatRow label="Distance" value={horse?.race_context?.distance} />
         </div>
 
-        {/* No form for US horses */}
-        {!horse?.form && !horse?.last_run_style && horse?.race_context?.region === 'USA' && (
-          <div className="card" style={{ marginBottom: 14, padding: '12px 14px' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--text-muted)', marginBottom: 6 }}>
-              PAST PERFORMANCES
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-              Detailed past performance data for US horses isn't available on the current data plan.
-              Use <strong style={{ color: 'var(--text-secondary)' }}>Horse Analysis</strong> below for an AI-generated assessment.
-            </div>
-          </div>
-        )}
-
         {/* Form string */}
         {(horse?.form || horse?.last_run_style) && (
           <div className="card" style={{ marginBottom: 14 }}>
