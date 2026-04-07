@@ -11,6 +11,8 @@ class Settings:
     TRACKSENSE_WEBHOOK_SECRET: str = os.getenv("TRACKSENSE_WEBHOOK_SECRET", "")
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
+    ONESIGNAL_APP_ID: str = os.getenv("ONESIGNAL_APP_ID", "")
+    ONESIGNAL_API_KEY: str = os.getenv("ONESIGNAL_API_KEY", "")
 
     @property
     def cors_origins_list(self) -> list[str]:

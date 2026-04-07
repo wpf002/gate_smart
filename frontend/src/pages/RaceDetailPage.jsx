@@ -6,6 +6,7 @@ import { HorseRow, HorseRowSkeleton } from '../components/races/HorseRow';
 import ScorecardPanel from '../components/races/ScorecardPanel';
 import ValueAlertBanner from '../components/races/ValueAlertBanner';
 import DebriefPanel from '../components/races/DebriefPanel';
+import NotificationBell from '../components/common/NotificationBell';
 import { getDisplayTime, formatDistance, formatPurse, isRacePast } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
 
@@ -357,7 +358,7 @@ export default function RaceDetailPage() {
         {race && (() => {
           const { time: displayTime, label: timeLabel } = getDisplayTime(race);
           return (
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent-gold)' }}>
                 {displayTime}
                 {timeLabel && (
@@ -373,6 +374,7 @@ export default function RaceDetailPage() {
             </div>
           );
         })()}
+        <NotificationBell raceId={raceId} raceName={race?.title || race?.race_name || ''} />
       </div>
 
       <div style={{ padding: '16px' }}>

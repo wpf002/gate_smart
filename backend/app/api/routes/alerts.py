@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -5,7 +6,8 @@ import msgspec
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.core.cache import cache_get, cache_keys
+from app.core.cache import cache_get, cache_keys, cache_set, cache_delete
+from app.services.notifications import send_value_alert_notification
 
 router = APIRouter()
 
@@ -13,6 +15,12 @@ router = APIRouter()
 class AlertCheck(msgspec.Struct):
     race_id: str
     horses: list[dict]   # list of { horse_id, horse_name, current_odds }
+
+
+class SubscribeRequest(msgspec.Struct):
+    race_id: str
+    session_id: str
+    onesignal_player_id: str
 
 
 class ValueAlert(msgspec.Struct):
@@ -99,11 +107,59 @@ async def check_alerts(request: Request) -> JSONResponse:
 
     alerts.sort(key=lambda a: a["value_percent"], reverse=True)
 
+    # Fire push notification for the top strong/moderate alert
+    top = next((a for a in alerts if a["alert_level"] in ("strong", "moderate")), None)
+    if top:
+        sub_keys = await cache_keys(f"sub:{req.race_id}:*")
+        player_ids = []
+        for k in sub_keys:
+            sub = await cache_get(k)
+            if sub and sub.get("onesignal_player_id"):
+                player_ids.append(sub["onesignal_player_id"])
+        if player_ids:
+            asyncio.create_task(send_value_alert_notification(
+                horse_name=top["horse_name"],
+                race_name=req.race_id,
+                course="",
+                current_odds=top["current_odds"],
+                fair_odds=top["fair_odds"],
+                value_percent=top["value_percent"],
+                alert_level=top["alert_level"],
+                external_user_ids=player_ids,
+            ))
+
     return JSONResponse({
         "race_id": req.race_id,
         "alerts": alerts,
         "checked_at": datetime.now(timezone.utc).isoformat(),
     })
+
+
+@router.post("/subscribe")
+async def subscribe_alerts(request: Request) -> JSONResponse:
+    raw = await request.body()
+    try:
+        req = msgspec.json.decode(raw, type=SubscribeRequest)
+    except Exception:
+        raise HTTPException(status_code=400, detail="malformed request body")
+
+    key = f"sub:{req.race_id}:{req.session_id}"
+    await cache_set(key, {
+        "onesignal_player_id": req.onesignal_player_id,
+        "subscribed_at": datetime.now(timezone.utc).isoformat(),
+        "race_id": req.race_id,
+        "session_id": req.session_id,
+    }, ex=86400)
+    return JSONResponse({"subscribed": True})
+
+
+@router.delete("/subscribe/{race_id}")
+async def unsubscribe_alerts(race_id: str, request: Request) -> JSONResponse:
+    session_id = request.headers.get("X-Session-ID", "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="X-Session-ID header required")
+    await cache_delete(f"sub:{race_id}:{session_id}")
+    return JSONResponse({"unsubscribed": True})
 
 
 @router.get("/race/{race_id}")

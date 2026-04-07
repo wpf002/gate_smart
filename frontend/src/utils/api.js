@@ -141,4 +141,15 @@ export const simReset = () =>
 export const simTopup = (amount) =>
   api.post('/simulator/bank/topup', { amount }).then((r) => r.data);
 
+// ── Push Notifications ────────────────────────────────────────────────────────
+export const subscribeToRaceAlerts = (raceId, sessionId, playerId) =>
+  api.post('/alerts/subscribe', {
+    race_id: raceId,
+    session_id: sessionId,
+    onesignal_player_id: playerId,
+  }).then((r) => r.data);
+
+export const unsubscribeFromRaceAlerts = (raceId) =>
+  api.delete(`/alerts/subscribe/${raceId}`).then((r) => r.data);
+
 export default api;

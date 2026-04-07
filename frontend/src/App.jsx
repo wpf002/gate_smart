@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import BottomNav from './components/common/BottomNav';
 import HomePage from './pages/HomePage';
@@ -92,6 +93,19 @@ function AppShell() {
 }
 
 export default function App() {
+  useEffect(() => {
+    const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
+    if (!appId || !window.OneSignalDeferred) return;
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(async (OneSignal) => {
+      await OneSignal.init({
+        appId,
+        notifyButton: { enable: false },
+        allowLocalhostAsSecureOrigin: true,
+      });
+    });
+  }, []);
+
   return (
     <BrowserRouter>
       <AppShell />

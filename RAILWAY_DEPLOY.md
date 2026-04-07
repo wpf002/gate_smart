@@ -1,5 +1,14 @@
 # GateSmart — Railway Deployment
 
+## Live Production URLs
+
+Backend:  <https://backend-production-15e941.up.railway.app>
+Frontend: <https://frontend-production-de916.up.railway.app>
+Health:   <https://backend-production-15e941.up.railway.app/health>
+API Docs: <https://backend-production-15e941.up.railway.app/docs>
+
+Last deployed: April 2026
+
 ## Services
 
 Create three services in Railway:

@@ -2,6 +2,12 @@
 
 AI-powered horse racing betting intelligence platform.
 
+## Live Demo
+
+Frontend: <https://frontend-production-de916.up.railway.app>
+API:      <https://backend-production-15e941.up.railway.app>
+Health:   <https://backend-production-15e941.up.railway.app/health>
+
 **Secretariat** — the AI handicapping engine — analyzes races, interprets form, identifies value, and explains every pick in plain English.
 
 ---

@@ -62,6 +62,12 @@ async def cache_keys(pattern: str) -> list:
     return await _redis.keys(pattern)
 
 
+async def cache_delete(key: str) -> None:
+    if _redis is None:
+        return
+    await _redis.delete(key)
+
+
 async def cache_incr(key: str, ttl: Optional[int] = None) -> int:
     """Increment a Redis counter. Pass ttl to auto-expire; omit for persistent counters."""
     if _redis is None:

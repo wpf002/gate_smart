@@ -1,0 +1,11 @@
+# GateSmart — Railway Production URLs
+# Updated: 2026-04-07
+
+BACKEND_URL=https://backend-production-15e941.up.railway.app
+FRONTEND_URL=https://frontend-production-de916.up.railway.app
+
+# Health check
+HEALTH_CHECK=https://backend-production-15e941.up.railway.app/health
+
+# API base
+API_BASE=https://backend-production-15e941.up.railway.app/api
