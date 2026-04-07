@@ -146,20 +146,20 @@ describe('formatDistance', () => {
     expect(formatDistance('1m', '8.0')).toBe('1m');
   });
 
-  it('shows decimal miles / remainder furlongs for 1m1f', () => {
-    expect(formatDistance('1m1f', '9.0')).toBe('1.125m / 1f');
+  it('shows whole miles / remainder furlongs for 1m1f', () => {
+    expect(formatDistance('1m1f', '9.0')).toBe('1m / 1f');
   });
 
-  it('shows decimal miles / remainder furlongs for 1m3f', () => {
-    expect(formatDistance('1m3f', '11.0')).toBe('1.375m / 3f');
+  it('shows whole miles / remainder furlongs for 1m3f', () => {
+    expect(formatDistance('1m3f', '11.0')).toBe('1m / 3f');
   });
 
-  it('shows decimal miles only for pure 2m', () => {
+  it('shows whole miles only for pure 2m', () => {
     expect(formatDistance('2m', '16.0')).toBe('2m');
   });
 
-  it('shows decimal miles / remainder furlongs for 2m4f', () => {
-    expect(formatDistance('2m4f', '20.0')).toBe('2.5m / 4f');
+  it('shows whole miles / remainder furlongs for 2m4f', () => {
+    expect(formatDistance('2m4f', '20.0')).toBe('2m / 4f');
   });
 
   it('shows furlongs only for sprint distances under 1m', () => {
@@ -174,7 +174,7 @@ describe('formatDistance', () => {
   });
 
   it('derives format from distance_f alone when dist string missing', () => {
-    expect(formatDistance(undefined, '9.0')).toBe('1.125m / 1f');
+    expect(formatDistance(undefined, '9.0')).toBe('1m / 1f');
     expect(formatDistance(undefined, '8.0')).toBe('1m');
   });
 });
