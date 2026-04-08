@@ -1,6 +1,9 @@
+import { useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import AccuracyBadge from '../components/common/AccuracyBadge';
+import { authUpdateProfile, authLogout } from '../utils/api';
 
 const RISK_OPTIONS = ['low', 'medium', 'high'];
 const EXPERIENCE_OPTIONS = ['beginner', 'intermediate', 'advanced'];
@@ -58,13 +61,107 @@ function SectionLabel({ children }) {
 }
 
 export default function ProfilePage() {
-  const { userProfile, setUserProfile } = useAppStore();
+  const { userProfile, setUserProfile, authUser, authToken, setAuth, clearAuth } = useAppStore();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  const isLoggedIn = !!(authToken && authUser);
+
+  // Sync server profile changes
+  const updateServerMutation = useMutation({
+    mutationFn: authUpdateProfile,
+    onSuccess: (updatedUser) => {
+      setAuth(authToken, updatedUser);
+    },
+  });
+
+  const handleProfileChange = (updates) => {
+    setUserProfile(updates);
+    if (isLoggedIn) {
+      // Map local keys to server keys
+      const serverUpdates = {};
+      if (updates.riskTolerance !== undefined) serverUpdates.risk_tolerance = updates.riskTolerance;
+      if (updates.experienceLevel !== undefined) serverUpdates.experience_level = updates.experienceLevel;
+      if (updates.bankroll !== undefined) serverUpdates.bankroll = updates.bankroll;
+      if (updates.region !== undefined) serverUpdates.region = updates.region;
+      if (Object.keys(serverUpdates).length > 0) {
+        updateServerMutation.mutate(serverUpdates);
+      }
+    }
+  };
+
+  const logoutMutation = useMutation({
+    mutationFn: authLogout,
+    onSettled: () => {
+      clearAuth();
+      qc.clear();
+    },
+  });
 
   return (
     <div>
       <PageHeader title="PROFILE" subtitle="Your betting preferences" />
 
       <div style={{ padding: '16px' }}>
+
+        {/* Auth status banner */}
+        {isLoggedIn ? (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 14px',
+            background: 'rgba(34,197,94,0.08)',
+            border: '1px solid rgba(34,197,94,0.25)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 4,
+          }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-green-bright)' }}>
+                Signed in
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
+                {authUser.email}
+              </div>
+            </div>
+            <button
+              className="btn btn-secondary"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+              style={{ fontSize: 12, padding: '6px 14px' }}
+            >
+              {logoutMutation.isPending ? 'Signing out…' : 'Sign out'}
+            </button>
+          </div>
+        ) : (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 14px',
+            background: 'rgba(26,107,168,0.08)',
+            border: '1px solid rgba(26,107,168,0.25)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 4,
+          }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-blue)' }}>
+                Guest mode
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                Sign in to save bets &amp; profile across devices
+              </div>
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate('/login')}
+              style={{ fontSize: 12, padding: '6px 14px', whiteSpace: 'nowrap' }}
+            >
+              Sign in
+            </button>
+          </div>
+        )}
+
         {/* Name */}
         <SectionLabel>Display Name</SectionLabel>
         <input
@@ -82,7 +179,7 @@ export default function ProfilePage() {
             type="number"
             min="0"
             value={userProfile.bankroll}
-            onChange={(e) => setUserProfile({ bankroll: parseFloat(e.target.value) || 0 })}
+            onChange={(e) => handleProfileChange({ bankroll: parseFloat(e.target.value) || 0 })}
             style={{ flex: 1, padding: '10px 14px', fontSize: 16, fontFamily: 'var(--font-mono)' }}
           />
         </div>
@@ -95,7 +192,7 @@ export default function ProfilePage() {
         <SegmentControl
           options={RISK_OPTIONS}
           value={userProfile.riskTolerance}
-          onChange={(v) => setUserProfile({ riskTolerance: v })}
+          onChange={(v) => handleProfileChange({ riskTolerance: v })}
         />
 
         {/* Experience level */}
@@ -103,7 +200,7 @@ export default function ProfilePage() {
         <SegmentControl
           options={EXPERIENCE_OPTIONS}
           value={userProfile.experienceLevel}
-          onChange={(v) => setUserProfile({ experienceLevel: v })}
+          onChange={(v) => handleProfileChange({ experienceLevel: v })}
         />
 
         {/* Secretariat accuracy stats */}

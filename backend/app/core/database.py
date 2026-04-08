@@ -25,7 +25,7 @@ class Base(DeclarativeBase):
 async def init_db() -> None:
     global _engine, _AsyncSessionLocal
     from app.core.config import settings
-    from app.models import equibase  # noqa: F401 — ensure models are registered
+    from app.models import equibase, user  # noqa: F401 — ensure models are registered
 
     _engine = create_async_engine(
         settings.DATABASE_URL,

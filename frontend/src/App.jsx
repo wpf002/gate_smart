@@ -10,6 +10,7 @@ import BetSlipPage from './pages/BetSlipPage';
 import EducationPage from './pages/EducationPage';
 import ProfilePage from './pages/ProfilePage';
 import SimulatorPage from './pages/SimulatorPage';
+import LoginPage from './pages/LoginPage';
 import OnboardingFlow from './components/common/OnboardingFlow';
 import { useAppStore } from './store';
 
@@ -96,6 +97,7 @@ function AppShell() {
           <Route path="/education" element={<EducationPage />} />
           <Route path="/simulator" element={<SimulatorPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/login" element={<LoginPage />} />
         </Routes>
       </div>
       <BottomNav />

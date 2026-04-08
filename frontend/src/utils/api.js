@@ -8,12 +8,14 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Attach session ID to every request for paper trading
+// Attach session ID and JWT token to every request
 api.interceptors.request.use((config) => {
   try {
     const stored = JSON.parse(localStorage.getItem('gatesmart-v2') || '{}');
     const sid = stored?.state?.sessionId;
     if (sid) config.headers['X-Session-ID'] = sid;
+    const token = stored?.state?.authToken;
+    if (token) config.headers['Authorization'] = `Bearer ${token}`;
   } catch {
     // ignore
   }
@@ -143,6 +145,23 @@ export const simReset = () =>
 
 export const simTopup = (amount) =>
   api.post('/simulator/bank/topup', { amount }).then((r) => r.data);
+
+// ── Push Notifications ────────────────────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────────────────────
+export const authRegister = (email, password, profile = {}) =>
+  api.post('/auth/register', { email, password, ...profile }).then((r) => r.data);
+
+export const authLogin = (email, password) =>
+  api.post('/auth/login', { email, password }).then((r) => r.data);
+
+export const authMe = () =>
+  api.get('/auth/me').then((r) => r.data);
+
+export const authUpdateProfile = (updates) =>
+  api.put('/auth/profile', updates).then((r) => r.data);
+
+export const authLogout = () =>
+  api.post('/auth/logout').then((r) => r.data);
 
 // ── Push Notifications ────────────────────────────────────────────────────────
 export const subscribeToRaceAlerts = (raceId, sessionId, playerId) =>

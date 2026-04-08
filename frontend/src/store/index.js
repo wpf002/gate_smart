@@ -10,12 +10,18 @@ function generateSessionId() {
 export const useAppStore = create(
   persist(
     (set) => ({
-      // Session ID for paper trading — cryptographically random, stored separately
+      // Session ID for paper trading (guest mode) — cryptographically random
       sessionId: localStorage.getItem('gs_session_id') || (() => {
         const id = generateSessionId();
         localStorage.setItem('gs_session_id', id);
         return id;
       })(),
+
+      // Auth — JWT token + server user profile
+      authToken: null,
+      authUser: null,
+      setAuth: (token, user) => set({ authToken: token, authUser: user }),
+      clearAuth: () => set({ authToken: null, authUser: null }),
 
       // Onboarding
       onboardingComplete: localStorage.getItem('gs_onboarded') === 'true',
@@ -82,6 +88,8 @@ export const useAppStore = create(
       name: 'gatesmart-v2',
       partialize: (state) => ({
         sessionId: state.sessionId,
+        authToken: state.authToken,
+        authUser: state.authUser,
         userProfile: state.userProfile,
         betSlip: state.betSlip,
         // advisorMessages, valueAlerts intentionally not persisted
