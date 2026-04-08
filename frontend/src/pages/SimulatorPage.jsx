@@ -189,8 +189,15 @@ function BetCard({ bet, onSettle, settling, settleMsg }) {
           </span>
         )}
       </div>
-      {isThisSettling === false && settleMsg?.raceId === bet.race_id && (
-        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
+      {!isThisSettling && settleMsg?.raceId === bet.race_id && (
+        <div style={{
+          marginTop: 8,
+          fontSize: 12,
+          color: 'var(--text-secondary)',
+          background: 'rgba(255,255,255,0.04)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '6px 8px',
+        }}>
           {settleMsg.text}
         </div>
       )}
@@ -198,7 +205,7 @@ function BetCard({ bet, onSettle, settling, settleMsg }) {
   );
 }
 
-function BetsTab({ bets, onSettle, settling, settleMsg }) {
+function BetsTab({ bets, onSettle, settling, settleMsg, onReset, resetting }) {
   if (!bets || bets.length === 0) {
     return (
       <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -216,6 +223,21 @@ function BetsTab({ bets, onSettle, settling, settleMsg }) {
       {bets.map((bet) => (
         <BetCard key={bet.bet_id} bet={bet} onSettle={onSettle} settling={settling} settleMsg={settleMsg} />
       ))}
+      <button
+        className="btn"
+        disabled={resetting}
+        onClick={onReset}
+        style={{
+          width: '100%',
+          marginTop: 8,
+          fontSize: 13,
+          color: 'var(--accent-red-bright)',
+          border: '1px solid var(--accent-red-dim)',
+          background: 'transparent',
+        }}
+      >
+        {resetting ? 'Clearing…' : 'Clear All Bets'}
+      </button>
     </div>
   );
 }
@@ -418,6 +440,8 @@ export default function SimulatorPage() {
           onSettle={handleSettle}
           settling={settling}
           settleMsg={settleMsg}
+          onReset={handleReset}
+          resetting={resetMutation.isPending}
         />
       )}
       {tab === 'stats' && (
