@@ -33,7 +33,7 @@ export function HorseRowSkeleton() {
  *   raceId     {string}
  *   scorecards {array}    array of scorecards from /advisor/scorecard (optional)
  */
-export function HorseRow({ horse, analysis, raceId, scorecards = [] }) {
+export function HorseRow({ horse, analysis, raceId, scorecards = [], course = '', raceName = '' }) {
   const navigate = useNavigate();
   const addToBetSlip = useAppStore((s) => s.addToBetSlip);
   const betSlip = useAppStore((s) => s.betSlip);
@@ -67,6 +67,10 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [] }) {
       bet_type: betType,
       odds,
       stake: 10,
+      course,
+      race_name: raceName,
+      jockey: horse.jockey || '',
+      trainer: horse.trainer || '',
     });
     trackBetAdded(betType, horse.horse_id, odds);
     setAdded(true);

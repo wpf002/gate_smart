@@ -77,8 +77,10 @@ function BankTab({ stats, onTopup, onReset, topping, resetting, topupError }) {
         fontSize: 12,
         color: 'var(--text-muted)',
         marginBottom: 16,
+        lineHeight: 1.5,
       }}>
-        This is a paper trading simulator. No real money is involved.
+        Paper trading simulator — no real money involved.<br />
+        <span style={{ opacity: 0.8 }}>Your <strong>Profile Bankroll</strong> is a separate value used by Secretariat for stake sizing recommendations.</span>
       </div>
 
       {/* Reset */}
@@ -122,9 +124,10 @@ function BetStatusBadge({ status }) {
   );
 }
 
-function BetCard({ bet, onSettle, settling }) {
+function BetCard({ bet, onSettle, settling, settleMsg }) {
   const isPending = bet.status === 'pending';
   const pnlColor = bet.pnl >= 0 ? 'var(--accent-green-bright)' : 'var(--accent-red-bright)';
+  const isThisSettling = settling === bet.race_id;
 
   return (
     <div style={{
@@ -143,6 +146,16 @@ function BetCard({ bet, onSettle, settling }) {
             {bet.bet_type?.toUpperCase()} · {bet.odds}
             {bet.course && <span> · {bet.course}</span>}
           </div>
+          {(bet.jockey || bet.trainer) && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              {[bet.jockey && `J: ${bet.jockey}`, bet.trainer && `T: ${bet.trainer}`].filter(Boolean).join(' · ')}
+            </div>
+          )}
+          {bet.placed_at && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              {new Date(bet.placed_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </div>
+          )}
         </div>
         <BetStatusBadge status={bet.status} />
       </div>
@@ -163,11 +176,11 @@ function BetCard({ bet, onSettle, settling }) {
         {isPending && (
           <button
             className="btn btn-secondary"
-            disabled={settling === bet.race_id}
+            disabled={isThisSettling}
             onClick={() => onSettle(bet.race_id)}
             style={{ fontSize: 11, padding: '4px 10px' }}
           >
-            {settling === bet.race_id ? 'Settling…' : 'Check Result'}
+            {isThisSettling ? 'Checking…' : 'Check Result'}
           </button>
         )}
         {!isPending && (
@@ -176,11 +189,16 @@ function BetCard({ bet, onSettle, settling }) {
           </span>
         )}
       </div>
+      {isThisSettling === false && settleMsg?.raceId === bet.race_id && (
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
+          {settleMsg.text}
+        </div>
+      )}
     </div>
   );
 }
 
-function BetsTab({ bets, onSettle, settling }) {
+function BetsTab({ bets, onSettle, settling, settleMsg }) {
   if (!bets || bets.length === 0) {
     return (
       <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -196,7 +214,7 @@ function BetsTab({ bets, onSettle, settling }) {
   return (
     <div style={{ padding: '0 16px 16px' }}>
       {bets.map((bet) => (
-        <BetCard key={bet.bet_id} bet={bet} onSettle={onSettle} settling={settling} />
+        <BetCard key={bet.bet_id} bet={bet} onSettle={onSettle} settling={settling} settleMsg={settleMsg} />
       ))}
     </div>
   );
@@ -279,6 +297,7 @@ function StatsTab({ stats }) {
 export default function SimulatorPage() {
   const [tab, setTab] = useState('bank');
   const [settling, setSettling] = useState(null);
+  const [settleMsg, setSettleMsg] = useState(null);
   const qc = useQueryClient();
 
   const { data: statsData } = useQuery({
@@ -312,12 +331,20 @@ export default function SimulatorPage() {
 
   const handleSettle = useCallback(async (raceId) => {
     setSettling(raceId);
+    setSettleMsg(null);
     try {
-      await simSettle(raceId);
+      const result = await simSettle(raceId);
       qc.invalidateQueries({ queryKey: ['sim-bets'] });
       qc.invalidateQueries({ queryKey: ['sim-stats'] });
-    } catch (err) {
-      // silently ignore — race may not have results yet
+      const count = result?.settled?.length ?? 0;
+      setSettleMsg({
+        raceId,
+        text: count > 0
+          ? `${count} bet${count !== 1 ? 's' : ''} settled`
+          : 'Results not available yet — check back after the race',
+      });
+    } catch {
+      setSettleMsg({ raceId, text: 'Could not fetch results — try again later' });
     } finally {
       setSettling(null);
     }
@@ -390,6 +417,7 @@ export default function SimulatorPage() {
           bets={bets}
           onSettle={handleSettle}
           settling={settling}
+          settleMsg={settleMsg}
         />
       )}
       {tab === 'stats' && (

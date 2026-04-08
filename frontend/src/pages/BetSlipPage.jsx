@@ -22,6 +22,10 @@ async function paperTradeBets(betSlip, qc, setTrading, setTradeResult, navigate)
         bet_type: bet.bet_type,
         odds: String(bet.odds),
         stake: bet.stake,
+        race_name: bet.race_name || '',
+        course: bet.course || '',
+        jockey: bet.jockey || '',
+        trainer: bet.trainer || '',
       });
       trackPaperBetPlaced(bet.bet_type, bet.stake);
       placed++;
@@ -65,11 +69,22 @@ function BetItem({ bet }) {
       border: '1px solid var(--border-subtle)',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-        <div>
+        <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
           <div style={{ fontWeight: 700, fontSize: 14 }}>{bet.horse_name}</div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
             {bet.bet_type?.toUpperCase()} · {bet.odds}
+            {bet.course && <span> · {bet.course}</span>}
           </div>
+          {(bet.jockey || bet.trainer) && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              {[bet.jockey && `J: ${bet.jockey}`, bet.trainer && `T: ${bet.trainer}`].filter(Boolean).join(' · ')}
+            </div>
+          )}
+          {bet.placed_at && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              {new Date(bet.placed_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </div>
+          )}
         </div>
         <button
           onClick={() => removeFromBetSlip(bet.horse_id, bet.bet_type)}

@@ -51,7 +51,13 @@ export const useAppStore = create(
             (b) => b.horse_id === bet.horse_id && b.bet_type === bet.bet_type
           );
           if (exists) return state;
-          return { betSlip: [...state.betSlip, { ...bet, stake: bet.stake ?? 10 }] };
+          return {
+            betSlip: [...state.betSlip, {
+              ...bet,
+              stake: bet.stake ?? 10,
+              placed_at: new Date().toISOString(),
+            }],
+          };
         }),
       removeFromBetSlip: (horse_id, bet_type) =>
         set((state) => ({

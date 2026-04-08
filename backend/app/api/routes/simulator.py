@@ -30,6 +30,8 @@ class PlaceBetRequest(msgspec.Struct):
     stake: float
     race_name: str = ""
     course: str = ""
+    jockey: str = ""
+    trainer: str = ""
 
 
 class TopupRequest(msgspec.Struct):
@@ -105,6 +107,8 @@ def _bet_to_dict(b: PaperBetModel) -> dict:
         "settled_at": b.settled_at,
         "race_name": b.race_name,
         "course": b.course,
+        "jockey": b.jockey,
+        "trainer": b.trainer,
     }
 
 
@@ -295,6 +299,19 @@ async def place_bet(
         if req.stake > bank:
             raise HTTPException(status_code=400, detail=f"insufficient funds (bank: £{bank:.2f})")
 
+        # Prevent duplicate pending bets for same horse in same race
+        dup = await db.execute(
+            select(PaperBetModel).where(
+                PaperBetModel.user_id == user.id,
+                PaperBetModel.race_id == req.race_id,
+                PaperBetModel.horse_id == req.horse_id,
+                PaperBetModel.bet_type == req.bet_type,
+                PaperBetModel.status == "pending",
+            )
+        )
+        if dup.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="A pending bet for this horse already exists")
+
         bet_row = PaperBetModel(
             user_id=user.id,
             bet_id=str(uuid.uuid4())[:8],
@@ -307,6 +324,8 @@ async def place_bet(
             placed_at=datetime.now(timezone.utc).isoformat(),
             race_name=req.race_name,
             course=req.course,
+            jockey=req.jockey,
+            trainer=req.trainer,
         )
         user.bankroll = round(bank - req.stake, 2)
         db.add(bet_row)
@@ -320,6 +339,13 @@ async def place_bet(
         bank = await _get_bank(sid)
         if req.stake > bank:
             raise HTTPException(status_code=400, detail=f"insufficient funds (bank: £{bank:.2f})")
+
+        # Prevent duplicates in Redis mode
+        existing = await _get_bets(sid)
+        for b in existing:
+            if (b.get("race_id") == req.race_id and b.get("horse_id") == req.horse_id
+                    and b.get("bet_type") == req.bet_type and b.get("status") == "pending"):
+                raise HTTPException(status_code=409, detail="A pending bet for this horse already exists")
 
         bet = {
             "bet_id": str(uuid.uuid4())[:8],
@@ -336,6 +362,8 @@ async def place_bet(
             "settled_at": "",
             "race_name": req.race_name,
             "course": req.course,
+            "jockey": req.jockey,
+            "trainer": req.trainer,
         }
         new_bank = round(bank - req.stake, 2)
         await _set_bank(sid, new_bank)

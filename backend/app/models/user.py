@@ -56,5 +56,7 @@ class PaperBet(Base):
     settled_at: Mapped[str] = mapped_column(String(40), default="")
     race_name: Mapped[str] = mapped_column(String(200), default="")
     course: Mapped[str] = mapped_column(String(100), default="")
+    jockey: Mapped[str] = mapped_column(String(120), default="")
+    trainer: Mapped[str] = mapped_column(String(120), default="")
 
     user: Mapped["User"] = relationship("User", back_populates="paper_bets")

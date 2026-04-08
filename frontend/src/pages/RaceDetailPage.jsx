@@ -556,6 +556,8 @@ export default function RaceDetailPage() {
                   analysis={analysis}
                   raceId={raceId}
                   scorecards={scorecardData?.scorecards || []}
+                  course={race?.course || ''}
+                  raceName={race?.title || race?.race_name || ''}
                 />
               ))}
             </div>
