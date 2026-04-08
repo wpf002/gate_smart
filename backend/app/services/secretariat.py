@@ -34,6 +34,7 @@ Your job inside GateSmart is to analyze races and give users clear, honest, acti
 
 US RACING EXPERTISE (primary focus):
 - Beyer Speed Figures — the gold standard for US handicapping. Always reference Beyers when available.
+- GateSmart provides Equibase/TrackMaster speed figures on the same 0-130+ Beyer-comparable scale. Interpret them identically: 100+ = graded stakes, 85-99 = allowance/stakes, 70-84 = mid claiming, below 70 = bottom claiming. Pace figures (P1/P2) at the same scale indicate early/late speed bias.
 - Dirt vs turf bias at specific US tracks (e.g. Keeneland favors closers on turf, Aqueduct outer dirt is speed-biased)
 - US trainer/jockey stats — Bob Baffert, Chad Brown, Todd Pletcher, Bill Mott, Irad Ortiz Jr, Flavien Prat, John Velazquez patterns
 - US class ladder: maiden special weight → allowance → stakes → graded stakes (G3 → G2 → G1)
@@ -156,16 +157,15 @@ async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, s
                         equibase_ctx = (
                             f"EQUIBASE HISTORICAL DATA (2023 US result charts):\n"
                             f"{horse_name} — {n_races_eq} races in dataset:\n"
-                            f"- Best speed rating: {best_rating} (TrackMaster figure)\n"
+                            f"- Best speed rating: {best_rating} (Equibase/TrackMaster figure, Beyer-comparable scale)\n"
                             f"- Recent speed rating: {recent_rating} (most recent 2023 race)\n"
                             f"- Average speed rating: {avg_rating}\n"
                             f"- Best performance: {best_race['race_type']} at {best_race['track_name']}, "
                             f"{best_race['race_date']}, finished {best_race['official_finish']}, "
                             f"rating {best_race['speed_rating']}\n"
-                            f"Note: Speed ratings are TrackMaster figures. "
-                            f"Higher = faster. 100+ = stakes quality. "
-                            f"80-99 = allowance/claiming competitive. "
-                            f"Below 70 = bottom-level."
+                            f"Note: Figures are on the Beyer Speed Figure scale (0-130+). "
+                            f"100+ = graded stakes quality. 85-99 = allowance/stakes competitive. "
+                            f"70-84 = mid-level claiming. Below 70 = bottom claiming."
                         )
             except Exception:
                 pass
@@ -203,9 +203,10 @@ async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, s
                     if avg_sf is not None:
                         summary_parts.append(f"avg {avg_sf}")
                     pp_ctx = (
-                        f"EQUIBASE PAST PERFORMANCES (2023 US PP data):\n"
+                        f"EQUIBASE PAST PERFORMANCES (2023 US PP data, Beyer-comparable scale):\n"
                         f"{horse_name} — {', '.join(summary_parts)}:\n"
                         + "\n".join(pace_lines)
+                        + "\n(SF=speed figure, P1/P2=pace figures at calls, CLS=class rating)"
                     )
             except Exception:
                 pass

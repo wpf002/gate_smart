@@ -329,18 +329,18 @@ def parse_pp_file(xml_path: str) -> list[dict]:
                     continue
 
                 # Speed / pace / class figures
-                sf_text = _pp_text(start_el, "SpeedFigure")
-                speed_figure: Optional[int] = None
-                if sf_text is not None:
-                    try:
-                        speed_figure = int(float(sf_text))
-                    except (ValueError, TypeError):
-                        pass
+                # XML stores figures as tenths (e.g. 480 = 48.0); 9999 = no figure sentinel
+                def _figure(el, *tags) -> Optional[int]:
+                    raw = _pp_int(el, *tags)
+                    if raw == 0 or raw >= 9999:
+                        return None
+                    return round(raw / 10)
 
-                pace_1 = _pp_int(start_el, "PaceFigure1")
-                pace_2 = _pp_int(start_el, "PaceFigure2")
-                pace_3 = _pp_int(start_el, "PaceFigure3")
-                class_rating = _pp_int(start_el, "ClassRating")
+                speed_figure = _figure(start_el, "SpeedFigure")
+                pace_1 = _figure(start_el, "PaceFigure1") or 0
+                pace_2 = _figure(start_el, "PaceFigure2") or 0
+                pace_3 = _figure(start_el, "PaceFigure3") or 0
+                class_rating = _figure(start_el, "ClassRating") or 0
                 official_finish = _pp_int(start_el, "OfficialFinish")
                 post_position = _pp_int(start_el, "PostPosition")
                 earnings_usd = _pp_float(start_el, "EarningsUSA")
