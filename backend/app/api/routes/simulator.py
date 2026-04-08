@@ -172,7 +172,8 @@ async def _settle_race_pg(
     session_id: Optional[str],
     race_id: str,
     user: Optional[User] = None,
-) -> list[dict]:
+) -> tuple[list[dict], str]:
+    """Returns (settled_bets, status) where status is 'settled'|'no_bets'|'no_results'|'error'."""
     if user_id:
         q = select(PaperBetModel).where(
             PaperBetModel.user_id == user_id,
@@ -188,7 +189,7 @@ async def _settle_race_pg(
     result = await db.execute(q)
     pending_bets = result.scalars().all()
     if not pending_bets:
-        return []
+        return [], "no_bets"
 
     try:
         results_data = await racing_api.get_results()
@@ -197,10 +198,10 @@ async def _settle_race_pg(
             None,
         )
     except Exception:
-        return []
+        return [], "error"
 
     if not race_result:
-        return []
+        return [], "no_results"
 
     runners_by_id: dict = {}
     runners_by_name: dict = {}
@@ -231,7 +232,7 @@ async def _settle_race_pg(
         settled_dicts.append(result_dict)
 
     await db.commit()
-    return settled_dicts
+    return settled_dicts, "settled"
 
 
 # Keep this for backward compat (called from races.py auto-settle)
@@ -363,11 +364,15 @@ async def settle(
     user: Optional[User] = Depends(get_optional_user),
 ) -> JSONResponse:
     user_id, session_id = _identity(request, user)
-    settled = await _settle_race_pg(db, user_id, session_id, race_id, user)
+    settled, status = await _settle_race_pg(db, user_id, session_id, race_id, user)
 
-    if not settled:
-        return JSONResponse({"message": "no pending bets found for this race", "settled": []})
-    return JSONResponse({"message": f"{len(settled)} bet(s) settled", "settled": settled})
+    messages = {
+        "settled":    f"{len(settled)} bet(s) settled",
+        "no_bets":    "No pending bets found for this race",
+        "no_results": "Race result not available yet — check back after the race finishes",
+        "error":      "Could not fetch results — try again in a moment",
+    }
+    return JSONResponse({"message": messages[status], "settled": settled})
 
 
 @router.get("/bets")

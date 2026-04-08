@@ -404,13 +404,11 @@ export default function SimulatorPage() {
       const result = await simSettle(raceId);
       qc.invalidateQueries({ queryKey: ['sim-bets'] });
       qc.invalidateQueries({ queryKey: ['sim-stats'] });
-      const count = result?.settled?.length ?? 0;
-      setSettleMsg({
-        raceId,
-        text: count > 0
-          ? `${count} bet${count !== 1 ? 's' : ''} settled`
-          : 'Results not available yet — check back after the race',
-      });
+      setSettleMsg({ raceId, text: result?.message || 'Done' });
+      if (result?.settled?.length > 0) {
+        qc.invalidateQueries({ queryKey: ['sim-bets'] });
+        qc.invalidateQueries({ queryKey: ['sim-stats'] });
+      }
     } catch {
       setSettleMsg({ raceId, text: 'Could not fetch results — try again later' });
     } finally {
