@@ -18,6 +18,8 @@ Redis key schema:
   na:meets:{date}                  TTL 600s   — NA meet list
   na:entries:{meet_id}             TTL 600s   — NA meet entries
   na:results:{meet_id}             TTL 3600s  — NA meet results
+  equibase:horse:{name_key}        no TTL     — 2023 result chart speed figures per horse
+  equibase:pp:{name_key}           no TTL     — 2023 past performance records per horse (cap 30)
 """
 import json
 from typing import Any, Optional

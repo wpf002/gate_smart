@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
+from app.core.cache import cache_get
 from app.services import racing_api, secretariat
+from app.services.equibase_api import make_horse_name_key
 
 router = APIRouter()
 
@@ -111,6 +113,30 @@ async def horse_explain(horse_id: str):
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail="AI analysis unavailable")
+
+
+@router.get("/{horse_id}/past-performances")
+async def horse_past_performances(
+    horse_id: str,
+    name: str = Query(default=None, description="Horse name override for Equibase lookup"),
+):
+    """
+    Return stored Equibase past performance records for a horse.
+    horse_id is used to find the horse name from today's racecards; pass ?name= to override.
+    """
+    horse_name = name
+    if not horse_name:
+        runner, _ = await _find_runner_in_racecards(horse_id)
+        if runner:
+            horse_name = runner.get("horse_name") or runner.get("horse", "")
+        else:
+            horse_name = horse_id  # last resort — treat horse_id as the name
+
+    eq_key = make_horse_name_key(horse_name)
+    pp_data = await cache_get(f"equibase:pp:{eq_key}")
+    if not pp_data:
+        return {"horse_id": horse_id, "horse_name": horse_name, "past_performances": [], "total": 0}
+    return {"horse_id": horse_id, "horse_name": horse_name, "past_performances": pp_data, "total": len(pp_data)}
 
 
 @router.get("/{horse_id}/form/decode")

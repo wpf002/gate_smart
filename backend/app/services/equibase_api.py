@@ -1,7 +1,8 @@
 """
-Equibase / TrackMaster result chart parser.
-Parses TrackMaster tchSchema.xsd XML files (file naming: {TRK}{yyyymmdd}tch.xml).
-Provides speed figures and race history for US horses.
+Equibase / TrackMaster parsers.
+
+Result charts: TrackMaster tchSchema.xsd XML (file naming: {TRK}{yyyymmdd}tch.xml)
+Past performances: Equibase simulcast.xsd XML (file naming: SIMD{yyyymmdd}{TRK}_{CTR}.xml)
 """
 import logging
 import re
@@ -213,3 +214,206 @@ def parse_result_chart(xml_path: str) -> list[dict]:
                 continue
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Past Performance parser  (Equibase simulcast.xsd  —  SIMD*.xml files)
+# ---------------------------------------------------------------------------
+
+def _pp_text(el, *tags, default=None):
+    """Walk a chain of child tags and return the text of the final one."""
+    cur = el
+    for tag in tags:
+        if cur is None:
+            return default
+        cur = cur.find(tag)
+    if cur is None or cur.text is None:
+        return default
+    return cur.text.strip()
+
+
+def _pp_int(el, *tags, default: int = 0) -> int:
+    val = _pp_text(el, *tags)
+    if val is None:
+        return default
+    try:
+        return int(float(val))
+    except (ValueError, TypeError):
+        return default
+
+
+def _pp_float(el, *tags, default: float = 0.0) -> float:
+    val = _pp_text(el, *tags)
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
+def _parse_filename_meta(xml_path: str) -> tuple[str, str, str]:
+    """
+    Extract (card_date, track_code, country) from SIMD filename.
+    SIMD20230101AQU_USA.xml  →  ('2023-01-01', 'AQU', 'USA')
+    Returns ('', '', '') on parse failure.
+    """
+    import os
+    fname = os.path.basename(xml_path)
+    m = re.match(r"SIMD(\d{4})(\d{2})(\d{2})([A-Z0-9]+)_([A-Z]+)\.xml", fname, re.IGNORECASE)
+    if not m:
+        return "", "", ""
+    card_date = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    track_code = m.group(4).upper()
+    country = m.group(5).upper()
+    return card_date, track_code, country
+
+
+def parse_pp_file(xml_path: str) -> list[dict]:
+    """
+    Parse a single Equibase past-performance XML file (SIMD*.xml).
+
+    Returns one dict per horse per PastPerformance record.
+    Redis key: equibase:pp:{horse_name_key}
+
+    Each record contains:
+      horse_name, horse_name_key, registration_number
+      card_date, card_track_code          ← the race card this entry was filed for
+      pp_track_code, pp_race_date, pp_race_number
+      pp_race_type, pp_surface, pp_distance, pp_track_condition
+      speed_figure, pace_figure_1/2/3, class_rating
+      official_finish, post_position
+      jockey_first/last, trainer_first/last (from the entry, i.e. current connections)
+      short_comment, long_comment
+      earnings_usd, odds_decimal
+      win_time_hundredths, field_size
+    """
+    card_date, card_track_code, _ = _parse_filename_meta(xml_path)
+
+    try:
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+    except Exception as e:
+        logger.error(f"Failed to parse PP XML {xml_path}: {e}")
+        return []
+
+    records: list[dict] = []
+
+    for race_el in root.findall("Race"):
+        race_number = _pp_int(race_el, "RaceNumber")
+        post_time = _pp_text(race_el, "PostTime", default="")
+        race_distance = _pp_text(race_el, "Distance", "PublishedValue", default="")
+        race_surface = _pp_text(race_el, "Course", "CourseType", "Value", default="")
+        race_type = _pp_text(race_el, "RaceType", "RaceType", default="")
+        race_purse = _pp_float(race_el, "PurseUSA")
+        race_breed = _pp_text(race_el, "BreedType", "Value", default="")
+
+        for starter_el in race_el.findall("Starters"):
+            horse_name_raw = _pp_text(starter_el, "Horse", "HorseName")
+            if not horse_name_raw:
+                continue
+
+            horse_name = _normalize_horse_name(horse_name_raw)
+            horse_name_key = make_horse_name_key(horse_name)
+            reg_num = _pp_text(starter_el, "Horse", "RegistrationNumber", default="")
+
+            # Current connections (as of the card date)
+            trainer_first = _pp_text(starter_el, "Trainer", "FirstName", default="")
+            trainer_last = _pp_text(starter_el, "Trainer", "LastName", default="")
+            jockey_first = _pp_text(starter_el, "Jockey", "FirstName", default="")
+            jockey_last = _pp_text(starter_el, "Jockey", "LastName", default="")
+
+            for pp_el in starter_el.findall("PastPerformance"):
+                start_el = pp_el.find("Start")
+                if start_el is None:
+                    continue
+
+                # Speed / pace / class figures
+                sf_text = _pp_text(start_el, "SpeedFigure")
+                speed_figure: Optional[int] = None
+                if sf_text is not None:
+                    try:
+                        speed_figure = int(float(sf_text))
+                    except (ValueError, TypeError):
+                        pass
+
+                pace_1 = _pp_int(start_el, "PaceFigure1")
+                pace_2 = _pp_int(start_el, "PaceFigure2")
+                pace_3 = _pp_int(start_el, "PaceFigure3")
+                class_rating = _pp_int(start_el, "ClassRating")
+                official_finish = _pp_int(start_el, "OfficialFinish")
+                post_position = _pp_int(start_el, "PostPosition")
+                earnings_usd = _pp_float(start_el, "EarningsUSA")
+
+                # Odds stored as integer (e.g. 5875 = 58.75/1); convert to float
+                raw_odds = _pp_int(start_el, "Odds")
+                odds_decimal = round(raw_odds / 100, 2) if raw_odds else 0.0
+
+                short_comment = _pp_text(start_el, "ShortComment", default="")
+                long_comment = _pp_text(start_el, "LongComment", default="")
+
+                # Jockey at time of the past race (may differ from current)
+                pp_jockey_first = _pp_text(start_el, "Jockey", "FirstName", default="")
+                pp_jockey_last = _pp_text(start_el, "Jockey", "LastName", default="")
+
+                # Win time: Fraction tag with Fraction child = 'W'
+                win_time_hundredths = 0
+                for frac_el in pp_el.findall("Fractions"):
+                    if _pp_text(frac_el, "Fraction") == "W":
+                        win_time_hundredths = _pp_int(frac_el, "Time")
+                        break
+
+                # Past race context
+                pp_track_code = _pp_text(pp_el, "Track", "TrackID", default="")
+                pp_race_date_raw = _pp_text(pp_el, "RaceDate", default="")
+                # Normalize date: '2022-05-28+00:00' → '2022-05-28'
+                pp_race_date = pp_race_date_raw[:10] if pp_race_date_raw else ""
+                pp_race_number = _pp_int(pp_el, "RaceNumber")
+                pp_race_type = _pp_text(pp_el, "RaceType", "RaceType", default="")
+                pp_surface = _pp_text(pp_el, "Course", "CourseType", "Value", default="")
+                pp_distance = _pp_text(pp_el, "Distance", "PublishedValue", default="")
+                pp_track_condition = _pp_text(pp_el, "TrackCondition", "Value", default="")
+                field_size = _pp_int(pp_el, "NumberOfStarters")
+
+                records.append({
+                    "horse_name": horse_name,
+                    "horse_name_key": horse_name_key,
+                    "registration_number": reg_num,
+                    "card_date": card_date,
+                    "card_track_code": card_track_code,
+                    "card_race_number": race_number,
+                    "card_post_time": post_time,
+                    "card_distance": race_distance,
+                    "card_surface": race_surface,
+                    "card_race_type": race_type,
+                    "card_purse": race_purse,
+                    "card_breed": race_breed,
+                    "trainer_first": trainer_first,
+                    "trainer_last": trainer_last,
+                    "jockey_first": jockey_first,
+                    "jockey_last": jockey_last,
+                    "pp_track_code": pp_track_code,
+                    "pp_race_date": pp_race_date,
+                    "pp_race_number": pp_race_number,
+                    "pp_race_type": pp_race_type,
+                    "pp_surface": pp_surface,
+                    "pp_distance": pp_distance,
+                    "pp_track_condition": pp_track_condition,
+                    "speed_figure": speed_figure,
+                    "pace_figure_1": pace_1,
+                    "pace_figure_2": pace_2,
+                    "pace_figure_3": pace_3,
+                    "class_rating": class_rating,
+                    "official_finish": official_finish,
+                    "post_position": post_position,
+                    "pp_jockey_first": pp_jockey_first,
+                    "pp_jockey_last": pp_jockey_last,
+                    "earnings_usd": earnings_usd,
+                    "odds_decimal": odds_decimal,
+                    "win_time_hundredths": win_time_hundredths,
+                    "field_size": field_size,
+                    "short_comment": short_comment,
+                    "long_comment": long_comment,
+                })
+
+    return records

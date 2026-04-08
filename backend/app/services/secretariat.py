@@ -57,11 +57,12 @@ Always respond in valid JSON as specified in each prompt. No markdown inside str
 
 async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, str]:
     """
-    For each horse, gather two data sources and merge into a single context string:
+    For each horse, gather three data sources and merge into a single context string:
       1. TrackSense real-time sectional data (RFID gate timings)
       2. Equibase historical speed figures (2023 US result charts)
+      3. Equibase past performances (2023 US SIMD PP data — pace figures, class, comments)
     Returns dict keyed by horse_name → merged context string.
-    Horses with no data from either source are not included.
+    Horses with no data from any source are not included.
     Never raises — catch all exceptions and return empty dict.
     """
     import re
@@ -136,9 +137,8 @@ async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, s
                     pass
 
             # ── Equibase historical speed figures ─────────────────────────────
+            eq_key = re.sub(r"[^a-z0-9_]", "", horse_name.lower().replace(" ", "_"))
             try:
-                eq_key = horse_name.lower().replace(" ", "_")
-                eq_key = re.sub(r"[^a-z0-9_]", "", eq_key)
                 equibase_data = await cache_get(f"equibase:horse:{eq_key}")
                 if equibase_data and isinstance(equibase_data, list) and len(equibase_data) > 0:
                     ratings = [r["speed_rating"] for r in equibase_data if r.get("speed_rating") is not None]
@@ -170,17 +170,56 @@ async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, s
             except Exception:
                 pass
 
+            # ── Equibase past performances ────────────────────────────────────
+            pp_ctx = None
+            try:
+                pp_data = await cache_get(f"equibase:pp:{eq_key}")
+                if pp_data and isinstance(pp_data, list) and len(pp_data) > 0:
+                    recent = pp_data[:10]  # up to 10 most recent starts
+                    sf_list = [r["speed_figure"] for r in recent if r.get("speed_figure") is not None]
+                    pace_lines = []
+                    for r in recent[:5]:
+                        parts = [
+                            f"{r.get('pp_track_code','')} {r.get('pp_race_date','')[:10]}",
+                            f"R{r.get('pp_race_number','')}",
+                            f"Fin:{r.get('official_finish','')}",
+                        ]
+                        if r.get("speed_figure") is not None:
+                            parts.append(f"SF:{r['speed_figure']}")
+                        if r.get("pace_figure_1"):
+                            parts.append(f"P1:{r['pace_figure_1']}")
+                        if r.get("pace_figure_2"):
+                            parts.append(f"P2:{r['pace_figure_2']}")
+                        if r.get("class_rating"):
+                            parts.append(f"CLS:{r['class_rating']}")
+                        if r.get("short_comment"):
+                            parts.append(f'"{r["short_comment"]}"')
+                        pace_lines.append("  " + " | ".join(parts))
+                    best_sf = max(sf_list) if sf_list else None
+                    avg_sf = round(sum(sf_list) / len(sf_list), 1) if sf_list else None
+                    summary_parts = [f"{len(pp_data)} starts in dataset"]
+                    if best_sf is not None:
+                        summary_parts.append(f"best speed fig {best_sf}")
+                    if avg_sf is not None:
+                        summary_parts.append(f"avg {avg_sf}")
+                    pp_ctx = (
+                        f"EQUIBASE PAST PERFORMANCES (2023 US PP data):\n"
+                        f"{horse_name} — {', '.join(summary_parts)}:\n"
+                        + "\n".join(pace_lines)
+                    )
+            except Exception:
+                pass
+
             # ── Merge ─────────────────────────────────────────────────────────
-            if tracksense_ctx and equibase_ctx:
-                result[horse_name] = (
-                    "HARDWARE & HISTORICAL DATA:\n"
-                    + tracksense_ctx + "\n\n"
-                    + equibase_ctx
-                )
-            elif tracksense_ctx:
-                result[horse_name] = tracksense_ctx
-            elif equibase_ctx:
-                result[horse_name] = equibase_ctx
+            parts = []
+            if tracksense_ctx:
+                parts.append(tracksense_ctx)
+            if equibase_ctx:
+                parts.append(equibase_ctx)
+            if pp_ctx:
+                parts.append(pp_ctx)
+            if parts:
+                result[horse_name] = "\n\n".join(parts)
 
         except Exception:
             continue
