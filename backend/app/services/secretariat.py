@@ -67,7 +67,10 @@ async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, s
     Never raises — catch all exceptions and return empty dict.
     """
     import re
+    from sqlalchemy import select, text
     from app.core.cache import cache_get
+    from app.core.database import _AsyncSessionLocal
+    from app.models.equibase import HorsePastPerformance, HorseResultChart
 
     result = {}
 
@@ -137,77 +140,86 @@ async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, s
                 except Exception:
                     pass
 
-            # ── Equibase historical speed figures ─────────────────────────────
+            # ── Equibase historical speed figures (result charts) ─────────────
             eq_key = re.sub(r"[^a-z0-9_]", "", horse_name.lower().replace(" ", "_"))
             try:
-                equibase_data = await cache_get(f"equibase:horse:{eq_key}")
-                if equibase_data and isinstance(equibase_data, list) and len(equibase_data) > 0:
-                    ratings = [r["speed_rating"] for r in equibase_data if r.get("speed_rating") is not None]
-                    if ratings:
-                        best_rating = max(ratings)
-                        avg_rating = round(sum(ratings) / len(ratings), 1)
-                        recent_rating = equibase_data[0].get("speed_rating")
-                        n_races_eq = len(equibase_data)
-
-                        best_race = max(
-                            (r for r in equibase_data if r.get("speed_rating") is not None),
-                            key=lambda x: x["speed_rating"],
+                if _AsyncSessionLocal:
+                    async with _AsyncSessionLocal() as db:
+                        res = await db.execute(
+                            select(HorseResultChart)
+                            .where(HorseResultChart.horse_name_key == eq_key)
+                            .order_by(HorseResultChart.race_date.desc())
+                            .limit(20)
                         )
-
-                        equibase_ctx = (
-                            f"EQUIBASE HISTORICAL DATA (2023 US result charts):\n"
-                            f"{horse_name} — {n_races_eq} races in dataset:\n"
-                            f"- Best speed rating: {best_rating} (Equibase/TrackMaster figure, Beyer-comparable scale)\n"
-                            f"- Recent speed rating: {recent_rating} (most recent 2023 race)\n"
-                            f"- Average speed rating: {avg_rating}\n"
-                            f"- Best performance: {best_race['race_type']} at {best_race['track_name']}, "
-                            f"{best_race['race_date']}, finished {best_race['official_finish']}, "
-                            f"rating {best_race['speed_rating']}\n"
-                            f"Note: Figures are on the Beyer Speed Figure scale (0-130+). "
-                            f"100+ = graded stakes quality. 85-99 = allowance/stakes competitive. "
-                            f"70-84 = mid-level claiming. Below 70 = bottom claiming."
-                        )
+                        chart_rows = res.scalars().all()
+                    if chart_rows:
+                        ratings = [r.speed_rating for r in chart_rows if r.speed_rating is not None]
+                        if ratings:
+                            best_rating = max(ratings)
+                            avg_rating = round(sum(ratings) / len(ratings), 1)
+                            recent_rating = chart_rows[0].speed_rating
+                            best_row = max((r for r in chart_rows if r.speed_rating is not None), key=lambda x: x.speed_rating)
+                            equibase_ctx = (
+                                f"EQUIBASE HISTORICAL DATA (2023 US result charts):\n"
+                                f"{horse_name} — {len(chart_rows)} races in dataset:\n"
+                                f"- Best speed rating: {best_rating} (Equibase/TrackMaster figure, Beyer-comparable scale)\n"
+                                f"- Recent speed rating: {recent_rating} (most recent 2023 race)\n"
+                                f"- Average speed rating: {avg_rating}\n"
+                                f"- Best performance: {best_row.race_type} at {best_row.track_name}, "
+                                f"{best_row.race_date}, finished {best_row.official_finish}, "
+                                f"rating {best_row.speed_rating}\n"
+                                f"Note: Figures are on the Beyer Speed Figure scale (0-130+). "
+                                f"100+ = graded stakes quality. 85-99 = allowance/stakes competitive. "
+                                f"70-84 = mid-level claiming. Below 70 = bottom claiming."
+                            )
             except Exception:
                 pass
 
             # ── Equibase past performances ────────────────────────────────────
             pp_ctx = None
             try:
-                pp_data = await cache_get(f"equibase:pp:{eq_key}")
-                if pp_data and isinstance(pp_data, list) and len(pp_data) > 0:
-                    recent = pp_data[:10]  # up to 10 most recent starts
-                    sf_list = [r["speed_figure"] for r in recent if r.get("speed_figure") is not None]
-                    pace_lines = []
-                    for r in recent[:5]:
-                        parts = [
-                            f"{r.get('pp_track_code','')} {r.get('pp_race_date','')[:10]}",
-                            f"R{r.get('pp_race_number','')}",
-                            f"Fin:{r.get('official_finish','')}",
-                        ]
-                        if r.get("speed_figure") is not None:
-                            parts.append(f"SF:{r['speed_figure']}")
-                        if r.get("pace_figure_1"):
-                            parts.append(f"P1:{r['pace_figure_1']}")
-                        if r.get("pace_figure_2"):
-                            parts.append(f"P2:{r['pace_figure_2']}")
-                        if r.get("class_rating"):
-                            parts.append(f"CLS:{r['class_rating']}")
-                        if r.get("short_comment"):
-                            parts.append(f'"{r["short_comment"]}"')
-                        pace_lines.append("  " + " | ".join(parts))
-                    best_sf = max(sf_list) if sf_list else None
-                    avg_sf = round(sum(sf_list) / len(sf_list), 1) if sf_list else None
-                    summary_parts = [f"{len(pp_data)} starts in dataset"]
-                    if best_sf is not None:
-                        summary_parts.append(f"best speed fig {best_sf}")
-                    if avg_sf is not None:
-                        summary_parts.append(f"avg {avg_sf}")
-                    pp_ctx = (
-                        f"EQUIBASE PAST PERFORMANCES (2023 US PP data, Beyer-comparable scale):\n"
-                        f"{horse_name} — {', '.join(summary_parts)}:\n"
-                        + "\n".join(pace_lines)
-                        + "\n(SF=speed figure, P1/P2=pace figures at calls, CLS=class rating)"
-                    )
+                if _AsyncSessionLocal:
+                    async with _AsyncSessionLocal() as db:
+                        res = await db.execute(
+                            select(HorsePastPerformance)
+                            .where(HorsePastPerformance.horse_name_key == eq_key)
+                            .order_by(HorsePastPerformance.pp_race_date.desc())
+                            .limit(10)
+                        )
+                        pp_rows = res.scalars().all()
+                    if pp_rows:
+                        sf_list = [r.speed_figure for r in pp_rows if r.speed_figure is not None]
+                        pace_lines = []
+                        for r in pp_rows[:5]:
+                            parts = [
+                                f"{r.pp_track_code} {r.pp_race_date}",
+                                f"R{r.pp_race_number}",
+                                f"Fin:{r.official_finish}",
+                            ]
+                            if r.speed_figure is not None:
+                                parts.append(f"SF:{r.speed_figure}")
+                            if r.pace_figure_1:
+                                parts.append(f"P1:{r.pace_figure_1}")
+                            if r.pace_figure_2:
+                                parts.append(f"P2:{r.pace_figure_2}")
+                            if r.class_rating:
+                                parts.append(f"CLS:{r.class_rating}")
+                            if r.short_comment:
+                                parts.append(f'"{r.short_comment}"')
+                            pace_lines.append("  " + " | ".join(parts))
+                        best_sf = max(sf_list) if sf_list else None
+                        avg_sf = round(sum(sf_list) / len(sf_list), 1) if sf_list else None
+                        summary_parts = [f"{len(pp_rows)} recent starts"]
+                        if best_sf is not None:
+                            summary_parts.append(f"best SF {best_sf}")
+                        if avg_sf is not None:
+                            summary_parts.append(f"avg {avg_sf}")
+                        pp_ctx = (
+                            f"EQUIBASE PAST PERFORMANCES (2023 US PP data, Beyer-comparable scale):\n"
+                            f"{horse_name} — {', '.join(summary_parts)}:\n"
+                            + "\n".join(pace_lines)
+                            + "\n(SF=speed figure, P1/P2=pace figures at calls, CLS=class rating)"
+                        )
             except Exception:
                 pass
 

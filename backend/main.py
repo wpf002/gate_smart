@@ -11,12 +11,18 @@ load_dotenv()
 from app.api.routes import races, horses, betting, ai_advisor, education, tracksense, simulator, alerts, affiliate
 from app.core.cache import init_redis
 from app.core.config import settings
+from app.core.database import init_db
 from app.core.limiter import limiter
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_redis()
+    try:
+        await init_db()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Database init failed (non-fatal): {e}")
     yield
 
 
@@ -59,9 +65,14 @@ async def health():
             redis_ok = True
     except Exception:
         pass
+
+    from app.core.database import db_status
+    db_ok = await db_status()
+
     return {
         "status": "ok",
         "environment": settings.ENVIRONMENT,
         "redis": "connected" if redis_ok else "disconnected",
+        "database": db_ok,
         "version": "1.0.0",
     }

@@ -13,6 +13,27 @@ class Settings:
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
     ONESIGNAL_APP_ID: str = os.getenv("ONESIGNAL_APP_ID", "")
     ONESIGNAL_API_KEY: str = os.getenv("ONESIGNAL_API_KEY", "")
+    # Railway provides DATABASE_URL as postgresql:// — derive both variants from it
+    _db_url_raw: str = os.getenv("DATABASE_URL", "postgresql://localhost/gatesmart")
+
+    @property
+    def DATABASE_URL(self) -> str:
+        """Async URL for SQLAlchemy asyncpg driver."""
+        url = self._db_url_raw
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        if url.startswith("postgresql://") and "+asyncpg" not in url:
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
+    @property
+    def DATABASE_URL_SYNC(self) -> str:
+        """Sync URL for psycopg2 (ingest scripts)."""
+        url = self._db_url_raw
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        url = url.replace("postgresql+asyncpg://", "postgresql://")
+        return url
 
     @property
     def cors_origins_list(self) -> list[str]:

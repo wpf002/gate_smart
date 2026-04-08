@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import cache_get
+from app.core.database import get_db
+from app.models.equibase import HorsePastPerformance
 from app.services import racing_api, secretariat
 from app.services.equibase_api import make_horse_name_key
 
@@ -119,9 +122,10 @@ async def horse_explain(horse_id: str):
 async def horse_past_performances(
     horse_id: str,
     name: str = Query(default=None, description="Horse name override for Equibase lookup"),
+    db: AsyncSession = Depends(get_db),
 ):
     """
-    Return stored Equibase past performance records for a horse.
+    Return Equibase past performance records for a horse from Postgres.
     horse_id is used to find the horse name from today's racecards; pass ?name= to override.
     """
     horse_name = name
@@ -130,13 +134,22 @@ async def horse_past_performances(
         if runner:
             horse_name = runner.get("horse_name") or runner.get("horse", "")
         else:
-            horse_name = horse_id  # last resort — treat horse_id as the name
+            horse_name = horse_id
 
     eq_key = make_horse_name_key(horse_name)
-    pp_data = await cache_get(f"equibase:pp:{eq_key}")
-    if not pp_data:
-        return {"horse_id": horse_id, "horse_name": horse_name, "past_performances": [], "total": 0}
-    return {"horse_id": horse_id, "horse_name": horse_name, "past_performances": pp_data, "total": len(pp_data)}
+    result = await db.execute(
+        select(HorsePastPerformance)
+        .where(HorsePastPerformance.horse_name_key == eq_key)
+        .order_by(HorsePastPerformance.pp_race_date.desc())
+        .limit(30)
+    )
+    rows = result.scalars().all()
+
+    pp_list = [
+        {c.name: getattr(row, c.name) for c in HorsePastPerformance.__table__.columns if c.name != "id"}
+        for row in rows
+    ]
+    return {"horse_id": horse_id, "horse_name": horse_name, "past_performances": pp_list, "total": len(pp_list)}
 
 
 @router.get("/{horse_id}/form/decode")
