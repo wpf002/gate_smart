@@ -10,7 +10,6 @@ Both use horse_name_key as the primary lookup key (normalized lowercase slug).
 from typing import Optional
 
 from sqlalchemy import (
-    Date,
     Float,
     Index,
     Integer,
@@ -18,6 +17,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -84,12 +84,9 @@ class HorsePastPerformance(Base):
     long_comment: Mapped[str] = mapped_column(Text, default="")
 
     __table_args__ = (
-        # Unique constraint for dedup on re-ingest
-        Index(
-            "uq_pp_start",
-            "horse_name_key", "pp_track_code", "pp_race_date", "pp_race_number",
-            unique=True,
-        ),
+        UniqueConstraint("horse_name_key", "pp_track_code", "pp_race_date", "pp_race_number", name="uq_pp_start"),
+        Index("ix_hpp_horse_name_key", "horse_name_key"),
+        Index("ix_hpp_pp_race_date", "pp_race_date"),
     )
 
 
@@ -149,9 +146,7 @@ class HorseResultChart(Base):
     points_of_call: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
-        Index(
-            "uq_chart_entry",
-            "horse_name_key", "track_code", "race_date", "race_number",
-            unique=True,
-        ),
+        UniqueConstraint("horse_name_key", "track_code", "race_date", "race_number", name="uq_chart_entry"),
+        Index("ix_hrc_horse_name_key", "horse_name_key"),
+        Index("ix_hrc_race_date", "race_date"),
     )

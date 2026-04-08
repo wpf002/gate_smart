@@ -51,7 +51,7 @@ INSERT INTO horse_result_charts (
     %(trainer_first)s, %(trainer_last)s, %(trainer_key)s,
     %(owner)s, %(comment)s, %(win_payoff)s, %(place_payoff)s, %(show_payoff)s, %(points_of_call)s
 )
-ON CONFLICT ON CONSTRAINT uq_chart_entry DO NOTHING
+ON CONFLICT (horse_name_key, track_code, race_date, race_number) DO NOTHING
 """
 
 

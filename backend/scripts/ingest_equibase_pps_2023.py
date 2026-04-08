@@ -57,7 +57,7 @@ INSERT INTO horse_past_performances (
     %(pp_jockey_first)s, %(pp_jockey_last)s,
     %(short_comment)s, %(long_comment)s
 )
-ON CONFLICT ON CONSTRAINT uq_pp_start DO NOTHING
+ON CONFLICT (horse_name_key, pp_track_code, pp_race_date, pp_race_number) DO NOTHING
 """
 
 
