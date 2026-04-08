@@ -35,6 +35,7 @@ Create three services in Railway:
 | Variable | Value |
 |---|---|
 | `VITE_API_URL` | Set to your backend Railway URL |
+| `VITE_GA_MEASUREMENT_ID` | `G-K6G74W27FD` |
 
 ## Deployment Steps
 

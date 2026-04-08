@@ -5,6 +5,7 @@ import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import AffiliateDrawer from '../components/common/AffiliateDrawer';
 import { simPlaceBet } from '../utils/api';
+import { trackPaperBetPlaced } from '../utils/analytics';
 
 // Standalone helper so it can be called in the paper-trade handler
 async function paperTradeBets(betSlip, qc, setTrading, setTradeResult, navigate) {
@@ -22,6 +23,7 @@ async function paperTradeBets(betSlip, qc, setTrading, setTradeResult, navigate)
         odds: String(bet.odds),
         stake: bet.stake,
       });
+      trackPaperBetPlaced(bet.bet_type, bet.stake);
       placed++;
     } catch {
       failed++;

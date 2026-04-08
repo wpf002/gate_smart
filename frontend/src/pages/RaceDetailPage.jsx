@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { trackRaceAnalysis, trackScoreCardViewed, trackDebriefViewed } from '../utils/analytics';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getRaceDetail, getScoreCard, checkValueAlerts, getRaceDebrief } from '../utils/api';
 import { HorseRow, HorseRowSkeleton } from '../components/races/HorseRow';
@@ -225,6 +226,7 @@ export default function RaceDetailPage() {
       const result = await getRaceDebrief(raceId);
       setDebrief(result);
       setActiveTab('debrief');
+      trackDebriefViewed(raceId);
     } catch (err) {
       const detail = err?.response?.data?.detail || err.message || 'Unknown error';
       setDebriefError(detail.includes('not yet available')
@@ -274,6 +276,7 @@ export default function RaceDetailPage() {
             const msg = JSON.parse(payload);
             if (msg.result) {
               setAnalysis(msg.result);
+              trackRaceAnalysis(raceId, analysisMode);
               // Fire-and-forget alert check using current race data
               if (race) runAlertCheck(race);
             }
@@ -303,6 +306,7 @@ export default function RaceDetailPage() {
       setScorecardData(data);
       setScoreError(null);
       setActiveTab('scorecard');
+      trackScoreCardViewed(raceId);
     },
     onError: (err) => {
       const detail = err?.response?.data?.detail || err.message || 'Unknown error';

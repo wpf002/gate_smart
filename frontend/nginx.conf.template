@@ -4,6 +4,13 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # OneSignal service worker — must be served from root with correct scope header
+    location = /OneSignalSDKWorker.js {
+        root /usr/share/nginx/html;
+        add_header Service-Worker-Allowed /;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+
     # Proxy /api to backend
     location /api/ {
         proxy_pass ${VITE_API_URL}/api/;

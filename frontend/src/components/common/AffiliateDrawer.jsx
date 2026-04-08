@@ -1,9 +1,12 @@
 import { useEffect } from 'react';
-import { getAffiliatesForRegion, buildAffiliateUrl, trackAffiliateClick } from '../../utils/affiliates';
+import { getAffiliatesForRegion, buildAffiliateUrl, trackAffiliateClick as logAffiliateBackend } from '../../utils/affiliates';
+import { trackAffiliateClick } from '../../utils/analytics';
 
-function openAffiliate(affiliate, baseUrl, sessionId) {
-  trackAffiliateClick(affiliate.id, sessionId);
+function openAffiliate(affiliate, baseUrl, sessionId, onClose) {
+  trackAffiliateClick(affiliate.id, affiliate.name, null);
+  logAffiliateBackend(affiliate.id, sessionId);
   window.open(buildAffiliateUrl(affiliate, baseUrl), '_blank', 'noopener,noreferrer');
+  if (onClose) onClose();
 }
 
 export default function AffiliateDrawer({ open, onClose, region = 'usa', sessionId = '' }) {
@@ -149,7 +152,7 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
                     {affiliate.subOptions.map((opt) => (
                       <button
                         key={opt.label}
-                        onClick={() => openAffiliate(affiliate, opt.baseUrl, sessionId)}
+                        onClick={() => openAffiliate(affiliate, opt.baseUrl, sessionId, onClose)}
                         className="btn btn-primary"
                         style={{ fontSize: 11, padding: '6px 12px', whiteSpace: 'nowrap' }}
                       >
@@ -159,7 +162,7 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
                   </div>
                 ) : (
                   <button
-                    onClick={() => openAffiliate(affiliate, affiliate.baseUrl, sessionId)}
+                    onClick={() => openAffiliate(affiliate, affiliate.baseUrl, sessionId, onClose)}
                     className="btn btn-primary"
                     style={{ flexShrink: 0, fontSize: 12, padding: '8px 14px' }}
                   >

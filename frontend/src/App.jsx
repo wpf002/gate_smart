@@ -69,6 +69,17 @@ function SideNav() {
 
 function AppShell() {
   const onboardingComplete = useAppStore((s) => s.onboardingComplete);
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!window.gtag) return;
+    const gaId = import.meta.env.VITE_GA_MEASUREMENT_ID;
+    if (!gaId) return;
+    window.gtag('event', 'page_view', {
+      page_path: location.pathname,
+      page_title: document.title,
+    });
+  }, [location.pathname]);
 
   return (
     <div className="app-shell">
@@ -93,9 +104,10 @@ function AppShell() {
 }
 
 export default function App() {
+  // OneSignal
   useEffect(() => {
     const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
-    if (!appId || !window.OneSignalDeferred) return;
+    if (!appId) return;
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     window.OneSignalDeferred.push(async (OneSignal) => {
       await OneSignal.init({
@@ -103,6 +115,25 @@ export default function App() {
         notifyButton: { enable: false },
         allowLocalhostAsSecureOrigin: true,
       });
+    });
+  }, []);
+
+  // GA4 init
+  useEffect(() => {
+    const gaId = import.meta.env.VITE_GA_MEASUREMENT_ID;
+    if (!gaId) return;
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${gaId}`;
+    document.head.appendChild(script);
+
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function() { window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', gaId, {
+      page_path: window.location.pathname,
+      cookie_flags: 'SameSite=None;Secure',
     });
   }, []);
 

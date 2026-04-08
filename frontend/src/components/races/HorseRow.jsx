@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store';
+import { trackBetAdded } from '../../utils/analytics';
 import RadarChart from './RadarChart';
 
 export function HorseRowSkeleton() {
@@ -57,14 +58,17 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [] }) {
 
   const handleAddBet = (e) => {
     e.stopPropagation();
+    const betType = analysisData?.recommended_bet || 'win';
+    const odds = horse.odds || horse.sp || '?';
     addToBetSlip({
       horse_id: horse.horse_id,
       horse_name: horse.horse_name,
       race_id: raceId,
-      bet_type: analysisData?.recommended_bet || 'win',
-      odds: horse.odds || horse.sp || '?',
+      bet_type: betType,
+      odds,
       stake: 10,
     });
+    trackBetAdded(betType, horse.horse_id, odds);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   };
