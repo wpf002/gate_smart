@@ -1,11 +1,13 @@
 """
-Ingest Equibase 2023 Past Performance ZIP into Redis.
+Ingest Equibase 2023 Past Performance files into Redis.
 
-Usage:
+Usage (directory of individual SIMD*.zip files):
     cd backend
+    python scripts/ingest_equibase_pps_2023.py --dir "/path/to/2023 PPs"
+    python scripts/ingest_equibase_pps_2023.py --dir "/path/to/2023 PPs" --limit 10 --dry-run
+
+Usage (single master ZIP containing nested SIMD ZIPs or XMLs):
     python scripts/ingest_equibase_pps_2023.py --zip /path/to/2023_PPs.zip
-    python scripts/ingest_equibase_pps_2023.py --zip /path/to/2023_PPs.zip --limit 10 --dry-run
-    python scripts/ingest_equibase_pps_2023.py --zip /path/to/2023_PPs.zip --limit 50
 
 Redis key schema:
     equibase:pp:{horse_name_key}  — per-horse list of past performance records,
@@ -85,14 +87,19 @@ def bulk_write(r: redis_lib.Redis, horse_map: dict) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest Equibase 2023 past performances into Redis")
-    parser.add_argument("--zip", required=True, help="Path to the 2023 PPs ZIP file")
+    src = parser.add_mutually_exclusive_group(required=True)
+    src.add_argument("--zip", help="Path to a master ZIP file containing SIMD ZIPs or XMLs")
+    src.add_argument("--dir", help="Path to a directory of individual SIMD*.zip files")
     parser.add_argument("--limit", type=int, default=None, help="Max XML files to process")
     parser.add_argument("--dry-run", action="store_true", help="Parse and report without writing to Redis")
     parser.add_argument("--batch", type=int, default=200, help="Files per write batch (default 200)")
     args = parser.parse_args()
 
-    if not os.path.exists(args.zip):
+    if args.zip and not os.path.exists(args.zip):
         print(f"ERROR: ZIP file not found: {args.zip}")
+        sys.exit(1)
+    if args.dir and not os.path.isdir(args.dir):
+        print(f"ERROR: Directory not found: {args.dir}")
         sys.exit(1)
 
     r = None
@@ -105,107 +112,142 @@ def main() -> None:
             print(f"ERROR: Cannot connect to Redis: {e}")
             sys.exit(1)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        print(f"Extracting ZIP to {tmpdir} ...")
-        with zipfile.ZipFile(args.zip, "r") as zf:
-            zf.extractall(tmpdir)
+    def _xml_source():
+        """
+        Yield (xml_path, cleanup_fn) pairs.
 
-        # Extract any nested ZIPs (each track/day is its own zip inside the master)
-        print("Extracting nested ZIPs ...")
-        nested_extracted = 0
-        for root_dir, dirs, files in os.walk(tmpdir):
-            dirs[:] = [d for d in dirs if d != "__MACOSX"]
-            for fname in files:
-                if fname.lower().endswith(".zip"):
-                    nested_zip_path = os.path.join(root_dir, fname)
-                    try:
-                        with zipfile.ZipFile(nested_zip_path, "r") as nzf:
-                            nzf.extractall(root_dir)
-                        nested_extracted += 1
-                    except Exception as e:
-                        print(f"  WARN: could not extract {fname}: {e}")
-        if nested_extracted:
-            print(f"Extracted {nested_extracted} nested ZIPs")
-
-        xml_files = []
-        for root_dir, dirs, files in os.walk(tmpdir):
-            dirs[:] = [d for d in dirs if d != "__MACOSX"]
-            for fname in files:
-                if fname.lower().endswith(".xml") and fname.upper().startswith("SIMD"):
-                    xml_files.append(os.path.join(root_dir, fname))
-
-        xml_files.sort()
-        total_files = len(xml_files)
-        print(f"Found {total_files} PP XML files")
-
-        if args.limit:
-            xml_files = xml_files[: args.limit]
-            print(f"Limiting to {len(xml_files)} files (--limit {args.limit})")
-
-        files_processed = 0
-        records_stored = 0
-        speed_figures_found = 0
-        errors = 0
-        dry_run_samples: list[dict] = []
-
-        horse_map: dict[str, list] = defaultdict(list)
-
-        for xml_path in xml_files:
+        --zip mode: extract master ZIP to a temp dir once, walk for SIMD XMLs
+                    (handles nested ZIPs too), clean up at end.
+        --dir mode: iterate SIMD*.zip files one-by-one, extract each to a
+                    per-file temp dir, yield XMLs, then delete the temp dir.
+                    Never extracts all ZIPs up front — safe for large datasets.
+        """
+        if args.zip:
+            tmp = tempfile.mkdtemp()
             try:
-                records = parse_pp_file(xml_path)
-            except Exception as e:
-                print(f"  ERROR parsing {os.path.basename(xml_path)}: {e}")
-                errors += 1
-                files_processed += 1
-                continue
+                with zipfile.ZipFile(args.zip, "r") as zf:
+                    zf.extractall(tmp)
+                # extract any nested ZIPs
+                for root_dir, dirs, files in os.walk(tmp):
+                    dirs[:] = [d for d in dirs if d != "__MACOSX"]
+                    for fname in files:
+                        if fname.lower().endswith(".zip"):
+                            try:
+                                with zipfile.ZipFile(os.path.join(root_dir, fname), "r") as nzf:
+                                    nzf.extractall(root_dir)
+                            except Exception as e:
+                                print(f"  WARN: could not extract {fname}: {e}")
+                found = []
+                for root_dir, dirs, files in os.walk(tmp):
+                    dirs[:] = [d for d in dirs if d != "__MACOSX"]
+                    for fname in files:
+                        if fname.lower().endswith(".xml") and fname.upper().startswith("SIMD"):
+                            found.append(os.path.join(root_dir, fname))
+                found.sort()
+                yield from ((p, lambda: None) for p in found)
+            finally:
+                import shutil
+                shutil.rmtree(tmp, ignore_errors=True)
+        else:
+            # Individual SIMD*.zip files — extract on demand
+            zip_files = sorted(
+                f for f in os.listdir(args.dir)
+                if f.lower().endswith(".zip") and f.upper().startswith("SIMD")
+            )
+            for zname in zip_files:
+                zpath = os.path.join(args.dir, zname)
+                ftmp = tempfile.mkdtemp()
+                try:
+                    with zipfile.ZipFile(zpath, "r") as zf:
+                        zf.extractall(ftmp)
+                    for root_dir, dirs, files in os.walk(ftmp):
+                        dirs[:] = [d for d in dirs if d != "__MACOSX"]
+                        for fname in files:
+                            if fname.lower().endswith(".xml") and fname.upper().startswith("SIMD"):
+                                yield os.path.join(root_dir, fname), lambda: None
+                except Exception as e:
+                    print(f"  WARN: could not extract {zname}: {e}")
+                finally:
+                    import shutil
+                    shutil.rmtree(ftmp, ignore_errors=True)
 
-            for rec in records:
-                if rec.get("speed_figure") is not None:
-                    speed_figures_found += 1
+    # Count total available files for progress display
+    if args.dir:
+        total_available = sum(
+            1 for f in os.listdir(args.dir)
+            if f.lower().endswith(".zip") and f.upper().startswith("SIMD")
+        )
+    else:
+        total_available = "?"  # unknown until extracted
+    print(f"Source: {'ZIP' if args.zip else args.dir}  |  available: {total_available} files")
 
-                if args.dry_run:
-                    if len(dry_run_samples) < 3 and rec.get("speed_figure") is not None:
-                        dry_run_samples.append(rec)
-                    records_stored += 1
-                else:
-                    horse_map[rec["horse_name_key"]].append(rec)
+    files_processed = 0
+    records_stored = 0
+    speed_figures_found = 0
+    errors = 0
+    dry_run_samples: list[dict] = []
+    horse_map: dict[str, list] = defaultdict(list)
+    limit = args.limit or float("inf")
 
+    for xml_path, _ in _xml_source():
+        if files_processed >= limit:
+            break
+
+        try:
+            records = parse_pp_file(xml_path)
+        except Exception as e:
+            print(f"  ERROR parsing {os.path.basename(xml_path)}: {e}")
+            errors += 1
             files_processed += 1
+            continue
 
-            if not args.dry_run and files_processed % args.batch == 0:
-                written = bulk_write(r, horse_map)
-                records_stored += written
-                horse_map = defaultdict(list)
-                print(
-                    f"Processed {files_processed}/{len(xml_files)} files | "
-                    f"records_stored={records_stored} | "
-                    f"speed_figures={speed_figures_found} | "
-                    f"errors={errors}",
-                    flush=True,
-                )
+        for rec in records:
+            if rec.get("speed_figure") is not None:
+                speed_figures_found += 1
 
-        if not args.dry_run and horse_map:
+            if args.dry_run:
+                if len(dry_run_samples) < 3 and rec.get("speed_figure") is not None:
+                    dry_run_samples.append(rec)
+                records_stored += 1
+            else:
+                horse_map[rec["horse_name_key"]].append(rec)
+
+        files_processed += 1
+
+        if not args.dry_run and files_processed % args.batch == 0:
             written = bulk_write(r, horse_map)
             records_stored += written
+            horse_map = defaultdict(list)
+            print(
+                f"Processed {files_processed}/{total_available} files | "
+                f"records_stored={records_stored} | "
+                f"speed_figures={speed_figures_found} | "
+                f"errors={errors}",
+                flush=True,
+            )
 
-        print("\n" + "=" * 60)
-        mode_label = "DRY RUN — no data written" if args.dry_run else "INGESTION COMPLETE"
-        print(f"{mode_label}")
-        print(f"  Files processed  : {files_processed}/{len(xml_files)}")
-        print(f"  Records stored   : {records_stored}")
-        print(f"  Speed figures    : {speed_figures_found}")
-        print(f"  Errors           : {errors}")
-        print("=" * 60)
+    if not args.dry_run and horse_map:
+        written = bulk_write(r, horse_map)
+        records_stored += written
 
-        if args.dry_run and dry_run_samples:
-            print("\nSample records with speed figures:")
-            for s in dry_run_samples:
-                print(f"\n  Horse     : {s['horse_name']}")
-                print(f"  Card      : {s['card_track_code']} {s['card_date']} R{s['card_race_number']}")
-                print(f"  PP race   : {s['pp_track_code']} {s['pp_race_date']} R{s['pp_race_number']}")
-                print(f"  Surface   : {s['pp_surface']}  Distance: {s['pp_distance']}")
-                print(f"  Speed fig : {s['speed_figure']}  Finish: {s['official_finish']}")
-                print(f"  Comment   : {s['short_comment']}")
+    print("\n" + "=" * 60)
+    mode_label = "DRY RUN — no data written" if args.dry_run else "INGESTION COMPLETE"
+    print(f"{mode_label}")
+    print(f"  Files processed  : {files_processed}/{total_available}")
+    print(f"  Records stored   : {records_stored}")
+    print(f"  Speed figures    : {speed_figures_found}")
+    print(f"  Errors           : {errors}")
+    print("=" * 60)
+
+    if args.dry_run and dry_run_samples:
+        print("\nSample records with speed figures:")
+        for s in dry_run_samples:
+            print(f"\n  Horse     : {s['horse_name']}")
+            print(f"  Card      : {s['card_track_code']} {s['card_date']} R{s['card_race_number']}")
+            print(f"  PP race   : {s['pp_track_code']} {s['pp_race_date']} R{s['pp_race_number']}")
+            print(f"  Surface   : {s['pp_surface']}  Distance: {s['pp_distance']}")
+            print(f"  Speed fig : {s['speed_figure']}  Finish: {s['official_finish']}")
+            print(f"  Comment   : {s['short_comment']}")
 
 
 if __name__ == "__main__":
