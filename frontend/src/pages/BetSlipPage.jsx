@@ -26,6 +26,7 @@ async function paperTradeBets(betSlip, qc, setTrading, setTradeResult, navigate)
         course: bet.course || '',
         jockey: bet.jockey || '',
         trainer: bet.trainer || '',
+        owner: bet.owner || '',
       });
       trackPaperBetPlaced(bet.bet_type, bet.stake);
       placed++;
@@ -76,13 +77,18 @@ function BetItem({ bet }) {
             {bet.course && <span> · {bet.course}</span>}
           </div>
           {(bet.jockey || bet.trainer) && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
               {[bet.jockey && `J: ${bet.jockey}`, bet.trainer && `T: ${bet.trainer}`].filter(Boolean).join(' · ')}
+            </div>
+          )}
+          {bet.owner && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              O: {bet.owner}
             </div>
           )}
           {bet.placed_at && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-              {new Date(bet.placed_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              Added: {new Date(bet.placed_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
         </div>

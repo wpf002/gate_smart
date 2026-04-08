@@ -147,8 +147,13 @@ function BetCard({ bet, onSettle, settling, settleMsg }) {
             {bet.course && <span> · {bet.course}</span>}
           </div>
           {(bet.jockey || bet.trainer) && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
               {[bet.jockey && `J: ${bet.jockey}`, bet.trainer && `T: ${bet.trainer}`].filter(Boolean).join(' · ')}
+            </div>
+          )}
+          {bet.owner && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              O: {bet.owner}
             </div>
           )}
           {bet.placed_at && (
@@ -220,24 +225,27 @@ function BetsTab({ bets, onSettle, settling, settleMsg, onReset, resetting }) {
 
   return (
     <div style={{ padding: '0 16px 16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+        <button
+          disabled={resetting}
+          onClick={onReset}
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            padding: '4px 10px',
+            borderRadius: 6,
+            border: '1px solid var(--accent-red-dim)',
+            background: 'transparent',
+            color: 'var(--accent-red-bright)',
+            cursor: 'pointer',
+          }}
+        >
+          {resetting ? 'Clearing…' : 'Clear All'}
+        </button>
+      </div>
       {bets.map((bet) => (
         <BetCard key={bet.bet_id} bet={bet} onSettle={onSettle} settling={settling} settleMsg={settleMsg} />
       ))}
-      <button
-        className="btn"
-        disabled={resetting}
-        onClick={onReset}
-        style={{
-          width: '100%',
-          marginTop: 8,
-          fontSize: 13,
-          color: 'var(--accent-red-bright)',
-          border: '1px solid var(--accent-red-dim)',
-          background: 'transparent',
-        }}
-      >
-        {resetting ? 'Clearing…' : 'Clear All Bets'}
-      </button>
     </div>
   );
 }
@@ -326,12 +334,16 @@ export default function SimulatorPage() {
     queryKey: ['sim-stats'],
     queryFn: simGetStats,
     refetchInterval: 30000,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   const { data: betsData } = useQuery({
     queryKey: ['sim-bets'],
     queryFn: simGetBets,
     refetchInterval: 30000,
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 
   const topupMutation = useMutation({

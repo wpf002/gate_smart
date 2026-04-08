@@ -32,6 +32,7 @@ class PlaceBetRequest(msgspec.Struct):
     course: str = ""
     jockey: str = ""
     trainer: str = ""
+    owner: str = ""
 
 
 class TopupRequest(msgspec.Struct):
@@ -109,6 +110,7 @@ def _bet_to_dict(b: PaperBetModel) -> dict:
         "course": b.course,
         "jockey": b.jockey,
         "trainer": b.trainer,
+        "owner": b.owner,
     }
 
 
@@ -326,6 +328,7 @@ async def place_bet(
             course=req.course,
             jockey=req.jockey,
             trainer=req.trainer,
+            owner=req.owner,
         )
         user.bankroll = round(bank - req.stake, 2)
         db.add(bet_row)
@@ -364,6 +367,7 @@ async def place_bet(
             "course": req.course,
             "jockey": req.jockey,
             "trainer": req.trainer,
+            "owner": req.owner,
         }
         new_bank = round(bank - req.stake, 2)
         await _set_bank(sid, new_bank)

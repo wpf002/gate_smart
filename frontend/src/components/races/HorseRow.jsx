@@ -71,6 +71,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
       race_name: raceName,
       jockey: horse.jockey || '',
       trainer: horse.trainer || '',
+      owner: horse.owner || '',
     });
     trackBetAdded(betType, horse.horse_id, odds);
     setAdded(true);
