@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { getHorse, explainHorse, explainFormString } from '../utils/api';
+import { getHorse, explainHorse, explainFormString, getHorsePastPerformances } from '../utils/api';
 import PageHeader from '../components/common/PageHeader';
 
 function StatRow({ label, value }) {
@@ -30,6 +30,13 @@ export default function HorseDetailPage() {
   const { data: horse, isLoading } = useQuery({
     queryKey: ['horse', horseId],
     queryFn: () => getHorse(horseId),
+  });
+
+  const horseName = horse?.horse_name || horse?.horse;
+  const { data: ppData } = useQuery({
+    queryKey: ['horse-pp', horseId, horseName],
+    queryFn: () => getHorsePastPerformances(horseId, horseName),
+    enabled: !!horseName,
   });
 
   const explainMutation = useMutation({
@@ -225,6 +232,54 @@ export default function HorseDetailPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Past performances */}
+        {ppData?.past_performances?.length > 0 && (
+          <div className="card" style={{ marginBottom: 14 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--text-muted)', marginBottom: 10 }}>
+              PAST PERFORMANCES <span style={{ fontSize: 11, fontWeight: 400 }}>({ppData.total} starts · 2023 US)</span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                    {['Date', 'Trk', 'Dist', 'Surf', 'Fin', 'SF', 'P1', 'P2', 'Cls'].map(h => (
+                      <th key={h} style={{ padding: '4px 6px', color: 'var(--text-muted)', fontWeight: 600, textAlign: h === 'Fin' || h === 'SF' || h === 'P1' || h === 'P2' || h === 'Cls' ? 'center' : 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                    <th style={{ padding: '4px 6px', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'left' }}>Comment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ppData.past_performances.slice(0, 10).map((pp, i) => {
+                    const sf = pp.speed_figure;
+                    const sfColor = sf == null ? 'var(--text-muted)'
+                      : sf >= 100 ? 'var(--accent-gold-bright)'
+                      : sf >= 85 ? 'var(--accent-green-bright)'
+                      : sf >= 70 ? 'var(--text-primary)'
+                      : 'var(--text-muted)';
+                    return (
+                      <tr key={i} style={{ borderBottom: '1px solid var(--border-subtle)', opacity: i >= 5 ? 0.7 : 1 }}>
+                        <td style={{ padding: '5px 6px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{pp.pp_race_date}</td>
+                        <td style={{ padding: '5px 6px', color: 'var(--text-secondary)' }}>{pp.pp_track_code}</td>
+                        <td style={{ padding: '5px 6px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{pp.pp_distance}</td>
+                        <td style={{ padding: '5px 6px', color: 'var(--text-secondary)' }}>{pp.pp_surface}</td>
+                        <td style={{ padding: '5px 6px', textAlign: 'center', fontWeight: 700, color: pp.official_finish === 1 ? 'var(--accent-gold-bright)' : 'var(--text-primary)' }}>{pp.official_finish || '—'}</td>
+                        <td style={{ padding: '5px 6px', textAlign: 'center', fontWeight: 700, color: sfColor }}>{sf ?? '—'}</td>
+                        <td style={{ padding: '5px 6px', textAlign: 'center', color: 'var(--text-secondary)' }}>{pp.pace_figure_1 || '—'}</td>
+                        <td style={{ padding: '5px 6px', textAlign: 'center', color: 'var(--text-secondary)' }}>{pp.pace_figure_2 || '—'}</td>
+                        <td style={{ padding: '5px 6px', textAlign: 'center', color: 'var(--text-secondary)' }}>{pp.class_rating || '—'}</td>
+                        <td style={{ padding: '5px 6px', color: 'var(--text-muted)', fontSize: 11, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pp.short_comment}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
+              SF = speed figure · P1/P2 = pace figures · Cls = class rating · Beyer-comparable scale
+            </div>
           </div>
         )}
 

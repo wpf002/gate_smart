@@ -46,6 +46,9 @@ export const explainHorse = (horseId) =>
 export const searchHorses = (query) =>
   api.get('/horses/search', { params: { q: query } }).then((r) => r.data);
 
+export const getHorsePastPerformances = (horseId, horseName) =>
+  api.get(`/horses/${horseId}/past-performances`, { params: horseName ? { name: horseName } : {} }).then((r) => r.data);
+
 // ── AI Advisor ────────────────────────────────────────────────────────────────
 export const analyzeRace = (raceId, mode = 'balanced', bankroll = null) =>
   api
