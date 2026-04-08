@@ -42,7 +42,10 @@ async def init_redis() -> None:
 async def cache_get(key: str) -> Optional[Any]:
     if _redis is None:
         return None
-    val = await _redis.get(key)
+    try:
+        val = await _redis.get(key)
+    except Exception:
+        return None
     if val is None:
         return None
     return json.loads(val)
@@ -51,30 +54,42 @@ async def cache_get(key: str) -> Optional[Any]:
 async def cache_set(key: str, value: Any, ex: Optional[int] = None) -> None:
     if _redis is None:
         return
-    data = json.dumps(value)
-    if ex is not None:
-        await _redis.set(key, data, ex=ex)
-    else:
-        await _redis.set(key, data)
+    try:
+        data = json.dumps(value)
+        if ex is not None:
+            await _redis.set(key, data, ex=ex)
+        else:
+            await _redis.set(key, data)
+    except Exception:
+        pass
 
 
 async def cache_keys(pattern: str) -> list:
     if _redis is None:
         return []
-    return await _redis.keys(pattern)
+    try:
+        return await _redis.keys(pattern)
+    except Exception:
+        return []
 
 
 async def cache_delete(key: str) -> None:
     if _redis is None:
         return
-    await _redis.delete(key)
+    try:
+        await _redis.delete(key)
+    except Exception:
+        pass
 
 
 async def cache_incr(key: str, ttl: Optional[int] = None) -> int:
     """Increment a Redis counter. Pass ttl to auto-expire; omit for persistent counters."""
     if _redis is None:
         return 0
-    val = await _redis.incr(key)
-    if val == 1 and ttl is not None:
-        await _redis.expire(key, ttl)
-    return val
+    try:
+        val = await _redis.incr(key)
+        if val == 1 and ttl is not None:
+            await _redis.expire(key, ttl)
+        return val
+    except Exception:
+        return 0

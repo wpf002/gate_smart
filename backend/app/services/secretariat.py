@@ -3,11 +3,18 @@ Secretariat — GateSmart's AI handicapping engine.
 Powered by Claude (Anthropic). This is the core intelligence of the platform.
 All race analysis, horse evaluation, and betting recommendations flow through here.
 """
+import ssl
 import anthropic
+import httpx
 import json
 from app.core.config import settings
 
-client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+# Use system SSL certs — avoids certifi/OpenSSL incompatibility on macOS Python 3.13
+_ssl_ctx = ssl.create_default_context()
+client = anthropic.AsyncAnthropic(
+    api_key=settings.ANTHROPIC_API_KEY,
+    http_client=httpx.AsyncClient(verify=_ssl_ctx),
+)
 
 
 def _parse_json(text: str) -> dict:
