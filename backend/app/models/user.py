@@ -39,7 +39,8 @@ class PaperBet(Base):
     __tablename__ = "paper_bets"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    session_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
 
     # Bet identity (matches existing Redis dict schema)
     bet_id: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -60,4 +61,4 @@ class PaperBet(Base):
     trainer: Mapped[str] = mapped_column(String(120), default="")
     owner: Mapped[str] = mapped_column(String(200), default="")
 
-    user: Mapped["User"] = relationship("User", back_populates="paper_bets")
+    user: Mapped[Optional["User"]] = relationship("User", back_populates="paper_bets")

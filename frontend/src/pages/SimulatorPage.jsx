@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../components/common/PageHeader';
-import { simGetBets, simGetStats, simTopup, simReset, simSettle } from '../utils/api';
+import { simGetBets, simGetStats, simTopup, simReset, simSettle, simDeleteBet } from '../utils/api';
 
 const TOPUP_AMOUNTS = [50, 100, 200, 500];
 
@@ -124,10 +124,11 @@ function BetStatusBadge({ status }) {
   );
 }
 
-function BetCard({ bet, onSettle, settling, settleMsg }) {
+function BetCard({ bet, onSettle, settling, settleMsg, onDelete, deleting }) {
   const isPending = bet.status === 'pending';
   const pnlColor = bet.pnl >= 0 ? 'var(--accent-green-bright)' : 'var(--accent-red-bright)';
   const isThisSettling = settling === bet.race_id;
+  const isDeleting = deleting === bet.bet_id;
 
   return (
     <div style={{
@@ -136,6 +137,7 @@ function BetCard({ bet, onSettle, settling, settleMsg }) {
       padding: '12px 14px',
       border: '1px solid var(--border-subtle)',
       marginBottom: 10,
+      opacity: isDeleting ? 0.5 : 1,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
@@ -162,7 +164,25 @@ function BetCard({ bet, onSettle, settling, settleMsg }) {
             </div>
           )}
         </div>
-        <BetStatusBadge status={bet.status} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <BetStatusBadge status={bet.status} />
+          <button
+            onClick={() => onDelete(bet.bet_id)}
+            disabled={isDeleting}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              fontSize: 16,
+              lineHeight: 1,
+              padding: '2px 4px',
+            }}
+            title="Remove bet"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
@@ -210,7 +230,7 @@ function BetCard({ bet, onSettle, settling, settleMsg }) {
   );
 }
 
-function BetsTab({ bets, onSettle, settling, settleMsg, onReset, resetting }) {
+function BetsTab({ bets, onSettle, settling, settleMsg, onReset, resetting, onDelete, deleting }) {
   if (!bets || bets.length === 0) {
     return (
       <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -244,7 +264,7 @@ function BetsTab({ bets, onSettle, settling, settleMsg, onReset, resetting }) {
         </button>
       </div>
       {bets.map((bet) => (
-        <BetCard key={bet.bet_id} bet={bet} onSettle={onSettle} settling={settling} settleMsg={settleMsg} />
+        <BetCard key={bet.bet_id} bet={bet} onSettle={onSettle} settling={settling} settleMsg={settleMsg} onDelete={onDelete} deleting={deleting} />
       ))}
     </div>
   );
@@ -363,6 +383,20 @@ export default function SimulatorPage() {
     },
   });
 
+  const [deleting, setDeleting] = useState(null);
+  const handleDelete = useCallback(async (betId) => {
+    setDeleting(betId);
+    try {
+      await simDeleteBet(betId);
+      qc.invalidateQueries({ queryKey: ['sim-bets'] });
+      qc.invalidateQueries({ queryKey: ['sim-stats'] });
+    } catch {
+      // silent — bet stays visible
+    } finally {
+      setDeleting(null);
+    }
+  }, [qc]);
+
   const handleSettle = useCallback(async (raceId) => {
     setSettling(raceId);
     setSettleMsg(null);
@@ -454,6 +488,8 @@ export default function SimulatorPage() {
           settleMsg={settleMsg}
           onReset={handleReset}
           resetting={resetMutation.isPending}
+          onDelete={handleDelete}
+          deleting={deleting}
         />
       )}
       {tab === 'stats' && (

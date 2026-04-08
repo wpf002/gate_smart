@@ -143,6 +143,9 @@ export const simGetStats = () =>
 export const simReset = () =>
   api.post('/simulator/reset').then((r) => r.data);
 
+export const simDeleteBet = (betId) =>
+  api.delete(`/simulator/bet/${betId}`).then((r) => r.data);
+
 export const simTopup = (amount) =>
   api.post('/simulator/bank/topup', { amount }).then((r) => r.data);
 

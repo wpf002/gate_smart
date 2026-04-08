@@ -5,7 +5,7 @@ from typing import Optional
 import msgspec
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_optional_user
@@ -17,15 +17,15 @@ from app.services import racing_api
 router = APIRouter()
 
 INITIAL_BANK = 500.0
-_BANK_KEY = "paper:bank:{sid}"
-_BETS_KEY = "paper:bets:{sid}"
+# Bank is still tracked in Redis for speed (just a float, acceptable to lose on restart)
+_BANK_KEY = "paper:bank:{key}"
 
 
 class PlaceBetRequest(msgspec.Struct):
     race_id: str
     horse_id: str
     horse_name: str
-    bet_type: str       # win | place | each_way
+    bet_type: str
     odds: str
     stake: float
     race_name: str = ""
@@ -39,58 +39,39 @@ class TopupRequest(msgspec.Struct):
     amount: float
 
 
-# ── Odds parser ───────────────────────────────────────────────────────────────
+# ── Identity helpers ──────────────────────────────────────────────────────────
+# Returns (user_id, session_id) — exactly one will be set.
 
-def _parse_decimal_odds(odds: str) -> Optional[float]:
-    if not odds or odds in ("?", "SP"):
-        return None
-    if "/" in odds:
-        parts = odds.split("/")
-        try:
-            return int(parts[0]) / int(parts[1]) + 1
-        except (ValueError, ZeroDivisionError, IndexError):
-            return None
-    try:
-        d = float(odds)
-        return d if d > 0 else None
-    except ValueError:
-        return None
-
-
-# ── Session helper (guest mode only) ─────────────────────────────────────────
-
-def _get_session(request: Request) -> str:
+def _identity(request: Request, user: Optional[User]):
+    if user:
+        return user.id, None
     sid = request.headers.get("X-Session-ID", "").strip()
     if not sid:
         raise HTTPException(status_code=400, detail="X-Session-ID header required")
-    return sid
+    return None, sid
 
 
-def _get_session_optional(request: Request) -> Optional[str]:
-    return request.headers.get("X-Session-ID", "").strip() or None
+def _bank_key(user_id: Optional[int], session_id: Optional[str]) -> str:
+    key = f"u:{user_id}" if user_id else f"s:{session_id}"
+    return _BANK_KEY.format(key=key)
 
 
-# ── Redis helpers (guest mode) ────────────────────────────────────────────────
+# ── Bank helpers (Redis — fast, acceptable to lose) ───────────────────────────
 
-async def _get_bank(sid: str) -> float:
-    val = await cache_get(_BANK_KEY.format(sid=sid))
+async def _get_bank(user_id: Optional[int], session_id: Optional[str]) -> float:
+    if user_id:
+        # Auth users: bank is on the User row — caller passes it in
+        return INITIAL_BANK  # fallback; callers use user.bankroll directly
+    val = await cache_get(_bank_key(None, session_id))
     return float(val) if val is not None else INITIAL_BANK
 
 
-async def _set_bank(sid: str, amount: float) -> None:
-    await cache_set(_BANK_KEY.format(sid=sid), amount)
+async def _set_bank(user_id: Optional[int], session_id: Optional[str], amount: float) -> None:
+    if session_id:
+        await cache_set(_bank_key(None, session_id), amount)
 
 
-async def _get_bets(sid: str) -> list:
-    val = await cache_get(_BETS_KEY.format(sid=sid))
-    return val if isinstance(val, list) else []
-
-
-async def _set_bets(sid: str, bets: list) -> None:
-    await cache_set(_BETS_KEY.format(sid=sid), bets)
-
-
-# ── Postgres helpers (auth mode) ──────────────────────────────────────────────
+# ── Postgres helpers ──────────────────────────────────────────────────────────
 
 def _bet_to_dict(b: PaperBetModel) -> dict:
     return {
@@ -114,127 +95,34 @@ def _bet_to_dict(b: PaperBetModel) -> dict:
     }
 
 
-async def _pg_get_bets(db: AsyncSession, user_id: int) -> list[dict]:
-    result = await db.execute(
-        select(PaperBetModel)
-        .where(PaperBetModel.user_id == user_id)
-        .order_by(PaperBetModel.id.desc())
-    )
+async def _pg_get_bets(db: AsyncSession, user_id: Optional[int], session_id: Optional[str]) -> list[dict]:
+    if user_id:
+        q = select(PaperBetModel).where(PaperBetModel.user_id == user_id)
+    else:
+        q = select(PaperBetModel).where(PaperBetModel.session_id == session_id)
+    result = await db.execute(q.order_by(PaperBetModel.id.desc()))
     return [_bet_to_dict(b) for b in result.scalars().all()]
 
 
-# ── Settle logic (Redis / guest mode) ────────────────────────────────────────
-# Called from races.py auto-settle background task — signature unchanged.
+# ── Settle helpers ────────────────────────────────────────────────────────────
 
-async def settle_race_bets(sid: str, race_id: str) -> list:
-    """
-    Fetch today's results, find the race, and settle all pending bets (Redis/guest mode).
-    Returns list of newly-settled bets (may be empty).
-    """
-    bets = await _get_bets(sid)
-    pending = [b for b in bets if b["race_id"] == race_id and b["status"] == "pending"]
-    if not pending:
-        return []
-
+def _parse_decimal_odds(odds: str) -> Optional[float]:
+    if not odds or odds in ("?", "SP"):
+        return None
+    if "/" in odds:
+        parts = odds.split("/")
+        try:
+            return int(parts[0]) / int(parts[1]) + 1
+        except (ValueError, ZeroDivisionError, IndexError):
+            return None
     try:
-        results_data = await racing_api.get_results()
-        race_result = None
-        for r in results_data.get("results", []):
-            if r.get("race_id") == race_id:
-                race_result = r
-                break
-    except Exception:
-        return []
-
-    if not race_result:
-        return []
-
-    runners_by_id: dict = {}
-    runners_by_name: dict = {}
-    for rn in race_result.get("runners", []):
-        hid = rn.get("horse_id", "")
-        hname = (rn.get("horse_name") or rn.get("horse", "")).lower()
-        if hid:
-            runners_by_id[hid] = rn
-        if hname:
-            runners_by_name[hname] = rn
-
-    total_runners = len(race_result.get("runners", []))
-    place_positions = 1 if total_runners <= 4 else 2 if total_runners <= 7 else 3
-
-    bank = await _get_bank(sid)
-    settled_bets = []
-
-    for bet in bets:
-        if bet["race_id"] != race_id or bet["status"] != "pending":
-            continue
-        runner = runners_by_id.get(bet["horse_id"]) or runners_by_name.get(bet["horse_name"].lower())
-        settled = _settle_bet(bet, runner, place_positions)
-        bank += settled["returns"]
-        settled_bets.append(settled)
-
-    await _set_bank(sid, round(bank, 2))
-    await _set_bets(sid, bets)
-    return settled_bets
-
-
-async def _settle_race_bets_pg(db: AsyncSession, user: User, race_id: str) -> list[dict]:
-    """Settle all pending bets for a race in Postgres (auth mode)."""
-    result = await db.execute(
-        select(PaperBetModel).where(
-            PaperBetModel.user_id == user.id,
-            PaperBetModel.race_id == race_id,
-            PaperBetModel.status == "pending",
-        )
-    )
-    pending_bets = result.scalars().all()
-    if not pending_bets:
-        return []
-
-    try:
-        results_data = await racing_api.get_results()
-        race_result = None
-        for r in results_data.get("results", []):
-            if r.get("race_id") == race_id:
-                race_result = r
-                break
-    except Exception:
-        return []
-
-    if not race_result:
-        return []
-
-    runners_by_id: dict = {}
-    runners_by_name: dict = {}
-    for rn in race_result.get("runners", []):
-        hid = rn.get("horse_id", "")
-        hname = (rn.get("horse_name") or rn.get("horse", "")).lower()
-        if hid:
-            runners_by_id[hid] = rn
-        if hname:
-            runners_by_name[hname] = rn
-
-    total_runners = len(race_result.get("runners", []))
-    place_positions = 1 if total_runners <= 4 else 2 if total_runners <= 7 else 3
-
-    settled_dicts = []
-    for bet_row in pending_bets:
-        runner = runners_by_id.get(bet_row.horse_id) or runners_by_name.get(bet_row.horse_name.lower())
-        result_dict = _settle_bet(_bet_to_dict(bet_row), runner, place_positions)
-
-        bet_row.status = result_dict["status"]
-        bet_row.returns = result_dict["returns"]
-        bet_row.pnl = result_dict["pnl"]
-        bet_row.settled_at = result_dict["settled_at"]
-        user.bankroll = round(user.bankroll + result_dict["returns"], 2)
-        settled_dicts.append(result_dict)
-
-    await db.commit()
-    return settled_dicts
+        d = float(odds)
+        return d if d > 0 else None
+    except ValueError:
+        return None
 
 
 def _settle_bet(bet: dict, runner: Optional[dict], place_positions: int) -> dict:
-    """Pure settle logic shared by Redis and Postgres modes."""
     if not runner:
         bet["status"] = "void"
         bet["returns"] = bet["stake"]
@@ -278,6 +166,79 @@ def _settle_bet(bet: dict, runner: Optional[dict], place_positions: int) -> dict
     return bet
 
 
+async def _settle_race_pg(
+    db: AsyncSession,
+    user_id: Optional[int],
+    session_id: Optional[str],
+    race_id: str,
+    user: Optional[User] = None,
+) -> list[dict]:
+    if user_id:
+        q = select(PaperBetModel).where(
+            PaperBetModel.user_id == user_id,
+            PaperBetModel.race_id == race_id,
+            PaperBetModel.status == "pending",
+        )
+    else:
+        q = select(PaperBetModel).where(
+            PaperBetModel.session_id == session_id,
+            PaperBetModel.race_id == race_id,
+            PaperBetModel.status == "pending",
+        )
+    result = await db.execute(q)
+    pending_bets = result.scalars().all()
+    if not pending_bets:
+        return []
+
+    try:
+        results_data = await racing_api.get_results()
+        race_result = next(
+            (r for r in results_data.get("results", []) if r.get("race_id") == race_id),
+            None,
+        )
+    except Exception:
+        return []
+
+    if not race_result:
+        return []
+
+    runners_by_id: dict = {}
+    runners_by_name: dict = {}
+    for rn in race_result.get("runners", []):
+        hid = rn.get("horse_id", "")
+        hname = (rn.get("horse_name") or rn.get("horse", "")).lower()
+        if hid:
+            runners_by_id[hid] = rn
+        if hname:
+            runners_by_name[hname] = rn
+
+    total_runners = len(race_result.get("runners", []))
+    place_positions = 1 if total_runners <= 4 else 2 if total_runners <= 7 else 3
+
+    settled_dicts = []
+    for bet_row in pending_bets:
+        runner = runners_by_id.get(bet_row.horse_id) or runners_by_name.get(bet_row.horse_name.lower())
+        result_dict = _settle_bet(_bet_to_dict(bet_row), runner, place_positions)
+        bet_row.status = result_dict["status"]
+        bet_row.returns = result_dict["returns"]
+        bet_row.pnl = result_dict["pnl"]
+        bet_row.settled_at = result_dict["settled_at"]
+        if user:
+            user.bankroll = round(user.bankroll + result_dict["returns"], 2)
+        else:
+            bank = await _get_bank(None, session_id)
+            await _set_bank(None, session_id, round(bank + result_dict["returns"], 2))
+        settled_dicts.append(result_dict)
+
+    await db.commit()
+    return settled_dicts
+
+
+# Keep this for backward compat (called from races.py auto-settle)
+async def settle_race_bets(sid: str, race_id: str) -> list:
+    return []  # no-op; Redis path removed
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/bet")
@@ -295,86 +256,103 @@ async def place_bet(
     if req.stake <= 0:
         raise HTTPException(status_code=400, detail="stake must be positive")
 
+    user_id, session_id = _identity(request, user)
+
+    # Bank check
     if user:
-        # ── Postgres / auth mode ──────────────────────────────────────────────
         bank = user.bankroll
-        if req.stake > bank:
-            raise HTTPException(status_code=400, detail=f"insufficient funds (bank: £{bank:.2f})")
-
-        # Prevent duplicate pending bets for same horse in same race
-        dup = await db.execute(
-            select(PaperBetModel).where(
-                PaperBetModel.user_id == user.id,
-                PaperBetModel.race_id == req.race_id,
-                PaperBetModel.horse_id == req.horse_id,
-                PaperBetModel.bet_type == req.bet_type,
-                PaperBetModel.status == "pending",
-            )
-        )
-        if dup.scalar_one_or_none():
-            raise HTTPException(status_code=409, detail="A pending bet for this horse already exists")
-
-        bet_row = PaperBetModel(
-            user_id=user.id,
-            bet_id=str(uuid.uuid4())[:8],
-            race_id=req.race_id,
-            horse_id=req.horse_id,
-            horse_name=req.horse_name,
-            bet_type=req.bet_type,
-            odds=req.odds,
-            stake=req.stake,
-            placed_at=datetime.now(timezone.utc).isoformat(),
-            race_name=req.race_name,
-            course=req.course,
-            jockey=req.jockey,
-            trainer=req.trainer,
-            owner=req.owner,
-        )
-        user.bankroll = round(bank - req.stake, 2)
-        db.add(bet_row)
-        await db.commit()
-        await db.refresh(bet_row)
-        return JSONResponse({"bet": _bet_to_dict(bet_row), "bank": user.bankroll})
-
     else:
-        # ── Redis / guest mode ────────────────────────────────────────────────
-        sid = _get_session(request)
-        bank = await _get_bank(sid)
-        if req.stake > bank:
-            raise HTTPException(status_code=400, detail=f"insufficient funds (bank: £{bank:.2f})")
+        bank = await _get_bank(None, session_id)
 
-        # Prevent duplicates in Redis mode
-        existing = await _get_bets(sid)
-        for b in existing:
-            if (b.get("race_id") == req.race_id and b.get("horse_id") == req.horse_id
-                    and b.get("bet_type") == req.bet_type and b.get("status") == "pending"):
-                raise HTTPException(status_code=409, detail="A pending bet for this horse already exists")
+    if req.stake > bank:
+        raise HTTPException(status_code=400, detail=f"insufficient funds (bank: £{bank:.2f})")
 
-        bet = {
-            "bet_id": str(uuid.uuid4())[:8],
-            "race_id": req.race_id,
-            "horse_id": req.horse_id,
-            "horse_name": req.horse_name,
-            "bet_type": req.bet_type,
-            "odds": req.odds,
-            "stake": req.stake,
-            "status": "pending",
-            "returns": 0.0,
-            "pnl": 0.0,
-            "placed_at": datetime.now(timezone.utc).isoformat(),
-            "settled_at": "",
-            "race_name": req.race_name,
-            "course": req.course,
-            "jockey": req.jockey,
-            "trainer": req.trainer,
-            "owner": req.owner,
-        }
-        new_bank = round(bank - req.stake, 2)
-        await _set_bank(sid, new_bank)
-        bets = await _get_bets(sid)
-        bets.append(bet)
-        await _set_bets(sid, bets)
-        return JSONResponse({"bet": bet, "bank": new_bank})
+    # Dedup: no two pending bets for same horse+race+type
+    if user_id:
+        dup_q = select(PaperBetModel).where(
+            PaperBetModel.user_id == user_id,
+            PaperBetModel.race_id == req.race_id,
+            PaperBetModel.horse_id == req.horse_id,
+            PaperBetModel.bet_type == req.bet_type,
+            PaperBetModel.status == "pending",
+        )
+    else:
+        dup_q = select(PaperBetModel).where(
+            PaperBetModel.session_id == session_id,
+            PaperBetModel.race_id == req.race_id,
+            PaperBetModel.horse_id == req.horse_id,
+            PaperBetModel.bet_type == req.bet_type,
+            PaperBetModel.status == "pending",
+        )
+    if (await db.execute(dup_q)).scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="A pending bet for this horse already exists")
+
+    bet_row = PaperBetModel(
+        user_id=user_id,
+        session_id=session_id,
+        bet_id=str(uuid.uuid4())[:8],
+        race_id=req.race_id,
+        horse_id=req.horse_id,
+        horse_name=req.horse_name,
+        bet_type=req.bet_type,
+        odds=req.odds,
+        stake=req.stake,
+        placed_at=datetime.now(timezone.utc).isoformat(),
+        race_name=req.race_name,
+        course=req.course,
+        jockey=req.jockey,
+        trainer=req.trainer,
+        owner=req.owner,
+    )
+
+    new_bank = round(bank - req.stake, 2)
+    if user:
+        user.bankroll = new_bank
+    else:
+        await _set_bank(None, session_id, new_bank)
+
+    db.add(bet_row)
+    await db.commit()
+    await db.refresh(bet_row)
+    return JSONResponse({"bet": _bet_to_dict(bet_row), "bank": new_bank})
+
+
+@router.delete("/bet/{bet_id}")
+async def delete_bet(
+    bet_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+) -> JSONResponse:
+    user_id, session_id = _identity(request, user)
+
+    if user_id:
+        q = select(PaperBetModel).where(
+            PaperBetModel.bet_id == bet_id,
+            PaperBetModel.user_id == user_id,
+        )
+    else:
+        q = select(PaperBetModel).where(
+            PaperBetModel.bet_id == bet_id,
+            PaperBetModel.session_id == session_id,
+        )
+
+    result = await db.execute(q)
+    bet_row = result.scalar_one_or_none()
+    if not bet_row:
+        raise HTTPException(status_code=404, detail="Bet not found")
+
+    # Refund stake if still pending
+    if bet_row.status == "pending":
+        if user:
+            user.bankroll = round(user.bankroll + bet_row.stake, 2)
+        else:
+            bank = await _get_bank(None, session_id)
+            await _set_bank(None, session_id, round(bank + bet_row.stake, 2))
+
+    await db.delete(bet_row)
+    await db.commit()
+    return JSONResponse({"message": "Bet removed"})
 
 
 @router.post("/settle/{race_id}")
@@ -384,11 +362,8 @@ async def settle(
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ) -> JSONResponse:
-    if user:
-        settled = await _settle_race_bets_pg(db, user, race_id)
-    else:
-        sid = _get_session(request)
-        settled = await settle_race_bets(sid, race_id)
+    user_id, session_id = _identity(request, user)
+    settled = await _settle_race_pg(db, user_id, session_id, race_id, user)
 
     if not settled:
         return JSONResponse({"message": "no pending bets found for this race", "settled": []})
@@ -401,11 +376,8 @@ async def list_bets(
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ) -> JSONResponse:
-    if user:
-        bets = await _pg_get_bets(db, user.id)
-    else:
-        sid = _get_session(request)
-        bets = list(reversed(await _get_bets(sid)))
+    user_id, session_id = _identity(request, user)
+    bets = await _pg_get_bets(db, user_id, session_id)
     return JSONResponse({"bets": bets, "total": len(bets)})
 
 
@@ -417,8 +389,8 @@ async def get_bank_balance(
 ) -> JSONResponse:
     if user:
         return JSONResponse({"bank": user.bankroll})
-    sid = _get_session(request)
-    return JSONResponse({"bank": await _get_bank(sid)})
+    _, session_id = _identity(request, None)
+    return JSONResponse({"bank": await _get_bank(None, session_id)})
 
 
 @router.get("/stats")
@@ -427,13 +399,9 @@ async def get_stats(
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ) -> JSONResponse:
-    if user:
-        bets = await _pg_get_bets(db, user.id)
-        bank = user.bankroll
-    else:
-        sid = _get_session(request)
-        bets = await _get_bets(sid)
-        bank = await _get_bank(sid)
+    user_id, session_id = _identity(request, user)
+    bets = await _pg_get_bets(db, user_id, session_id)
+    bank = user.bankroll if user else await _get_bank(None, session_id)
 
     settled = [b for b in bets if b["status"] in ("won", "lost")]
     pending = [b for b in bets if b["status"] == "pending"]
@@ -464,19 +432,21 @@ async def reset(
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ) -> JSONResponse:
-    if user:
-        # Delete all bets and reset bankroll to 500
-        result = await db.execute(
-            select(PaperBetModel).where(PaperBetModel.user_id == user.id)
-        )
+    user_id, session_id = _identity(request, user)
+
+    if user_id:
+        result = await db.execute(select(PaperBetModel).where(PaperBetModel.user_id == user_id))
         for bet_row in result.scalars().all():
             await db.delete(bet_row)
         user.bankroll = INITIAL_BANK
         await db.commit()
     else:
-        sid = _get_session(request)
-        await _set_bank(sid, INITIAL_BANK)
-        await _set_bets(sid, [])
+        result = await db.execute(select(PaperBetModel).where(PaperBetModel.session_id == session_id))
+        for bet_row in result.scalars().all():
+            await db.delete(bet_row)
+        await db.commit()
+        await _set_bank(None, session_id, INITIAL_BANK)
+
     return JSONResponse({"bank": INITIAL_BANK, "message": "Simulator reset to £500"})
 
 
@@ -499,9 +469,9 @@ async def topup(
         user.bankroll = round(user.bankroll + req.amount, 2)
         await db.commit()
         return JSONResponse({"bank": user.bankroll})
-    else:
-        sid = _get_session(request)
-        bank = await _get_bank(sid)
-        new_bank = round(bank + req.amount, 2)
-        await _set_bank(sid, new_bank)
-        return JSONResponse({"bank": new_bank})
+
+    _, session_id = _identity(request, None)
+    bank = await _get_bank(None, session_id)
+    new_bank = round(bank + req.amount, 2)
+    await _set_bank(None, session_id, new_bank)
+    return JSONResponse({"bank": new_bank})
