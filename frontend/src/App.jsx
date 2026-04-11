@@ -122,11 +122,7 @@ function BetSlipToast() {
 
   if (!toast) return null;
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: 80,
-      left: '50%',
-      transform: 'translateX(-50%)',
+    <div className="bet-slip-toast" style={{
       background: 'var(--bg-elevated)',
       border: '1px solid var(--accent-gold-dim)',
       borderRadius: 'var(--radius-md)',

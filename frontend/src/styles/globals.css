@@ -396,6 +396,20 @@ input::placeholder, textarea::placeholder {
   }
 }
 
+/* ─── Bet slip toast — above bottom nav on mobile, lower on desktop ──────── */
+.bet-slip-toast {
+  position: fixed;
+  bottom: calc(var(--bottom-nav-height) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+@media (min-width: 768px) {
+  .bet-slip-toast {
+    bottom: 24px;
+  }
+}
+
 /* ─── Utility ────────────────────────────────────────────────────────────── */
 .text-gold { color: var(--accent-gold-bright); }
 .text-muted { color: var(--text-muted); }
