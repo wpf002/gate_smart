@@ -2,10 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { trackRaceAnalysis, trackScoreCardViewed, trackDebriefViewed } from '../utils/analytics';
 import { useQuery } from '@tanstack/react-query';
-import { getRaceDetail, getScoreCard, checkValueAlerts, getRaceDebrief, clearRaceAnalysis, getRaceResults } from '../utils/api';
+import { getRaceDetail, getScoreCard, getRaceDebrief, clearRaceAnalysis, getRaceResults } from '../utils/api';
 import { HorseRow, HorseRowSkeleton } from '../components/races/HorseRow';
 import ScorecardPanel from '../components/races/ScorecardPanel';
-import ValueAlertBanner from '../components/races/ValueAlertBanner';
 import DebriefPanel from '../components/races/DebriefPanel';
 import { getDisplayTime, formatDistance, formatPurse, isRaceDefinitelyFinished } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
@@ -461,8 +460,6 @@ export default function RaceDetailPage() {
   const [scorecardData, setScorecardData] = useState(validCache?.scorecardData || null);
   const [analyzeError, setAnalyzeError] = useState(null);
   const [activeTab, setActiveTab] = useState(validCache ? 'analysis' : 'analysis');
-  const [valueAlerts, setValueAlerts] = useState(null);
-  const [alertsLoading, setAlertsLoading] = useState(false);
   const [debrief, setDebrief] = useState(null);
   const [debriefLoading, setDebriefLoading] = useState(false);
   const [debriefError, setDebriefError] = useState(null);
@@ -471,24 +468,6 @@ export default function RaceDetailPage() {
   // Mode-switch confirmation
   const [pendingMode, setPendingMode] = useState(null);
   const abortRef = useRef(null);
-
-  const runAlertCheck = async (raceData) => {
-    if (!raceData?.runners?.length) return;
-    setAlertsLoading(true);
-    try {
-      const horses = raceData.runners.map((r) => ({
-        horse_id: r.horse_id,
-        horse_name: r.horse_name || r.horse,
-        current_odds: r.odds || r.sp || '?',
-      }));
-      const result = await checkValueAlerts(raceId, horses);
-      setValueAlerts(result);
-    } catch {
-      // silently ignore
-    } finally {
-      setAlertsLoading(false);
-    }
-  };
 
   const runDebrief = async () => {
     setDebriefLoading(true);
@@ -587,7 +566,6 @@ export default function RaceDetailPage() {
               setAnalysis(msg.result);
               setRaceAnalysisCache(raceId, { analysis: msg.result, mode, scorecardData: null });
               trackRaceAnalysis(raceId, mode);
-              if (race) runAlertCheck(race);
             }
             if (msg.error) throw new Error(msg.error);
           } catch (e) { if (e.message !== 'JSON parse error') throw e; }
@@ -631,7 +609,6 @@ export default function RaceDetailPage() {
     setAnalysis(null);
     setScorecardData(null);
     setAnalyzeError(null);
-    setValueAlerts(null);
     setActiveTab('analysis');
   };
 
@@ -754,11 +731,6 @@ export default function RaceDetailPage() {
               📋 Post-Race Debrief
             </button>
           )}
-          {analysis && !alertsLoading && (
-            <button className="btn btn-ghost" onClick={() => race && runAlertCheck(race)} style={{ flexShrink: 0 }}>
-              ⚡ Check Value
-            </button>
-          )}
         </div>
 
         {/* ── Staleness warning ─────────────────────────────────────── */}
@@ -811,8 +783,6 @@ export default function RaceDetailPage() {
             ⚠️ {debriefError}
           </div>
         )}
-
-        <ValueAlertBanner alerts={valueAlerts?.alerts} loading={alertsLoading} />
 
         {/* ── Tab panel ─────────────────────────────────────────────── */}
         {showTabs && (
