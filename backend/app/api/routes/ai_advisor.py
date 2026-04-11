@@ -369,7 +369,58 @@ async def race_debrief(request: Request) -> JSONResponse:
     except Exception:
         raise HTTPException(status_code=502, detail="AI debrief unavailable")
 
+    # Settle accuracy tracking asynchronously — fire-and-forget
+    asyncio.create_task(_settle_prediction(req.race_id, race_result))
+
     return JSONResponse(result)
+
+
+async def _settle_prediction(race_id: str, race_result: dict) -> None:
+    """
+    Compare stored Secretariat top-pick against the actual race winner and
+    update accuracy counters. Safe to call multiple times — checks 'status'.
+    """
+    try:
+        pred = await cache_get(f"predictions:{race_id}")
+        if not pred or pred.get("status") == "settled":
+            return
+
+        # Find the winner (position == "1")
+        runners = race_result.get("runners", [])
+        winner = next(
+            (r for r in runners if str(r.get("position", "")).strip() == "1"),
+            None,
+        )
+        if not winner:
+            return
+
+        actual_winner_id = str(winner.get("horse_id", ""))
+        actual_winner_name = winner.get("horse_name", "") or winner.get("horse", "")
+        top_pick_id = str(pred.get("top_pick_horse_id", ""))
+        top_pick_name = pred.get("top_pick_horse_name", "")
+
+        is_correct = bool(
+            top_pick_id and actual_winner_id and top_pick_id == actual_winner_id
+        ) or bool(
+            top_pick_name and actual_winner_name and
+            top_pick_name.strip().lower() == actual_winner_name.strip().lower()
+        )
+
+        await cache_incr("accuracy:total")
+        if is_correct:
+            await cache_incr("accuracy:correct")
+
+        # Mark as settled so we don't double-count
+        pred.update({
+            "status": "settled",
+            "actual_winner": actual_winner_name,
+            "actual_winner_id": actual_winner_id,
+            "is_correct": is_correct,
+            "settled_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await cache_set(f"predictions:{race_id}", pred, ex=604800)
+    except Exception:
+        pass  # Never raise — accuracy is non-critical
 
 
 @router.delete("/analysis/{race_id}")
