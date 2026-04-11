@@ -302,12 +302,20 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
           </div>
           {analysisData?.recommended_bet && (
             <div style={{ marginTop: 4 }}>
-              <span className={`badge badge-${
-                analysisData.recommended_bet === 'avoid' ? 'red' :
-                analysisData.recommended_bet === 'win'   ? 'green' : 'gold'
-              }`}>
-                {analysisData.recommended_bet}
-              </span>
+              {(() => {
+                const raw = analysisData.recommended_bet;
+                const LABELS = {
+                  'use-in-exotics': 'Use in Exotics',
+                  'each-way': 'Each Way',
+                  'avoid': 'Avoid',
+                  'win': 'Win',
+                  'place': 'Place',
+                  'show': 'Show',
+                };
+                const label = LABELS[raw] || raw;
+                const color = raw === 'avoid' ? 'red' : raw === 'win' ? 'green' : 'gold';
+                return <span className={`badge badge-${color}`}>{label}</span>;
+              })()}
             </div>
           )}
         </div>

@@ -160,17 +160,31 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], raceId = '', cou
 
       {analysis.vulnerable_favorite && (
         <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 13 }}>
-          ⚠️ <strong style={{ color: 'var(--accent-red-bright)' }}>Vulnerable Favorite:</strong>{' '}
+          ⚠️ <strong style={{ color: 'var(--accent-red-bright)' }}>
+            {viewMode === 'beginner' ? 'The favorite looks beatable:' : 'Vulnerable Favorite:'}
+          </strong>{' '}
           <span style={{ color: 'var(--text-secondary)' }}>{analysis.vulnerable_favorite}</span>
+          {viewMode === 'beginner' && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              The horse most people are betting on may not win today — consider looking at other runners.
+            </div>
+          )}
         </div>
       )}
 
       {analysis.longshot_alert?.horse_name && (
         <div style={{ background: 'rgba(42,122,75,0.1)', border: '1px solid rgba(42,122,75,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 13 }}>
-          🎯 <strong style={{ color: 'var(--accent-green-bright)' }}>Longshot Alert:</strong>{' '}
+          🎯 <strong style={{ color: 'var(--accent-green-bright)' }}>
+            {viewMode === 'beginner' ? 'Surprise Pick:' : 'Longshot Alert:'}
+          </strong>{' '}
           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-gold)' }}>{analysis.longshot_alert.odds}</span>{' '}
           <strong>{analysis.longshot_alert.number ? `${analysis.longshot_alert.number} ` : ''}{analysis.longshot_alert.horse_name}</strong>{' '}
           <span style={{ color: 'var(--text-secondary)' }}>— {analysis.longshot_alert.reason}</span>
+          {viewMode === 'beginner' && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              A "longshot" is a horse with high odds — not many people are betting on it, but if it wins, the payout is much bigger than the favorite.
+            </div>
+          )}
         </div>
       )}
 
@@ -191,7 +205,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], raceId = '', cou
                   <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold-bright)' }}>
                     {p.number ? `${p.number} ` : ''}{p.horse_name}
                   </span>
-                  {p.reasoning && (
+                  {p.reasoning && viewMode === 'technical' && (
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 6 }}>— {p.reasoning}</span>
                   )}
                 </div>
@@ -203,37 +217,49 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], raceId = '', cou
       )}
 
       {/* ── Bet Recommendations ──────────────────────────────────── */}
-      {analysis.bet_recommendations && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-            Bet Recommendations
-          </div>
-          {Object.entries(analysis.bet_recommendations).map(([type, rec]) => {
-            if (!rec?.selection) return null;
-            return (
+      {analysis.bet_recommendations && (() => {
+        const BET_LABELS = {
+          win:        'Win — pick the winner',
+          place:      'Place — finish in the top 2',
+          show:       'Show — finish in the top 3',
+          exacta:     'Exacta',
+          trifecta:   'Trifecta',
+          superfecta: 'Superfecta',
+        };
+        const SIMPLE_BETS = ['win', 'place', 'show'];
+        const entries = Object.entries(analysis.bet_recommendations)
+          .filter(([type, rec]) => rec?.selection && (viewMode === 'technical' || SIMPLE_BETS.includes(type)));
+        if (entries.length === 0) return null;
+        return (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+              Bet Recommendations
+            </div>
+            {entries.map(([type, rec]) => (
               <div key={type} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid var(--border-subtle)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', textTransform: 'capitalize' }}>{type}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)' }}>
+                    {viewMode === 'beginner' ? (BET_LABELS[type] || type) : type.charAt(0).toUpperCase() + type.slice(1)}
+                  </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {rec.stake_suggestion && (
                       <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)' }}>{rec.stake_suggestion}</span>
                     )}
-                    {/* Only add to slip for single-horse bets (win/place/show) */}
-                    {['win', 'place', 'show'].includes(type) && (
+                    {SIMPLE_BETS.includes(type) && (
                       <AddBtn name={rec.selection} betType={type} />
                     )}
                   </div>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{rec.reasoning}</div>
-                {rec.box_option && (
+                {rec.box_option && viewMode === 'technical' && (
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>📦 {rec.box_option}</div>
                 )}
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Legacy recommended_bets (backwards compat with cached responses) */}
       {!analysis.bet_recommendations && analysis.recommended_bets?.length > 0 && (
@@ -593,7 +619,7 @@ export default function RaceDetailPage() {
           <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-secondary)' }}>
             {(race.distance || race.distance_f) && <span>📏 {formatDistance(race.distance, race.distance_f, race.region)}</span>}
             {race.surface && <span>🌿 {race.surface}</span>}
-            {race.going && <span>⛅ Going: {race.going}</span>}
+            {race.going && <span>🏁 Track: {race.going}</span>}
             {formatPurse(race) && <span>💰 {formatPurse(race)}</span>}
             {race.runners?.length && <span>🏇 {race.runners.length} runners</span>}
             {raceFinished && <span style={{ color: 'var(--accent-gold-bright)', fontWeight: 600 }}>✓ Finished</span>}
