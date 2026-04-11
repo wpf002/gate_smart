@@ -453,10 +453,21 @@ async def get_na_racecards_full(date: str = None) -> dict:
                                 tzinfo=tz.utc).timestamp() * 1000)
     day_end_ms = day_start_ms + 86_400_000  # +24 hours
 
+    import re as _re
+    _WAGER_POOL = _re.compile(
+        r'\b(pick\s*\d+|trifecta|superfecta|exacta|daily\s*double|rolling\s*pick)\b',
+        _re.IGNORECASE,
+    )
+
     all_races = []
+    seen_race_ids: set[str] = set()
     for meet in meets:
         meet_id = meet.get("meet_id", "")
         if not meet_id:
+            continue
+        # Skip exotic wager pool "meets" — they duplicate individual race entries
+        track_name = meet.get("track_name", "")
+        if _WAGER_POOL.search(track_name):
             continue
         try:
             entries_data = await get_na_meet_entries(meet_id)
@@ -472,7 +483,14 @@ async def get_na_racecards_full(date: str = None) -> dict:
                             continue
                     except (TypeError, ValueError):
                         pass
-                all_races.append(_normalize_na_race(race, meet_info))
+                normalized = _normalize_na_race(race, meet_info)
+                # Deduplicate by race_id in case the same race appears in multiple meets
+                rid = normalized.get("race_id", "")
+                if rid and rid in seen_race_ids:
+                    continue
+                if rid:
+                    seen_race_ids.add(rid)
+                all_races.append(normalized)
         except Exception:
             continue
 

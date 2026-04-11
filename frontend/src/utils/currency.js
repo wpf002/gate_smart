@@ -14,7 +14,7 @@ export function getCurrencySymbol(region) {
 
 export function formatCurrency(amount, region) {
   const symbol = getCurrencySymbol(region);
-  if (amount == null && amount !== 0) return `${symbol}—`;
+  if (amount == null || isNaN(amount)) return null;
   return `${symbol}${Number(amount).toLocaleString('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,

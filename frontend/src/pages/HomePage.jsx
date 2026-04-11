@@ -100,9 +100,17 @@ export default function HomePage() {
     ? [...(data?.racecards ?? []), ...(naData?.racecards ?? [])]
     : (data?.racecards ?? []);
 
+  // Normalize course names — strip exotic wager suffixes the NA API appends
+  // e.g. "Keeneland Turf Pick 3" → "Keeneland"
+  const normalizeCourse = (c) =>
+    (c || 'Unknown')
+      .replace(/\s+(turf\s+)?pick\s+\d+$/i, '')
+      .replace(/\s+(super|grand)\s+pick\s+\d+$/i, '')
+      .trim() || 'Unknown';
+
   // Group by course, sort courses alphabetically
   const byTrack = races.reduce((acc, race) => {
-    const course = race.course || 'Unknown';
+    const course = normalizeCourse(race.course);
     if (!acc[course]) acc[course] = [];
     acc[course].push(race);
     return acc;
