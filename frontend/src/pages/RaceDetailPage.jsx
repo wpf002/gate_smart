@@ -58,6 +58,10 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], raceId = '', cou
   const AddBtn = ({ name, betType = 'win' }) => {
     const runner = findRunner(name);
     if (!runner) return null;
+    // Don't offer to add scratched/non-runner horses
+    const isScratched = runner.non_runner || runner.scratched ||
+      ['non_runner', 'scratched', 'withdrawn'].includes((runner.status || '').toLowerCase());
+    if (isScratched) return null;
     const key = `${runner.horse_id}:${betType}`;
     const done = addedKeys.has(key);
     return (
