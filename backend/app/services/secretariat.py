@@ -359,7 +359,7 @@ def _slim_race_for_prompt(race_data: dict) -> dict:
         "trainer_14_days", "rpr", "ts", "distance_winner", "course_winner",
         "going_winner", "headgear", "headgear_first_time",
     }
-    _RACE_DROP = {"raw", "big_race", "type_of_race", "region", "pattern",
+    _RACE_DROP = {"raw", "big_race", "type_of_race", "pattern",
                   "age_band", "sex_restriction", "field_size"}
     runners = race_data.get("runners", [])
     large_field = len(runners) > 10
