@@ -7,7 +7,6 @@ import { HorseRow, HorseRowSkeleton } from '../components/races/HorseRow';
 import ScorecardPanel from '../components/races/ScorecardPanel';
 import ValueAlertBanner from '../components/races/ValueAlertBanner';
 import DebriefPanel from '../components/races/DebriefPanel';
-import NotificationBell from '../components/common/NotificationBell';
 import { getDisplayTime, formatDistance, formatPurse, isRaceDefinitelyFinished } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
 
@@ -661,7 +660,6 @@ export default function RaceDetailPage() {
             </div>
           );
         })()}
-        <NotificationBell raceId={raceId} raceName={race?.title || race?.race_name || ''} />
       </div>
 
       <div style={{ padding: '16px' }}>
