@@ -761,6 +761,39 @@ export default function RaceDetailPage() {
           )}
         </div>
 
+        {/* ── Staleness warning ─────────────────────────────────────── */}
+        {analysis && !analysisStreaming && (() => {
+          const cached = raceAnalysisCache[raceId];
+          if (!cached?.cachedAt) return null;
+          const ageMs = Date.now() - cached.cachedAt;
+          const ageMin = Math.floor(ageMs / 60000);
+          if (ageMin < 30) return null;
+          // Check if race is within 90 minutes of post
+          const postMs = race?.off_dt ? new Date(race.off_dt).getTime() : null;
+          const minsToPost = postMs ? Math.floor((postMs - Date.now()) / 60000) : null;
+          if (minsToPost !== null && (minsToPost > 90 || minsToPost < 0)) return null;
+          return (
+            <div style={{
+              padding: '10px 14px', marginBottom: 12,
+              background: 'rgba(201,162,39,0.08)',
+              border: '1px solid var(--border-gold)',
+              borderRadius: 'var(--radius-md)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+            }}>
+              <span style={{ fontSize: 12, color: 'var(--accent-gold-bright)' }}>
+                ⚠️ Analysis is {ageMin} min old — odds may have shifted. Re-run for fresh picks.
+              </span>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 11, padding: '4px 10px', flexShrink: 0 }}
+                onClick={handleResetAnalysis}
+              >
+                Re-run
+              </button>
+            </div>
+          );
+        })()}
+
         {/* ── Error banners ──────────────────────────────────────────── */}
         {analyzeError && (
           <div style={{ padding: '10px 14px', background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--accent-red-bright)', marginBottom: 12 }}>
