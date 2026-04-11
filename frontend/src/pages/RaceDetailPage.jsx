@@ -297,6 +297,37 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], raceId = '', cou
         </div>
       )}
 
+      {/* ── Pick 3 / 4 / 5 / 6 ─────────────────────────────────── */}
+      {analysis.top_contenders?.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+            Multi-Race Bets — Pick 3 / 4 / 5 / 6
+          </div>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border-subtle)' }}>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.5 }}>
+              {viewMode === 'beginner'
+                ? 'Pick 3/4/5/6 bets require picking the winner of several consecutive races in a row. Use your top selection from this race as one "leg" of your ticket — then pick winners from the next 2–5 races on the card.'
+                : 'Sequence bets — use the primary leg single or wheel to the backup for coverage. Stack with other legs from adjacent races.'}
+            </p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 80, flexShrink: 0 }}>Primary leg</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-gold-bright)' }}>{analysis.top_contenders[0]}</span>
+            </div>
+            {analysis.top_contenders[1] && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 80, flexShrink: 0 }}>Backup leg</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{analysis.top_contenders[1]}</span>
+              </div>
+            )}
+            {viewMode === 'beginner' && (
+              <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(26,107,168,0.1)', borderRadius: 6, fontSize: 11, color: 'var(--accent-blue-bright)', lineHeight: 1.5 }}>
+                💡 At the window: <em>"$2 Pick 3, [horse #] in this race, [pick for next race], [pick for race after], Race [N]"</em>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── What to say at the counter ───────────────────────────── */}
       {analysis.teller_script && (
         <div style={{ marginBottom: 12 }}>
@@ -716,22 +747,98 @@ export default function RaceDetailPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[...Array(8)].map((_, i) => <HorseRowSkeleton key={i} />)}
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(race?.runners || []).map(horse => (
-                <HorseRow
-                  key={horse.horse_id}
-                  horse={horse}
-                  analysis={analysis}
-                  raceId={raceId}
-                  scorecards={scorecardData?.scorecards || []}
-                  course={race?.course || ''}
-                  raceName={race?.title || race?.race_name || ''}
-                  region={race?.region || ''}
-                />
-              ))}
-            </div>
-          )}
+          ) : (() => {
+            // Sort by program number (handles "1", "1A", "2", "10" correctly)
+            const sortedRunners = [...(race?.runners || [])].sort((a, b) => {
+              const parse = r => {
+                const raw = String(r.program_number || r.cloth_number || r.stall_number || '99');
+                const m = raw.match(/^(\d+)([A-Za-z]*)$/);
+                return m ? [parseInt(m[1], 10), m[2].toUpperCase()] : [99, raw];
+              };
+              const [an, as] = parse(a);
+              const [bn, bs] = parse(b);
+              return an !== bn ? an - bn : as.localeCompare(bs);
+            });
+
+            // Detect coupled entries (same base number, e.g. "1" and "1A")
+            const baseGroups = {};
+            sortedRunners.forEach(r => {
+              const base = String(r.program_number || r.cloth_number || '').match(/^(\d+)/)?.[1];
+              if (base) { if (!baseGroups[base]) baseGroups[base] = []; baseGroups[base].push(r.horse_id); }
+            });
+            const coupledIds = new Set();
+            Object.values(baseGroups).forEach(ids => { if (ids.length > 1) ids.forEach(id => coupledIds.add(id)); });
+
+            // Race connections summary (trainers + jockeys)
+            const trainerMap = {};
+            const jockeyMap = {};
+            sortedRunners.forEach(r => {
+              const num = r.program_number || r.cloth_number || '?';
+              if (r.trainer) {
+                if (!trainerMap[r.trainer]) trainerMap[r.trainer] = { nums: [], winPct: r.trainer_14_day_percent };
+                trainerMap[r.trainer].nums.push(num);
+              }
+              if (r.jockey) {
+                if (!jockeyMap[r.jockey]) jockeyMap[r.jockey] = { nums: [] };
+                jockeyMap[r.jockey].nums.push(num);
+              }
+            });
+            const trainers = Object.entries(trainerMap).sort((a, b) => b[1].nums.length - a[1].nums.length);
+            const jockeys  = Object.entries(jockeyMap).sort((a, b)  => b[1].nums.length - a[1].nums.length);
+
+            return (
+              <>
+                {/* Trainer / Jockey connections */}
+                {(trainers.length > 0 || jockeys.length > 0) && (
+                  <div style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                      {race?.course} — Trainers & Jockeys
+                    </div>
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      {trainers.length > 0 && (
+                        <div style={{ flex: 1, minWidth: 120 }}>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>TRAINERS</div>
+                          {trainers.slice(0, 6).map(([name, info]) => (
+                            <div key={name} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3, display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent-gold)', flexShrink: 0 }}>#{info.nums.join(' #')}</span>
+                              <span style={{ minWidth: 0 }}>{name}{info.winPct != null ? <span style={{ color: 'var(--text-muted)', marginLeft: 4, fontSize: 10 }}>{info.winPct}%</span> : ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {jockeys.length > 0 && (
+                        <div style={{ flex: 1, minWidth: 120 }}>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>JOCKEYS</div>
+                          {jockeys.slice(0, 6).map(([name, info]) => (
+                            <div key={name} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3, display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent-gold)', flexShrink: 0 }}>#{info.nums.join(' #')}</span>
+                              <span style={{ minWidth: 0 }}>{name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {sortedRunners.map(horse => (
+                    <HorseRow
+                      key={horse.horse_id}
+                      horse={horse}
+                      analysis={analysis}
+                      raceId={raceId}
+                      scorecards={scorecardData?.scorecards || []}
+                      course={race?.course || ''}
+                      raceName={race?.title || race?.race_name || ''}
+                      region={race?.region || ''}
+                      isCoupled={coupledIds.has(horse.horse_id)}
+                    />
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>

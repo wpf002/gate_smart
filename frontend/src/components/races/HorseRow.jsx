@@ -179,7 +179,7 @@ export function HorseRowSkeleton() {
  *   raceId     {string}
  *   scorecards {array}    array of scorecards from /advisor/scorecard (optional)
  */
-export function HorseRow({ horse, analysis, raceId, scorecards = [], course = '', raceName = '', region = '' }) {
+export function HorseRow({ horse, analysis, raceId, scorecards = [], course = '', raceName = '', region = '', isCoupled = false }) {
   const navigate = useNavigate();
   const addToBetSlip = useAppStore((s) => s.addToBetSlip);
   const betSlip = useAppStore((s) => s.betSlip);
@@ -292,10 +292,16 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
               whiteSpace: 'nowrap',
               textDecoration: isScratched ? 'line-through' : 'none',
             }}>
+              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-gold-dim)', marginRight: 4 }}>
+                {horse.program_number || horse.cloth_number || horse.stall_number || '?'} —
+              </span>
               {horse.horse_name}
             </div>
             {isScratched && (
               <span className="badge badge-muted" style={{ flexShrink: 0, fontSize: 10 }}>Scratched</span>
+            )}
+            {isCoupled && !isScratched && (
+              <span className="badge badge-gold" style={{ flexShrink: 0, fontSize: 9 }}>ENTRY</span>
             )}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
