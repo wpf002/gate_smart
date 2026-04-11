@@ -191,7 +191,7 @@ export default function OnboardingFlow() {
 
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 48, color: 'var(--accent-gold-bright)', lineHeight: 1 }}>
-                £{bankroll}
+                ${bankroll}
               </div>
             </div>
 
