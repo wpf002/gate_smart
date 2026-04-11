@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { Component, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import BottomNav from './components/common/BottomNav';
 import HomePage from './pages/HomePage';
@@ -13,6 +13,46 @@ import SimulatorPage from './pages/SimulatorPage';
 import LoginPage from './pages/LoginPage';
 import OnboardingFlow from './components/common/OnboardingFlow';
 import { useAppStore } from './store';
+
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          padding: 32,
+          textAlign: 'center',
+          color: 'var(--text-muted)',
+          maxWidth: 400,
+          margin: '60px auto',
+        }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--accent-gold)', marginBottom: 10 }}>
+            Something went wrong
+          </div>
+          <div style={{ fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
+            {this.state.error?.message || 'An unexpected error occurred.'}
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/'; }}
+          >
+            Go back to races
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const NAV_ITEMS = [
   { path: '/', icon: '🏠', label: 'Races' },
@@ -124,18 +164,20 @@ function AppShell() {
       <SideNav />
       <BetSlipToast />
       <div className="page-content">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/race/:raceId" element={<RaceDetailPage />} />
-          <Route path="/horse/:horseId" element={<HorseDetailPage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/advisor" element={<AdvisorPage />} />
-          <Route path="/betslip" element={<BetSlipPage />} />
-          <Route path="/education" element={<EducationPage />} />
-          <Route path="/simulator" element={<SimulatorPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/login" element={<LoginPage />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/race/:raceId" element={<RaceDetailPage />} />
+            <Route path="/horse/:horseId" element={<HorseDetailPage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/advisor" element={<AdvisorPage />} />
+            <Route path="/betslip" element={<BetSlipPage />} />
+            <Route path="/education" element={<EducationPage />} />
+            <Route path="/simulator" element={<SimulatorPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/login" element={<LoginPage />} />
+          </Routes>
+        </ErrorBoundary>
       </div>
       <BottomNav />
     </div>
