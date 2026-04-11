@@ -6,14 +6,18 @@ import PageHeader from '../components/common/PageHeader';
 import AccuracyBadge from '../components/common/AccuracyBadge';
 
 const SUGGESTED_QUESTIONS = [
+  'Who are the top Kentucky Derby contenders this year?',
+  'What horses should I watch heading into the Triple Crown?',
+  'Who are the leading trainers in US racing right now?',
+  'Explain the Kentucky Derby points system',
+  'What is track bias and how does it affect betting?',
+  'How do I read a US past performance sheet?',
   'What does each way mean?',
-  'How do I read a form guide?',
   'What is a trifecta bet?',
-  'How should I size my bets?',
-  'What is track bias?',
-  'Explain SP odds to me',
-  'What is a Superfecta?',
+  'How should I size my bets for my bankroll?',
+  'What is a Beyer Speed Figure?',
   'How does parimutuel betting work?',
+  'What is a claiming race?',
 ];
 
 /** Render inline markdown: **bold**, *italic*, `code` */

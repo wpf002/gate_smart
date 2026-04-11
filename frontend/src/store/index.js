@@ -106,6 +106,23 @@ export const useAppStore = create(
         set((state) => ({
           valueAlerts: { ...state.valueAlerts, [raceId]: alerts },
         })),
+
+      // Race analysis cache — in-memory only, keyed by race_id
+      // Lets the user navigate to a horse profile and back without losing analysis
+      raceAnalysisCache: {},
+      setRaceAnalysisCache: (raceId, data) =>
+        set((state) => ({
+          raceAnalysisCache: {
+            ...state.raceAnalysisCache,
+            [raceId]: { ...data, cachedAt: Date.now() },
+          },
+        })),
+      clearRaceAnalysisCache: (raceId) =>
+        set((state) => {
+          const next = { ...state.raceAnalysisCache };
+          delete next[raceId];
+          return { raceAnalysisCache: next };
+        }),
     }),
     {
       name: 'gatesmart-v2',

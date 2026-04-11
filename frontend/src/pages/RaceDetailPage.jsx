@@ -416,13 +416,19 @@ function TabBar({ tabs, active, onChange }) {
 export default function RaceDetailPage() {
   const { raceId } = useParams();
   const navigate = useNavigate();
-  const { userProfile } = useAppStore();
-  const [analysisMode, setAnalysisMode] = useState('balanced');
-  const [analysis, setAnalysis] = useState(null);
+  const { userProfile, raceAnalysisCache, setRaceAnalysisCache, clearRaceAnalysisCache } = useAppStore();
+
+  // Restore analysis state from in-memory cache (survives navigating to horse profile and back)
+  const cached = raceAnalysisCache[raceId];
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes — matches server cache
+  const validCache = cached && (Date.now() - cached.cachedAt) < CACHE_TTL ? cached : null;
+
+  const [analysisMode, setAnalysisMode] = useState(validCache?.mode || 'balanced');
+  const [analysis, setAnalysis] = useState(validCache?.analysis || null);
   const [analysisStreaming, setAnalysisStreaming] = useState(false);
-  const [scorecardData, setScorecardData] = useState(null);
+  const [scorecardData, setScorecardData] = useState(validCache?.scorecardData || null);
   const [analyzeError, setAnalyzeError] = useState(null);
-  const [activeTab, setActiveTab] = useState('analysis');
+  const [activeTab, setActiveTab] = useState(validCache ? 'analysis' : 'analysis');
   const [valueAlerts, setValueAlerts] = useState(null);
   const [alertsLoading, setAlertsLoading] = useState(false);
   const [debrief, setDebrief] = useState(null);
@@ -513,6 +519,11 @@ export default function RaceDetailPage() {
     getScoreCard(raceId)
       .then(data => {
         setScorecardData(data);
+        setRaceAnalysisCache(raceId, {
+          ...(raceAnalysisCache[raceId] || {}),
+          scorecardData: data,
+          cachedAt: Date.now(),
+        });
         trackScoreCardViewed(raceId);
       })
       .catch(() => {});
@@ -542,6 +553,7 @@ export default function RaceDetailPage() {
             const msg = JSON.parse(payload);
             if (msg.result) {
               setAnalysis(msg.result);
+              setRaceAnalysisCache(raceId, { analysis: msg.result, mode, scorecardData: null });
               trackRaceAnalysis(raceId, mode);
               if (race) runAlertCheck(race);
             }
@@ -583,6 +595,7 @@ export default function RaceDetailPage() {
   // C6: Reset analysis
   const handleResetAnalysis = async () => {
     try { await clearRaceAnalysis(raceId); } catch { /* ignore */ }
+    clearRaceAnalysisCache(raceId);
     setAnalysis(null);
     setScorecardData(null);
     setAnalyzeError(null);
@@ -735,14 +748,21 @@ export default function RaceDetailPage() {
           <div style={{ marginBottom: 16 }}>
             {tabs.length > 1 && <TabBar tabs={tabs} active={validTab} onChange={setActiveTab} />}
             {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} runners={race?.runners || []} raceId={raceId} course={race?.course || ''} />}
-            {validTab === 'scorecard' && <ScorecardPanel raceScorecards={scorecardData} loading={false} />}
+            {validTab === 'scorecard' && <ScorecardPanel raceScorecards={scorecardData} loading={false} runners={race?.runners || []} />}
             {validTab === 'debrief' && <DebriefPanel debrief={debrief} loading={debriefLoading} />}
           </div>
         )}
 
         {/* ── Runners ───────────────────────────────────────────────── */}
         <div style={{ marginBottom: 12 }}>
-          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 10, letterSpacing: '0.04em' }}>RUNNERS</h3>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '0.04em' }}>RUNNERS</h3>
+            {analysis && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                Colored circle = AI contender score (0–100, higher is stronger)
+              </span>
+            )}
+          </div>
           {isLoading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[...Array(8)].map((_, i) => <HorseRowSkeleton key={i} />)}

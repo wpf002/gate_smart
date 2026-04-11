@@ -10,8 +10,17 @@ const RANK_BADGES = ['🥇', '🥈', '🥉'];
  *   raceScorecards  {object}   full API response: { race_id, course, scorecards[] }
  *   loading         {boolean}
  */
-export default function ScorecardPanel({ raceScorecards, loading }) {
+export default function ScorecardPanel({ raceScorecards, loading, runners = [] }) {
   const [expandedId, setExpandedId] = useState(null);
+
+  // Build a lookup from horse_id → program number
+  const numByHorseId = {};
+  const numByName = {};
+  runners.forEach(r => {
+    const num = r.program_number || r.cloth_number || r.stall_number || '';
+    if (r.horse_id && num) numByHorseId[r.horse_id] = num;
+    if ((r.horse_name || r.horse) && num) numByName[(r.horse_name || r.horse).toLowerCase()] = num;
+  });
 
   if (loading) {
     return (
@@ -70,11 +79,14 @@ export default function ScorecardPanel({ raceScorecards, loading }) {
       </div>
 
       {sorted.map((sc, idx) => {
+        // Look up program number
+        const num = numByHorseId[sc.horse_id] || numByName[(sc.horse_name || '').toLowerCase()] || '';
+        const numPrefix = num ? `#${num} — ` : '';
         // Prepend rank badge to name for top 3
         const rankBadge = RANK_BADGES[idx];
         const displayCard = rankBadge
-          ? { ...sc, horse_name: `${rankBadge} ${sc.horse_name}` }
-          : sc;
+          ? { ...sc, horse_name: `${rankBadge} ${numPrefix}${sc.horse_name}` }
+          : { ...sc, horse_name: `${numPrefix}${sc.horse_name}` };
         const rowId = sc.horse_id || idx;
         return (
           <ScoreCard

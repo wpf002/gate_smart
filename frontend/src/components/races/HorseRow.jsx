@@ -117,14 +117,17 @@ function EquibasePP({ horse }) {
               <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{r.pp_track_code}</div>
             </div>
             <PosBadge pos={r.official_finish} fieldSize={r.field_size > 0 ? r.field_size : null} />
-            <div style={{ minWidth: 0 }}>
-              <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <span style={{ color: 'var(--text-muted)' }}>
                 {[r.pp_distance, r.pp_track_condition].filter(Boolean).join(' · ')}
               </span>
               {r.short_comment && (
-                <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: 140 }}>
-                  {r.short_comment}
-                </span>
+                <>
+                  <span style={{ color: 'var(--border-medium)', margin: '0 4px' }}>|</span>
+                  <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: 130 }}>
+                    {r.short_comment}
+                  </span>
+                </>
               )}
             </div>
             {r.speed_figure > 0 && (
@@ -292,9 +295,6 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
               whiteSpace: 'nowrap',
               textDecoration: isScratched ? 'line-through' : 'none',
             }}>
-              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-gold-dim)', marginRight: 4 }}>
-                {horse.program_number || horse.cloth_number || horse.stall_number || '?'} —
-              </span>
               {horse.horse_name}
             </div>
             {isScratched && (
@@ -377,23 +377,27 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             {/* Analysis text */}
             {summaryText && (
               <div style={{ flex: 1, minWidth: 0 }}>
-                {analysisData.strengths?.length > 0 && (
+                {experienceLevel !== 'beginner' && analysisData.strengths?.length > 0 && (
                   <div style={{ marginBottom: 6 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-green-bright)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
                       Strengths
                     </div>
                     {analysisData.strengths.map((s, i) => (
-                      <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>· {s}</div>
+                      <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>
+                        · {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </div>
                     ))}
                   </div>
                 )}
-                {analysisData.weaknesses?.length > 0 && (
+                {experienceLevel !== 'beginner' && analysisData.weaknesses?.length > 0 && (
                   <div style={{ marginBottom: 6 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-red-bright)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
                       Concerns
                     </div>
                     {analysisData.weaknesses.map((w, i) => (
-                      <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>· {w}</div>
+                      <div key={i} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>
+                        · {w.charAt(0).toUpperCase() + w.slice(1)}
+                      </div>
                     ))}
                   </div>
                 )}

@@ -921,17 +921,24 @@ async def extract_and_store_fair_prices(race_id: str, analysis: dict) -> None:
 
 
 async def answer_betting_question(question: str, context: dict = None) -> str:
-    """Free-form Q&A — user can ask Secretariat anything about horse racing."""
-    prompt = f"""Racing Q&A. Answer in 2-4 sentences. Plain prose only — no bullet points, no bold, no dashes, no lists, no headers. Define jargon inline when needed.
+    """Free-form Q&A — user can ask Secretariat anything about horse racing or racing intelligence."""
+    prompt = f"""You are Secretariat, an elite US horse racing handicapper and racing intelligence expert.
+Answer the user's question thoroughly. Use markdown formatting where helpful:
+- Use **bold** for horse names, trainers, and key terms
+- Use numbered or bulleted lists for rankings or multiple points
+- Use headings (##) for multi-section answers
+- For questions about specific horses/contenders, give your honest expert assessment based on your training data
+- For current events or live race questions, note that your knowledge has a cutoff and odds change daily
 
 Question: {question}
 {"Context: " + json.dumps(context) if context else ""}
 
-Return JSON: {{"answer": "2-4 sentence plain prose answer here"}}"""
+Answer in 3-8 sentences or appropriate list format. Be specific, confident, and use your racing expertise.
+Return JSON: {{"answer": "your markdown-formatted answer here"}}"""
 
     response = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=300,
+        model="claude-sonnet-4-6",
+        max_tokens=1000,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
