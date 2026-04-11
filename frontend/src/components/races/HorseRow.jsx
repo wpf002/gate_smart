@@ -1,8 +1,106 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store';
 import { trackBetAdded } from '../../utils/analytics';
+import { getHorsePastPerformances } from '../../utils/api';
 import RadarChart from './RadarChart';
+
+// ── Position badge helper ──────────────────────────────────────────────────────
+function PosBadge({ pos, fieldSize }) {
+  const n = parseInt(pos);
+  const color =
+    n === 1 ? '#FFD700' :
+    n === 2 ? '#C0C0C0' :
+    n === 3 ? '#CD7F32' :
+    'var(--text-muted)';
+  return (
+    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color, fontSize: 13 }}>
+      {pos}{fieldSize ? `/${fieldSize}` : ''}
+    </span>
+  );
+}
+
+// ── Inline past performances ───────────────────────────────────────────────────
+function RecentForm({ horse }) {
+  const [perf, setPerf] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const fetchedRef = useRef(false);
+
+  // Fire on first render of this component (called when row expands)
+  if (!fetchedRef.current && !loading && !perf && !error) {
+    fetchedRef.current = true;
+    setLoading(true);
+    getHorsePastPerformances(horse.horse_id, horse.horse_name)
+      .then((data) => setPerf(data))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }
+
+  if (loading) {
+    return (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Recent Form</div>
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="skeleton" style={{ height: 11, width: `${80 - i * 15}%`, borderRadius: 3, marginBottom: 5 }} />
+        ))}
+      </div>
+    );
+  }
+
+  const runs = perf?.past_performances?.slice(0, 5) ?? [];
+  if (error || runs.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+        Recent Form
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {runs.map((r, i) => (
+          <div key={i} style={{
+            display: 'grid',
+            gridTemplateColumns: '62px 36px 1fr auto',
+            gap: 6,
+            alignItems: 'center',
+            fontSize: 11,
+            padding: '4px 8px',
+            borderRadius: 4,
+            background: 'var(--bg-card)',
+          }}>
+            {/* Date + track */}
+            <div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>{r.pp_race_date?.slice(5)}</div>
+              <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{r.pp_track_code}</div>
+            </div>
+            {/* Position */}
+            <PosBadge pos={r.official_finish} fieldSize={r.field_size > 0 ? r.field_size : null} />
+            {/* Dist / going / comment */}
+            <div style={{ minWidth: 0 }}>
+              <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>
+                {[r.pp_distance, r.pp_track_condition].filter(Boolean).join(' · ')}
+              </span>
+              {r.short_comment && (
+                <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: 140 }}>
+                  {r.short_comment}
+                </span>
+              )}
+            </div>
+            {/* Speed figure */}
+            {r.speed_figure > 0 && (
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12,
+                color: r.speed_figure >= 90 ? 'var(--accent-gold-bright)' : r.speed_figure >= 75 ? 'var(--accent-green-bright)' : 'var(--text-muted)',
+              }}>
+                {r.speed_figure}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function HorseRowSkeleton() {
   return (
@@ -251,6 +349,8 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
               </div>
             )}
           </div>
+
+          <RecentForm horse={horse} />
 
           {/* View horse profile link */}
           <button

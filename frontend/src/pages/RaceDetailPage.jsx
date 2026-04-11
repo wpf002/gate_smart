@@ -352,6 +352,13 @@ export default function RaceDetailPage() {
   const { data: race, isLoading } = useQuery({
     queryKey: ['race', raceId],
     queryFn: () => getRaceDetail(raceId),
+    // Poll every 45 s within the 30-min window before post time; stop once finished
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data || isRaceDefinitelyFinished(data) || !data.off_dt) return false;
+      const minsToPost = (new Date(data.off_dt) - Date.now()) / 60000;
+      return minsToPost <= 30 && minsToPost > -5 ? 45000 : false;
+    },
   });
 
   // Auto-load official results when a finished race is loaded (onSuccess removed in RQ v5)
