@@ -373,7 +373,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
           padding: '12px',
           background: 'var(--bg-secondary)',
         }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             {/* Analysis text */}
             {summaryText && (
               <div style={{ flex: 1, minWidth: 0 }}>
