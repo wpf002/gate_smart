@@ -708,7 +708,7 @@ export default function RaceDetailPage() {
           )}
           {analysis && !analysisStreaming && (
             <button className="btn btn-ghost" onClick={handleResetAnalysis} style={{ fontSize: 12, padding: '6px 12px' }}>
-              ↺ Reset
+              Reset
             </button>
           )}
           {showDebriefBtn && (
