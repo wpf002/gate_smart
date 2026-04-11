@@ -186,24 +186,30 @@ export default function HomePage() {
       </div>
 
       {/* Track search */}
-      <div style={{ padding: '10px 20px 0' }}>
-        <input
-          type="search"
-          placeholder="Search tracks…"
-          value={trackSearch}
-          onChange={(e) => setTrackSearch(e.target.value)}
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '8px 12px',
-            fontSize: 14,
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border-subtle)',
-            background: 'var(--bg-elevated)',
-            color: 'var(--text-primary)',
-            outline: 'none',
-          }}
-        />
+      <div style={{ padding: '10px 16px 0' }}>
+        <div style={{ position: 'relative' }}>
+          <span style={{
+            position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+            fontSize: 14, pointerEvents: 'none', color: 'var(--text-muted)',
+          }}>🔍</span>
+          <input
+            type="search"
+            placeholder="Filter tracks…"
+            value={trackSearch}
+            onChange={(e) => setTrackSearch(e.target.value)}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '9px 12px 9px 32px',
+              fontSize: 14,
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-medium)',
+              background: 'var(--bg-elevated)',
+              color: 'var(--text-primary)',
+              outline: 'none',
+            }}
+          />
+        </div>
       </div>
 
       <div style={{ padding: '16px 20px' }}>
