@@ -4,18 +4,26 @@ import { formatRaceTime, TIMEZONE_OPTIONS } from '../../utils/timezone';
 import { useAppStore } from '../../store';
 
 /**
- * For US/CAN races, derive the display time from off_dt using the user's
- * preferred timezone (defaults to Eastern).
- * For all other races, use the time field (local track time from the API).
- * Returns { time: string, label: string|null }
+ * For US/CAN races: convert off_dt to the user's preferred timezone.
+ * For all other races: show local track time, and if off_dt is available
+ * also compute the US equivalent so the user knows when to watch.
+ * Returns { time, label, usTime, usLabel }
  */
 export function getDisplayTime(race, timezone = 'America/New_York') {
+  const opt = TIMEZONE_OPTIONS.find((o) => o.value === timezone);
+  const usLabel = opt?.abbr ?? 'ET';
+
   if (['USA', 'CAN'].includes((race.region || '').toUpperCase()) && race.off_dt) {
     const { time, abbr } = formatRaceTime(race.off_dt, timezone);
-    const opt = TIMEZONE_OPTIONS.find((o) => o.value === timezone);
-    return { time, label: abbr ?? opt?.abbr ?? 'ET' };
+    return { time, label: abbr ?? usLabel, usTime: null, usLabel: null };
   }
-  return { time: race.time || race.off_time || '', label: null };
+
+  const localTime = race.time || race.off_time || '';
+  if (race.off_dt) {
+    const { time: usTime } = formatRaceTime(race.off_dt, timezone);
+    return { time: localTime, label: null, usTime, usLabel };
+  }
+  return { time: localTime, label: null, usTime: null, usLabel: null };
 }
 
 /**
@@ -103,7 +111,7 @@ export function RaceCard({ race, isTomorrow = false }) {
   const navigate = useNavigate();
   const timezone = useAppStore((s) => s.userProfile?.timezone);
   const past = !isTomorrow && isRacePast(race);
-  const { time: displayTime, label: timeLabel } = getDisplayTime(race, timezone);
+  const { time: displayTime, label: timeLabel, usTime, usLabel } = getDisplayTime(race, timezone);
   const runnersCount = race.runners?.length ?? race.no_of_runners;
 
   return (
@@ -131,6 +139,11 @@ export function RaceCard({ race, isTomorrow = false }) {
           {timeLabel && (
             <span style={{ fontSize: 11, fontFamily: 'var(--font-body)', color: 'var(--text-muted)', marginLeft: 4 }}>
               {timeLabel}
+            </span>
+          )}
+          {usTime && (
+            <span style={{ fontSize: 11, fontFamily: 'var(--font-body)', color: 'var(--text-muted)', marginLeft: 4 }}>
+              ({usTime} {usLabel})
             </span>
           )}
           {' · '}{race.course}
