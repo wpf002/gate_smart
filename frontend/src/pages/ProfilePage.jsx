@@ -4,6 +4,7 @@ import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import AccuracyBadge from '../components/common/AccuracyBadge';
 import { authUpdateProfile, authLogout } from '../utils/api';
+import { TIMEZONE_OPTIONS } from '../utils/timezone';
 
 const RISK_OPTIONS = ['low', 'medium', 'high'];
 const EXPERIENCE_OPTIONS = ['beginner', 'intermediate', 'advanced'];
@@ -194,6 +195,28 @@ export default function ProfilePage() {
           value={userProfile.riskTolerance}
           onChange={(v) => handleProfileChange({ riskTolerance: v })}
         />
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+          {{
+            low:    'Secretariat will favour short-priced favourites and each-way bets. Stake sizes will be conservative (1–2% of bankroll).',
+            medium: 'Secretariat will balance value and safety. Stakes will be moderate (2–4% of bankroll).',
+            high:   'Secretariat will target overlays and longer shots. Stakes can be aggressive (3–6% of bankroll).',
+          }[userProfile.riskTolerance]}
+        </div>
+
+        {/* Timezone */}
+        <SectionLabel>Race Time Display</SectionLabel>
+        <select
+          value={userProfile.timezone || 'America/New_York'}
+          onChange={(e) => setUserProfile({ timezone: e.target.value })}
+          style={{ width: '100%', padding: '10px 14px', fontSize: 14, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}
+        >
+          {TIMEZONE_OPTIONS.map((tz) => (
+            <option key={tz.value} value={tz.value}>{tz.label}</option>
+          ))}
+        </select>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+          US race times are shown in this timezone on race cards
+        </div>
 
         {/* Experience level */}
         <SectionLabel>Experience Level</SectionLabel>
@@ -202,6 +225,13 @@ export default function ProfilePage() {
           value={userProfile.experienceLevel}
           onChange={(v) => handleProfileChange({ experienceLevel: v })}
         />
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+          {{
+            beginner:     'Secretariat will use plain-English explanations, avoid jargon, and highlight the Beginner Tip first.',
+            intermediate: 'Secretariat will balance plain-English and technical handicapping factors.',
+            advanced:     'Secretariat will lead with technical analysis — Beyer figures, class drops, pace scenarios, and form cycles.',
+          }[userProfile.experienceLevel]}
+        </div>
 
         {/* Secretariat accuracy stats */}
         <SectionLabel>Secretariat Performance</SectionLabel>

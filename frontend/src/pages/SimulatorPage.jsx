@@ -25,11 +25,11 @@ function BankTab({ stats, onTopup, onReset, topping, resetting, topupError }) {
           Paper Bank
         </div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 42, fontWeight: 700, color: 'var(--accent-gold-bright)', lineHeight: 1 }}>
-          £{bank.toFixed(2)}
+          ${bank.toFixed(2)}
         </div>
         {stats?.total_wagered > 0 && (
           <div style={{ marginTop: 10, fontSize: 14, color: pnlColor, fontFamily: 'var(--font-mono)' }}>
-            {netPnl >= 0 ? '+' : ''}£{netPnl.toFixed(2)} net P&L
+            {netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)} net P&L
           </div>
         )}
       </div>
@@ -48,7 +48,7 @@ function BankTab({ stats, onTopup, onReset, topping, resetting, topupError }) {
               onClick={() => onTopup(amt)}
               style={{ fontFamily: 'var(--font-mono)' }}
             >
-              +£{amt}
+              +${amt}
             </button>
           ))}
         </div>
@@ -188,12 +188,12 @@ function BetCard({ bet, onSettle, settling, settleMsg, onDelete, deleting }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
         <div>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Stake </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700 }}>£{bet.stake.toFixed(2)}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700 }}>${bet.stake.toFixed(2)}</span>
           {!isPending && (
             <>
               <span style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 4px' }}>→</span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700, color: pnlColor }}>
-                £{bet.returns.toFixed(2)}
+                ${bet.returns.toFixed(2)}
               </span>
             </>
           )}
@@ -210,7 +210,7 @@ function BetCard({ bet, onSettle, settling, settleMsg, onDelete, deleting }) {
         )}
         {!isPending && (
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: pnlColor, fontWeight: 700 }}>
-            {bet.pnl >= 0 ? '+' : ''}£{bet.pnl.toFixed(2)}
+            {bet.pnl >= 0 ? '+' : ''}${bet.pnl.toFixed(2)}
           </span>
         )}
       </div>
@@ -218,13 +218,56 @@ function BetCard({ bet, onSettle, settling, settleMsg, onDelete, deleting }) {
         <div style={{
           marginTop: 8,
           fontSize: 12,
-          color: 'var(--text-secondary)',
+          color: settleMsg.isRetry ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
           background: 'rgba(255,255,255,0.04)',
           borderRadius: 'var(--radius-sm)',
           padding: '6px 8px',
         }}>
-          {settleMsg.text}
+          {settleMsg.isRetry ? '⏳ ' : ''}{settleMsg.text}
         </div>
+      )}
+    </div>
+  );
+}
+
+function TodayPnlBanner({ bets }) {
+  const todayStr = new Date().toDateString();
+  const todayBets = bets.filter((b) => b.placed_at && new Date(b.placed_at).toDateString() === todayStr);
+  if (todayBets.length === 0) return null;
+
+  const settled = todayBets.filter((b) => b.status !== 'pending');
+  const pnl = settled.reduce((sum, b) => sum + (b.pnl || 0), 0);
+  const wagered = todayBets.reduce((sum, b) => sum + (b.stake || 0), 0);
+  const pnlColor = pnl >= 0 ? 'var(--accent-green-bright)' : 'var(--accent-red-bright)';
+
+  return (
+    <div style={{
+      background: 'var(--bg-elevated)',
+      borderRadius: 'var(--radius-md)',
+      padding: '12px 14px',
+      border: '1px solid var(--border-medium)',
+      marginBottom: 14,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    }}>
+      <div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Today's Activity
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
+          {todayBets.length} bet{todayBets.length !== 1 ? 's' : ''} · ${wagered.toFixed(2)} wagered
+        </div>
+      </div>
+      {settled.length > 0 ? (
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>P&L</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: pnlColor }}>
+            {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Pending</div>
       )}
     </div>
   );
@@ -245,6 +288,7 @@ function BetsTab({ bets, onSettle, settling, settleMsg, onReset, resetting, onDe
 
   return (
     <div style={{ padding: '0 16px 16px' }}>
+      <TodayPnlBanner bets={bets} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
         <button
           disabled={resetting}
@@ -324,7 +368,7 @@ function StatsTab({ stats }) {
           Net P&L
         </div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 700, color: pnlColor }}>
-          {stats.net_pnl >= 0 ? '+' : ''}£{stats.net_pnl.toFixed(2)}
+          {stats.net_pnl >= 0 ? '+' : ''}${stats.net_pnl.toFixed(2)}
         </div>
         <div style={{ fontSize: 13, color: roiColor, fontFamily: 'var(--font-mono)', marginTop: 4 }}>
           ROI {stats.roi >= 0 ? '+' : ''}{stats.roi}%
@@ -337,8 +381,8 @@ function StatsTab({ stats }) {
         <StatRow label="Won" value={stats.won_bets} color="var(--accent-green-bright)" />
         <StatRow label="Lost" value={stats.lost_bets} color="var(--accent-red-bright)" />
         <StatRow label="Win rate" value={winRate !== '—' ? `${winRate}%` : '—'} />
-        <StatRow label="Total wagered" value={`£${stats.total_wagered.toFixed(2)}`} mono />
-        <StatRow label="Total returns" value={`£${stats.total_returns.toFixed(2)}`} mono />
+        <StatRow label="Total wagered" value={`$${stats.total_wagered.toFixed(2)}`} mono />
+        <StatRow label="Total returns" value={`$${stats.total_returns.toFixed(2)}`} mono />
       </div>
     </div>
   );
@@ -404,13 +448,14 @@ export default function SimulatorPage() {
       const result = await simSettle(raceId);
       qc.invalidateQueries({ queryKey: ['sim-bets'] });
       qc.invalidateQueries({ queryKey: ['sim-stats'] });
-      setSettleMsg({ raceId, text: result?.message || 'Done' });
-      if (result?.settled?.length > 0) {
-        qc.invalidateQueries({ queryKey: ['sim-bets'] });
-        qc.invalidateQueries({ queryKey: ['sim-stats'] });
-      }
+      const isNoResults = result?.status === 'no_results';
+      setSettleMsg({
+        raceId,
+        text: result?.message || 'Done',
+        isRetry: isNoResults,
+      });
     } catch {
-      setSettleMsg({ raceId, text: 'Could not fetch results — try again later' });
+      setSettleMsg({ raceId, text: 'Could not fetch results — try again later', isRetry: true });
     } finally {
       setSettling(null);
     }

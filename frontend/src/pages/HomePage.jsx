@@ -71,6 +71,7 @@ function TrackSection({ course, races, isTomorrow }) {
 export default function HomePage() {
   const [selectedDay, setSelectedDay] = useState('today');
   const [selectedRegion, setSelectedRegion] = useState('USA,CAN');
+  const [trackSearch, setTrackSearch] = useState('');
 
   const isAll = selectedRegion === null;
 
@@ -107,7 +108,10 @@ export default function HomePage() {
     return acc;
   }, {});
 
-  const tracks = Object.keys(byTrack).sort((a, b) => a.localeCompare(b));
+  const allTracks = Object.keys(byTrack).sort((a, b) => a.localeCompare(b));
+  const tracks = trackSearch.trim()
+    ? allTracks.filter(t => t.toLowerCase().includes(trackSearch.trim().toLowerCase()))
+    : allTracks;
 
   // Sort races within each track by off_dt (accurate) then time string fallback
   tracks.forEach(t => {
@@ -181,6 +185,27 @@ export default function HomePage() {
         ))}
       </div>
 
+      {/* Track search */}
+      <div style={{ padding: '10px 20px 0' }}>
+        <input
+          type="search"
+          placeholder="Search tracks…"
+          value={trackSearch}
+          onChange={(e) => setTrackSearch(e.target.value)}
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            padding: '8px 12px',
+            fontSize: 14,
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-elevated)',
+            color: 'var(--text-primary)',
+            outline: 'none',
+          }}
+        />
+      </div>
+
       <div style={{ padding: '16px 20px' }}>
         {isError && (
           <div style={{
@@ -215,7 +240,9 @@ export default function HomePage() {
         ) : (
           <>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-              {races.length} races across {tracks.length} tracks
+              {trackSearch.trim()
+                ? `${tracks.length} of ${allTracks.length} tracks match "${trackSearch.trim()}"`
+                : `${races.length} races across ${tracks.length} tracks`}
             </div>
             {tracks.map(course => (
               <TrackSection key={course} course={course} races={byTrack[course]} isTomorrow={selectedDay === 'tomorrow'} />

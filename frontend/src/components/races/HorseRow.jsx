@@ -40,6 +40,9 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
   const [expanded, setExpanded] = useState(false);
   const [added, setAdded] = useState(false);
 
+  const isScratched = horse.non_runner || horse.scratched ||
+    ['scratched', 'non-runner', 'nr', 'withdrawn'].includes((horse.status || '').toLowerCase());
+
   // Match analysis runner
   const analysisData = analysis?.runners?.find(
     (r) => r.horse_id === horse.horse_id || r.horse_name === horse.horse_name
@@ -88,6 +91,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
         border: '1px solid var(--border-subtle)',
         overflow: 'hidden',
         transition: 'background 0.15s',
+        opacity: isScratched ? 0.5 : 1,
       }}
     >
       {/* ── Header row (always visible) ─────────────────────────────── */}
@@ -103,37 +107,45 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
         onMouseEnter={e => { if (hasExpandedContent) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
       >
-        {/* Score ring or stall number */}
+        {/* Score ring or program number */}
         {scoreClass ? (
           <div className={`score-ring ${scoreClass}`}>{score}</div>
         ) : (
           <div style={{
-            width: 40,
-            height: 40,
+            width: 32,
+            height: 32,
             borderRadius: '50%',
-            background: 'var(--bg-elevated)',
+            background: isScratched ? 'var(--bg-elevated)' : 'rgba(201,162,39,0.15)',
+            border: `2px solid ${isScratched ? 'var(--border-subtle)' : 'var(--accent-gold-dim)'}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontFamily: 'var(--font-display)',
-            fontSize: 16,
-            color: 'var(--text-muted)',
+            fontSize: 15,
+            fontWeight: 700,
+            color: isScratched ? 'var(--text-muted)' : 'var(--accent-gold)',
             flexShrink: 0,
           }}>
-            {horse.cloth_number || horse.stall_number || '?'}
+            {horse.program_number || horse.cloth_number || horse.stall_number || '?'}
           </div>
         )}
 
         {/* Horse info */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontWeight: 700,
-            fontSize: 14,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}>
-            {horse.horse_name}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{
+              fontWeight: 700,
+              fontSize: 14,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              textDecoration: isScratched ? 'line-through' : 'none',
+            }}>
+              {horse.horse_name}
+            </div>
+            {isScratched && (
+              <span className="badge badge-muted" style={{ flexShrink: 0, fontSize: 10 }}>Scratched</span>
+            )}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
             {[horse.jockey, horse.trainer].filter(Boolean).join(' · ')}

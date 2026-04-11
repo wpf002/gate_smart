@@ -119,6 +119,14 @@ export const getSecretariatAccuracy = () =>
 export const getRaceDebrief = (raceId) =>
   api.post('/advisor/debrief', { race_id: raceId }).then((r) => r.data);
 
+// ── Analysis Cache ─────────────────────────────────────────────────────────────
+export const clearRaceAnalysis = (raceId) =>
+  api.delete(`/advisor/analysis/${raceId}`).then((r) => r.data);
+
+// ── Race Results ───────────────────────────────────────────────────────────────
+export const getRaceResults = (raceId) =>
+  api.get(`/races/results/race/${raceId}`).then((r) => r.data);
+
 // ── Affiliate ─────────────────────────────────────────────────────────────────
 export const logAffiliateClick = (affiliateId, sessionId, raceId = '') =>
   api.post('/affiliate/click', { affiliate_id: affiliateId, session_id: sessionId, race_id: raceId })

@@ -1,14 +1,14 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { trackRaceAnalysis, trackScoreCardViewed, trackDebriefViewed } from '../utils/analytics';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { getRaceDetail, getScoreCard, checkValueAlerts, getRaceDebrief } from '../utils/api';
+import { useQuery } from '@tanstack/react-query';
+import { getRaceDetail, getScoreCard, checkValueAlerts, getRaceDebrief, clearRaceAnalysis, getRaceResults } from '../utils/api';
 import { HorseRow, HorseRowSkeleton } from '../components/races/HorseRow';
 import ScorecardPanel from '../components/races/ScorecardPanel';
 import ValueAlertBanner from '../components/races/ValueAlertBanner';
 import DebriefPanel from '../components/races/DebriefPanel';
 import NotificationBell from '../components/common/NotificationBell';
-import { getDisplayTime, formatDistance, formatPurse, isRacePast } from '../components/races/RaceCard';
+import { getDisplayTime, formatDistance, formatPurse, isRaceDefinitelyFinished } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
 
 const MODES = [
@@ -18,8 +18,20 @@ const MODES = [
   { id: 'longshot',   label: '🎯 Longshot',   desc: 'Overlay value'  },
 ];
 
-// ── Inline AnalysisPanel (kept local — no separate file) ──────────────────────
-function AnalysisPanel({ analysis, loading }) {
+const FINISH_MEDALS = { first: '🥇', second: '🥈', third: '🥉', fourth: '4️⃣' };
+
+// ── AnalysisPanel ─────────────────────────────────────────────────────────────
+function AnalysisPanel({ analysis, loading, mode }) {
+  const [viewMode, setViewMode] = useState('beginner'); // 'technical' | 'beginner'
+  const [tellerOpen, setTellerOpen] = useState(false);
+  const [copied, setCopied] = useState(null);
+
+  const copyToClipboard = (text, key) => {
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setCopied(key);
+    setTimeout(() => setCopied(null), 1500);
+  };
+
   if (loading) {
     return (
       <div style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
@@ -41,6 +53,11 @@ function AnalysisPanel({ analysis, loading }) {
 
   if (!analysis) return null;
 
+  const modeLabel = MODES.find(m => m.id === mode)?.label || mode;
+  const summaryText = viewMode === 'beginner'
+    ? (analysis.overall_summary_beginner || analysis.overall_summary)
+    : analysis.overall_summary;
+
   return (
     <div style={{
       background: 'linear-gradient(135deg, rgba(201,162,39,0.08) 0%, var(--bg-secondary) 100%)',
@@ -49,17 +66,33 @@ function AnalysisPanel({ analysis, loading }) {
       padding: 16,
       marginBottom: 16,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
-          SECRETARIAT ANALYSIS
-        </span>
-        <span className={`badge badge-${analysis.confidence === 'high' ? 'green' : analysis.confidence === 'low' ? 'red' : 'gold'}`}>
-          {analysis.confidence} confidence
-        </span>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
+            SECRETARIAT — {modeLabel.replace(/^[^ ]+ /, '').toUpperCase()}
+          </span>
+          <span className={`badge badge-${analysis.confidence === 'high' ? 'green' : analysis.confidence === 'low' ? 'red' : 'gold'}`}>
+            {analysis.confidence} confidence
+          </span>
+        </div>
+        {/* Technical / Beginner toggle */}
+        <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 16, padding: 2, gap: 2 }}>
+          {['beginner', 'technical'].map(v => (
+            <button key={v} onClick={() => setViewMode(v)} style={{
+              padding: '4px 10px', borderRadius: 14, border: 'none', fontSize: 11, fontWeight: 600,
+              background: viewMode === v ? 'var(--accent-gold)' : 'transparent',
+              color: viewMode === v ? '#000' : 'var(--text-muted)',
+              cursor: 'pointer', textTransform: 'capitalize',
+            }}>
+              {v === 'beginner' ? '📖 Plain' : '🔬 Technical'}
+            </button>
+          ))}
+        </div>
       </div>
 
       <p style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6, marginBottom: 12 }}>
-        {analysis.overall_summary}
+        {summaryText}
       </p>
 
       {analysis.pace_scenario && (
@@ -72,59 +105,91 @@ function AnalysisPanel({ analysis, loading }) {
       )}
 
       {analysis.vulnerable_favorite && (
-        <div style={{
-          background: 'rgba(192,57,43,0.1)',
-          border: '1px solid rgba(192,57,43,0.25)',
-          borderRadius: 8,
-          padding: '8px 12px',
-          marginBottom: 10,
-          fontSize: 13,
-        }}>
+        <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 13 }}>
           ⚠️ <strong style={{ color: 'var(--accent-red-bright)' }}>Vulnerable Favorite:</strong>{' '}
           <span style={{ color: 'var(--text-secondary)' }}>{analysis.vulnerable_favorite}</span>
         </div>
       )}
 
       {analysis.longshot_alert?.horse_name && (
-        <div style={{
-          background: 'rgba(42,122,75,0.1)',
-          border: '1px solid rgba(42,122,75,0.25)',
-          borderRadius: 8,
-          padding: '8px 12px',
-          marginBottom: 10,
-          fontSize: 13,
-        }}>
+        <div style={{ background: 'rgba(42,122,75,0.1)', border: '1px solid rgba(42,122,75,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 13 }}>
           🎯 <strong style={{ color: 'var(--accent-green-bright)' }}>Longshot Alert:</strong>{' '}
           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-gold)' }}>{analysis.longshot_alert.odds}</span>{' '}
-          <strong>{analysis.longshot_alert.horse_name}</strong>{' '}
+          <strong>{analysis.longshot_alert.number ? `${analysis.longshot_alert.number} ` : ''}{analysis.longshot_alert.horse_name}</strong>{' '}
           <span style={{ color: 'var(--text-secondary)' }}>— {analysis.longshot_alert.reason}</span>
         </div>
       )}
 
-      {analysis.recommended_bets?.length > 0 && (
-        <div>
+      {/* ── Predicted Finish Order ───────────────────────────────── */}
+      {analysis.predicted_finish && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+            Predicted Finish Order
+          </div>
+          {['first', 'second', 'third', 'fourth'].map(pos => {
+            const p = analysis.predicted_finish[pos];
+            if (!p?.horse_name) return null;
+            return (
+              <div key={pos} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 6 }}>
+                <span style={{ fontSize: 20, lineHeight: 1, flexShrink: 0 }}>{FINISH_MEDALS[pos]}</span>
+                <div>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold-bright)' }}>
+                    {p.number ? `${p.number} ` : ''}{p.horse_name}
+                  </span>
+                  {p.reasoning && (
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 6 }}>— {p.reasoning}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Bet Recommendations ──────────────────────────────────── */}
+      {analysis.bet_recommendations && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+            Bet Recommendations
+          </div>
+          {Object.entries(analysis.bet_recommendations).map(([type, rec]) => {
+            if (!rec?.selection) return null;
+            return (
+              <div key={type} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid var(--border-subtle)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', textTransform: 'capitalize' }}>{type}</span>
+                  {rec.stake_suggestion && (
+                    <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)' }}>{rec.stake_suggestion}</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{rec.reasoning}</div>
+                {rec.box_option && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>📦 {rec.box_option}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Legacy recommended_bets (backwards compat with cached responses) */}
+      {!analysis.bet_recommendations && analysis.recommended_bets?.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
             Recommended Bets
           </div>
           {analysis.recommended_bets.map((bet, i) => (
-            <div key={i} style={{
-              background: 'var(--bg-card)',
-              borderRadius: 8,
-              padding: '10px 12px',
-              marginBottom: 8,
-              border: '1px solid var(--border-subtle)',
-            }}>
+            <div key={i} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid var(--border-subtle)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)' }}>{bet.bet_type}</span>
-                <span className={`badge badge-${bet.risk_level === 'low' ? 'green' : bet.risk_level === 'high' ? 'red' : 'gold'}`}>
-                  {bet.risk_level}
-                </span>
+                <span className={`badge badge-${bet.risk_level === 'low' ? 'green' : bet.risk_level === 'high' ? 'red' : 'gold'}`}>{bet.risk_level}</span>
               </div>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{bet.selection}</div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{bet.reasoning}</div>
               {bet.suggested_stake && (
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                  Suggested stake: <span style={{ color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)' }}>{bet.suggested_stake}</span>
+                  Suggested: <span style={{ color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)' }}>{bet.suggested_stake}</span>
                 </div>
               )}
             </div>
@@ -132,16 +197,37 @@ function AnalysisPanel({ analysis, loading }) {
         </div>
       )}
 
+      {/* ── What to say at the counter ───────────────────────────── */}
+      {analysis.teller_script && (
+        <div style={{ marginBottom: 12 }}>
+          <button
+            onClick={() => setTellerOpen(o => !o)}
+            style={{ background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)', width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}
+          >
+            <span>🎙 What to say at the teller counter</span>
+            <span>{tellerOpen ? '▲' : '▼'}</span>
+          </button>
+          {tellerOpen && (
+            <div style={{ marginTop: 6, padding: '10px 12px', background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+              {Object.entries(analysis.teller_script).map(([type, script]) => (
+                <div
+                  key={type}
+                  onClick={() => copyToClipboard(script, type)}
+                  style={{ padding: '6px 0', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{script}</span>
+                  <span style={{ fontSize: 10, color: copied === type ? 'var(--accent-green-bright)' : 'var(--text-muted)', marginLeft: 8, flexShrink: 0 }}>
+                    {copied === type ? '✓ Copied' : 'Tap to copy'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {analysis.beginner_tip && (
-        <div style={{
-          marginTop: 12,
-          padding: '8px 12px',
-          background: 'rgba(26,107,168,0.1)',
-          borderRadius: 8,
-          fontSize: 13,
-          color: 'var(--text-secondary)',
-          borderLeft: '2px solid var(--accent-blue)',
-        }}>
+        <div style={{ marginTop: 4, padding: '8px 12px', background: 'rgba(26,107,168,0.1)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', borderLeft: '2px solid var(--accent-blue)' }}>
           💡 <strong style={{ color: 'var(--accent-blue-bright)' }}>Beginner tip:</strong> {analysis.beginner_tip}
         </div>
       )}
@@ -149,32 +235,45 @@ function AnalysisPanel({ analysis, loading }) {
   );
 }
 
+// ── Finished race results panel ───────────────────────────────────────────────
+function ResultsPanel({ results }) {
+  if (!results?.runners?.length) return null;
+  const sorted = [...results.runners]
+    .filter(r => r.position && !isNaN(parseInt(r.position)))
+    .sort((a, b) => parseInt(a.position) - parseInt(b.position));
+  const posStyle = (pos) => {
+    const n = parseInt(pos);
+    if (n === 1) return { color: '#FFD700', fontWeight: 800 };
+    if (n === 2) return { color: '#C0C0C0', fontWeight: 700 };
+    if (n === 3) return { color: '#CD7F32', fontWeight: 700 };
+    return { color: 'var(--text-muted)', fontWeight: 600 };
+  };
+  return (
+    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)', padding: 14, marginBottom: 16 }}>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--accent-gold)', marginBottom: 10 }}>OFFICIAL RESULT</div>
+      {sorted.map((r, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+          <span style={{ width: 24, fontSize: 14, ...posStyle(r.position) }}>{r.position}</span>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{r.number ? `#${r.number} ` : ''}{r.horse_name || r.horse}</span>
+          {(r.sp || r.odds) && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>{r.sp || r.odds}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 function TabBar({ tabs, active, onChange }) {
   return (
-    <div style={{
-      display: 'flex',
-      borderBottom: '1px solid var(--border-subtle)',
-      marginBottom: 12,
-    }}>
+    <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', marginBottom: 12 }}>
       {tabs.map(t => (
-        <button
-          key={t.id}
-          onClick={() => onChange(t.id)}
-          style={{
-            flex: 1,
-            padding: '8px 4px',
-            background: 'none',
-            border: 'none',
-            borderBottom: active === t.id ? '2px solid var(--accent-gold)' : '2px solid transparent',
-            color: active === t.id ? 'var(--accent-gold-bright)' : 'var(--text-muted)',
-            fontFamily: 'var(--font-display)',
-            fontSize: 14,
-            letterSpacing: '0.04em',
-            cursor: 'pointer',
-            transition: 'all 0.15s',
-          }}
-        >
+        <button key={t.id} onClick={() => onChange(t.id)} style={{
+          flex: 1, padding: '8px 4px', background: 'none', border: 'none',
+          borderBottom: active === t.id ? '2px solid var(--accent-gold)' : '2px solid transparent',
+          color: active === t.id ? 'var(--accent-gold-bright)' : 'var(--text-muted)',
+          fontFamily: 'var(--font-display)', fontSize: 14, letterSpacing: '0.04em',
+          cursor: 'pointer', transition: 'all 0.15s',
+        }}>
           {t.label}
         </button>
       ))}
@@ -192,13 +291,16 @@ export default function RaceDetailPage() {
   const [analysisStreaming, setAnalysisStreaming] = useState(false);
   const [scorecardData, setScorecardData] = useState(null);
   const [analyzeError, setAnalyzeError] = useState(null);
-  const [scoreError, setScoreError] = useState(null);
   const [activeTab, setActiveTab] = useState('analysis');
   const [valueAlerts, setValueAlerts] = useState(null);
   const [alertsLoading, setAlertsLoading] = useState(false);
   const [debrief, setDebrief] = useState(null);
   const [debriefLoading, setDebriefLoading] = useState(false);
   const [debriefError, setDebriefError] = useState(null);
+  const [debriefPending, setDebriefPending] = useState(false);
+  const [raceResults, setRaceResults] = useState(null);
+  // Mode-switch confirmation
+  const [pendingMode, setPendingMode] = useState(null);
   const abortRef = useRef(null);
 
   const runAlertCheck = async (raceData) => {
@@ -213,7 +315,7 @@ export default function RaceDetailPage() {
       const result = await checkValueAlerts(raceId, horses);
       setValueAlerts(result);
     } catch {
-      // silently ignore — fair prices may not be stored yet
+      // silently ignore
     } finally {
       setAlertsLoading(false);
     }
@@ -222,16 +324,26 @@ export default function RaceDetailPage() {
   const runDebrief = async () => {
     setDebriefLoading(true);
     setDebriefError(null);
+    setDebriefPending(false);
     try {
       const result = await getRaceDebrief(raceId);
-      setDebrief(result);
-      setActiveTab('debrief');
-      trackDebriefViewed(raceId);
+      if (result?.status === 'pending') {
+        setDebriefPending(true);
+      } else {
+        setDebrief(result);
+        setActiveTab('debrief');
+        trackDebriefViewed(raceId);
+      }
     } catch (err) {
-      const detail = err?.response?.data?.detail || err.message || 'Unknown error';
-      setDebriefError(detail.includes('not yet available')
-        ? 'Results not yet available — check back after the race.'
-        : `Debrief failed: ${detail}`);
+      const status = err?.response?.status;
+      if (status === 202) {
+        setDebriefPending(true);
+      } else {
+        const detail = err?.response?.data?.detail || err.message || 'Unknown error';
+        setDebriefError(detail.includes('not yet available')
+          ? 'Results not yet available — check back after the race.'
+          : `Debrief failed: ${detail}`);
+      }
     } finally {
       setDebriefLoading(false);
     }
@@ -240,9 +352,16 @@ export default function RaceDetailPage() {
   const { data: race, isLoading } = useQuery({
     queryKey: ['race', raceId],
     queryFn: () => getRaceDetail(raceId),
+    onSuccess: (data) => {
+      // Auto-load results for finished races
+      if (isRaceDefinitelyFinished(data) && !raceResults) {
+        getRaceResults(raceId).then(setRaceResults).catch(() => {});
+      }
+    },
   });
 
-  const runAnalysis = () => {
+  // B1: Fire analysis + scorecard concurrently
+  const runAnalysisAndScore = (mode = analysisMode) => {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -251,17 +370,25 @@ export default function RaceDetailPage() {
     setAnalyzeError(null);
     setActiveTab('analysis');
 
-    fetch('/api/advisor/analyze/stream', {
+    // Fire scorecard in parallel (non-blocking)
+    getScoreCard(raceId)
+      .then(data => {
+        setScorecardData(data);
+        trackScoreCardViewed(raceId);
+      })
+      .catch(() => {});
+
+    const apiBase = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
+    fetch(`${apiBase}/advisor/analyze/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ race_id: raceId, mode: analysisMode, bankroll: userProfile.bankroll || null }),
+      body: JSON.stringify({ race_id: raceId, mode, bankroll: userProfile.bankroll || null }),
       signal: controller.signal,
     }).then(async (res) => {
       if (!res.ok) { throw new Error(`HTTP ${res.status}`); }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -276,8 +403,7 @@ export default function RaceDetailPage() {
             const msg = JSON.parse(payload);
             if (msg.result) {
               setAnalysis(msg.result);
-              trackRaceAnalysis(raceId, analysisMode);
-              // Fire-and-forget alert check using current race data
+              trackRaceAnalysis(raceId, mode);
               if (race) runAlertCheck(race);
             }
             if (msg.error) throw new Error(msg.error);
@@ -297,84 +423,88 @@ export default function RaceDetailPage() {
     });
   };
 
-  // shim so the rest of the page can still check isPending
-  const analyzeMutation = { isPending: analysisStreaming, mutate: runAnalysis };
+  // B2: Mode switch — if analysis already exists, confirm re-run
+  const handleModeChange = (newMode) => {
+    if (analysis && newMode !== analysisMode) {
+      setPendingMode(newMode);
+    } else {
+      setAnalysisMode(newMode);
+    }
+  };
 
-  const scoreMutation = useMutation({
-    mutationFn: () => getScoreCard(raceId),
-    onSuccess: (data) => {
-      setScorecardData(data);
-      setScoreError(null);
-      setActiveTab('scorecard');
-      trackScoreCardViewed(raceId);
-    },
-    onError: (err) => {
-      const detail = err?.response?.data?.detail || err.message || 'Unknown error';
-      setScoreError(
-        detail.includes('credit')
-          ? 'Secretariat needs Anthropic API credits. Add credits at console.anthropic.com.'
-          : `Scoring failed: ${detail}`
-      );
-    },
-  });
+  const confirmModeSwitch = () => {
+    const mode = pendingMode;
+    setPendingMode(null);
+    setAnalysisMode(mode);
+    setAnalysis(null);
+    setScorecardData(null);
+    runAnalysisAndScore(mode);
+  };
 
-  // What tabs exist right now
-  const hasAnalysisTab = !!(analysis || analyzeMutation.isPending);
-  const hasScorecardTab = !!(scorecardData || scoreMutation.isPending);
+  // C6: Reset analysis
+  const handleResetAnalysis = async () => {
+    try { await clearRaceAnalysis(raceId); } catch { /* ignore */ }
+    setAnalysis(null);
+    setScorecardData(null);
+    setAnalyzeError(null);
+    setActiveTab('analysis');
+  };
+
+  const analyzeMutation = { isPending: analysisStreaming, mutate: () => runAnalysisAndScore() };
+
+  const hasAnalysisTab = !!(analysis || analysisStreaming);
+  const hasScorecardTab = !!(scorecardData);
   const hasDebriefTab = !!(debrief || debriefLoading);
   const showTabs = hasAnalysisTab || hasScorecardTab || hasDebriefTab;
 
-  // Which action buttons to show
-  const showAnalyseBtn = !analysis && !analyzeMutation.isPending;
-  const showScoreBtn   = !scorecardData && !scoreMutation.isPending;
-  const showDebriefBtn = !debrief && !debriefLoading && !!race && isRacePast(race);
-  const showActionArea = showAnalyseBtn || showScoreBtn || showDebriefBtn;
+  const showAnalyseBtn = !analysis && !analysisStreaming;
+  const showDebriefBtn = !debrief && !debriefLoading && !!race && isRaceDefinitelyFinished(race);
+  const raceFinished = !!race && isRaceDefinitelyFinished(race);
 
   const tabs = [
     ...(hasAnalysisTab  ? [{ id: 'analysis',  label: 'ANALYSIS'   }] : []),
     ...(hasScorecardTab ? [{ id: 'scorecard', label: 'SCORE CARD' }] : []),
     ...(hasDebriefTab   ? [{ id: 'debrief',   label: 'DEBRIEF'    }] : []),
   ];
-
-  // Keep activeTab valid whenever tabs change
   const validTab = tabs.find(t => t.id === activeTab) ? activeTab : tabs[0]?.id ?? 'analysis';
 
   return (
     <div>
-      {/* ── Sticky header ─────────────────────────────────────────────── */}
+      {/* ── Mode-switch confirm modal ─────────────────────────────── */}
+      {pendingMode && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: 24, maxWidth: 340, width: '100%', border: '1px solid var(--border-gold)' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)', marginBottom: 12 }}>
+              Re-run analysis in {MODES.find(m => m.id === pendingMode)?.label} mode?
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              This will clear the current analysis and scorecard.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setPendingMode(null)}>Cancel</button>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={confirmModeSwitch}>Re-run</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Sticky header ─────────────────────────────────────────── */}
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '14px 16px',
-        borderBottom: '1px solid var(--border-subtle)',
-        position: 'sticky',
-        top: 0,
-        background: 'var(--bg-primary)',
-        zIndex: 10,
+        display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px',
+        borderBottom: '1px solid var(--border-subtle)', position: 'sticky',
+        top: 0, background: 'var(--bg-primary)', zIndex: 10,
       }}>
-        <button
-          onClick={() => navigate(-1)}
-          style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}
-        >
-          ←
-        </button>
+        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>←</button>
         {race && (() => {
           const { time: displayTime, label: timeLabel } = getDisplayTime(race);
           return (
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent-gold)' }}>
                 {displayTime}
-                {timeLabel && (
-                  <span style={{ fontSize: 11, fontFamily: 'var(--font-body)', color: 'var(--text-muted)', marginLeft: 4 }}>
-                    {timeLabel}
-                  </span>
-                )}
+                {timeLabel && <span style={{ fontSize: 11, fontFamily: 'var(--font-body)', color: 'var(--text-muted)', marginLeft: 4 }}>{timeLabel}</span>}
                 {' · '}{race.course}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1 }}>
-                {race.title || race.race_name}
-              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1 }}>{race.title || race.race_name}</div>
             </div>
           );
         })()}
@@ -384,165 +514,94 @@ export default function RaceDetailPage() {
       <div style={{ padding: '16px' }}>
         {/* ── Race meta ─────────────────────────────────────────────── */}
         {race && !isLoading && (
-          <div style={{
-            display: 'flex',
-            gap: 12,
-            marginBottom: 16,
-            flexWrap: 'wrap',
-            fontSize: 13,
-            color: 'var(--text-secondary)',
-          }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-secondary)' }}>
             {(race.distance || race.distance_f) && <span>📏 {formatDistance(race.distance, race.distance_f)}</span>}
             {race.surface && <span>🌿 {race.surface}</span>}
             {race.going && <span>⛅ Going: {race.going}</span>}
             {formatPurse(race) && <span>💰 {formatPurse(race)}</span>}
             {race.runners?.length && <span>🏇 {race.runners.length} runners</span>}
+            {raceFinished && <span style={{ color: 'var(--accent-gold-bright)', fontWeight: 600 }}>✓ Finished</span>}
           </div>
         )}
+
+        {/* ── Finished race results ──────────────────────────────────── */}
+        {raceFinished && raceResults && <ResultsPanel results={raceResults} />}
+
+        {/* ── Mode selector (always visible) ────────────────────────── */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Analysis Mode</div>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+            {MODES.map(m => (
+              <button key={m.id} onClick={() => handleModeChange(m.id)} style={{
+                flexShrink: 0, padding: '6px 12px', borderRadius: 20, border: '1px solid',
+                borderColor: analysisMode === m.id ? 'var(--accent-gold)' : 'var(--border-subtle)',
+                background: analysisMode === m.id ? 'rgba(201,162,39,0.12)' : 'transparent',
+                color: analysisMode === m.id ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+              }}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* ── Action buttons ─────────────────────────────────────────── */}
-        {showActionArea && (
-          <div style={{ marginBottom: 16 }}>
-            {/* Mode selector — only relevant for analysis */}
-            {showAnalyseBtn && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                  Analysis Mode
-                </div>
-                <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
-                  {MODES.map(m => (
-                    <button
-                      key={m.id}
-                      onClick={() => setAnalysisMode(m.id)}
-                      style={{
-                        flexShrink: 0,
-                        padding: '6px 12px',
-                        borderRadius: 20,
-                        border: '1px solid',
-                        borderColor: analysisMode === m.id ? 'var(--accent-gold)' : 'var(--border-subtle)',
-                        background: analysisMode === m.id ? 'rgba(201,162,39,0.12)' : 'transparent',
-                        color: analysisMode === m.id ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {showAnalyseBtn && (
-                <button
-                  className="btn btn-primary btn-full"
-                  onClick={() => analyzeMutation.mutate()}
-                  disabled={isLoading}
-                >
-                  Analyse with Secretariat
-                </button>
-              )}
-              {showScoreBtn && (
-                <button
-                  className="btn btn-secondary btn-full"
-                  onClick={() => scoreMutation.mutate()}
-                  disabled={isLoading}
-                >
-                  Score the Field
-                </button>
-              )}
-              {showDebriefBtn && (
-                <button
-                  className="btn btn-secondary btn-full"
-                  onClick={runDebrief}
-                  disabled={isLoading}
-                >
-                  📋 Post-Race Debrief
-                </button>
-              )}
-              {analysis && !alertsLoading && (
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => race && runAlertCheck(race)}
-                  style={{ flexShrink: 0 }}
-                >
-                  ⚡ Check Value
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {showAnalyseBtn && (
+            <button className="btn btn-primary btn-full" onClick={() => analyzeMutation.mutate()} disabled={isLoading}>
+              Analyse with Secretariat
+            </button>
+          )}
+          {analysis && !analysisStreaming && (
+            <button className="btn btn-ghost" onClick={handleResetAnalysis} style={{ fontSize: 12, padding: '6px 12px' }}>
+              ↺ Reset
+            </button>
+          )}
+          {showDebriefBtn && (
+            <button className="btn btn-secondary btn-full" onClick={runDebrief} disabled={isLoading}>
+              📋 Post-Race Debrief
+            </button>
+          )}
+          {analysis && !alertsLoading && (
+            <button className="btn btn-ghost" onClick={() => race && runAlertCheck(race)} style={{ flexShrink: 0 }}>
+              ⚡ Check Value
+            </button>
+          )}
+        </div>
 
         {/* ── Error banners ──────────────────────────────────────────── */}
         {analyzeError && (
-          <div style={{
-            padding: '10px 14px',
-            background: 'rgba(192,57,43,0.08)',
-            border: '1px solid rgba(192,57,43,0.25)',
-            borderRadius: 'var(--radius-md)',
-            fontSize: 13,
-            color: 'var(--accent-red-bright)',
-            marginBottom: 12,
-          }}>
+          <div style={{ padding: '10px 14px', background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--accent-red-bright)', marginBottom: 12 }}>
             ⚠️ {analyzeError}
           </div>
         )}
-        {scoreError && (
-          <div style={{
-            padding: '10px 14px',
-            background: 'rgba(192,57,43,0.08)',
-            border: '1px solid rgba(192,57,43,0.25)',
-            borderRadius: 'var(--radius-md)',
-            fontSize: 13,
-            color: 'var(--accent-red-bright)',
-            marginBottom: 12,
-          }}>
-            ⚠️ {scoreError}
+        {debriefPending && (
+          <div style={{ padding: '10px 14px', background: 'rgba(201,162,39,0.08)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--accent-gold-bright)', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <span>⏳ Results processing — try again in a few minutes</span>
+            <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }} onClick={runDebrief}>Try Again</button>
           </div>
         )}
         {debriefError && (
-          <div style={{
-            padding: '10px 14px',
-            background: 'rgba(192,57,43,0.08)',
-            border: '1px solid rgba(192,57,43,0.25)',
-            borderRadius: 'var(--radius-md)',
-            fontSize: 13,
-            color: 'var(--accent-red-bright)',
-            marginBottom: 12,
-          }}>
+          <div style={{ padding: '10px 14px', background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--accent-red-bright)', marginBottom: 12 }}>
             ⚠️ {debriefError}
           </div>
         )}
 
-        {/* ── Value alert banner ─────────────────────────────────────── */}
         <ValueAlertBanner alerts={valueAlerts?.alerts} loading={alertsLoading} />
 
         {/* ── Tab panel ─────────────────────────────────────────────── */}
         {showTabs && (
           <div style={{ marginBottom: 16 }}>
-            {tabs.length > 1 && (
-              <TabBar tabs={tabs} active={validTab} onChange={setActiveTab} />
-            )}
-            {validTab === 'analysis' && (
-              <AnalysisPanel analysis={analysis} loading={analyzeMutation.isPending} />
-            )}
-            {validTab === 'scorecard' && (
-              <ScorecardPanel raceScorecards={scorecardData} loading={scoreMutation.isPending} />
-            )}
-            {validTab === 'debrief' && (
-              <DebriefPanel debrief={debrief} loading={debriefLoading} />
-            )}
+            {tabs.length > 1 && <TabBar tabs={tabs} active={validTab} onChange={setActiveTab} />}
+            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} />}
+            {validTab === 'scorecard' && <ScorecardPanel raceScorecards={scorecardData} loading={false} />}
+            {validTab === 'debrief' && <DebriefPanel debrief={debrief} loading={debriefLoading} />}
           </div>
         )}
 
         {/* ── Runners ───────────────────────────────────────────────── */}
         <div style={{ marginBottom: 12 }}>
-          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 10, letterSpacing: '0.04em' }}>
-            RUNNERS
-          </h3>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 10, letterSpacing: '0.04em' }}>RUNNERS</h3>
           {isLoading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[...Array(8)].map((_, i) => <HorseRowSkeleton key={i} />)}
@@ -558,6 +617,7 @@ export default function RaceDetailPage() {
                   scorecards={scorecardData?.scorecards || []}
                   course={race?.course || ''}
                   raceName={race?.title || race?.race_name || ''}
+                  raceResults={raceResults}
                 />
               ))}
             </div>

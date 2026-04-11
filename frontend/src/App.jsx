@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import BottomNav from './components/common/BottomNav';
 import HomePage from './pages/HomePage';
@@ -68,6 +68,42 @@ function SideNav() {
   );
 }
 
+function BetSlipToast() {
+  const toast = useAppStore((s) => s.betSlipToast);
+  const clearBetSlipToast = useAppStore((s) => s.clearBetSlipToast);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => clearBetSlipToast(), 2500);
+    return () => clearTimeout(timerRef.current);
+  }, [toast?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!toast) return null;
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: 80,
+      left: '50%',
+      transform: 'translateX(-50%)',
+      background: 'var(--bg-elevated)',
+      border: '1px solid var(--accent-gold-dim)',
+      borderRadius: 'var(--radius-md)',
+      padding: '10px 18px',
+      fontSize: 13,
+      fontWeight: 600,
+      color: 'var(--text-primary)',
+      zIndex: 9999,
+      pointerEvents: 'none',
+      whiteSpace: 'nowrap',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+    }}>
+      {toast.message}
+    </div>
+  );
+}
+
 function AppShell() {
   const onboardingComplete = useAppStore((s) => s.onboardingComplete);
   const location = useLocation();
@@ -86,6 +122,7 @@ function AppShell() {
     <div className="app-shell">
       {!onboardingComplete && <OnboardingFlow />}
       <SideNav />
+      <BetSlipToast />
       <div className="page-content">
         <Routes>
           <Route path="/" element={<HomePage />} />

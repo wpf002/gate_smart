@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
@@ -62,6 +63,48 @@ async def races_today(region: str = None):
         raise
     except Exception:
         raise HTTPException(status_code=502, detail="Racing data unavailable")
+
+
+@router.get("/results/race/{race_id}")
+async def results_for_race(race_id: str):
+    """Return finishing order for a single race. Handles both UK and NA race IDs."""
+    for attempt in range(2):
+        try:
+            if "-" in race_id:
+                meet_id, race_number = race_id.rsplit("-", 1)
+                meet_results = await racing_api.get_na_meet_results(meet_id)
+                for race in meet_results.get("races", []):
+                    rk = race.get("race_key") or {}
+                    rnum = str(rk.get("race_number", "")) if isinstance(rk, dict) else ""
+                    if rnum == str(race_number):
+                        runners = [
+                            {
+                                "horse_id": str(e.get("registration_number", "")),
+                                "horse_name": e.get("horse_name", ""),
+                                "position": str(
+                                    e.get("official_finish_position")
+                                    or e.get("finish_position") or ""
+                                ),
+                                "sp": str(e.get("final_odds") or e.get("morning_line_odds", "SP")),
+                                "number": str(e.get("program_number", "")),
+                            }
+                            for e in race.get("runners", [])
+                        ]
+                        if runners:
+                            return {"race_id": race_id, "title": race.get("race_name", ""), "runners": runners}
+            else:
+                results_data = await racing_api.get_results()
+                found = next(
+                    (r for r in results_data.get("results", []) if r.get("race_id") == race_id),
+                    None,
+                )
+                if found:
+                    return found
+        except Exception:
+            pass
+        if attempt == 0:
+            await asyncio.sleep(1)
+    raise HTTPException(status_code=404, detail="Results not yet available")
 
 
 @router.get("/results/today")

@@ -1,57 +1,61 @@
 import { useNavigate } from 'react-router-dom';
+import { formatPurse as formatPurseUtil } from '../../utils/currency';
+import { formatRaceTime, TIMEZONE_OPTIONS } from '../../utils/timezone';
+import { useAppStore } from '../../store';
 
 /**
- * For US races, derive the display time from off_dt in Eastern Time.
+ * For US/CAN races, derive the display time from off_dt using the user's
+ * preferred timezone (defaults to Eastern).
  * For all other races, use the time field (local track time from the API).
  * Returns { time: string, label: string|null }
  */
-export function getDisplayTime(race) {
-  if (race.region === 'USA' && race.off_dt) {
-    const t = new Date(race.off_dt).toLocaleTimeString('en-US', {
-      timeZone: 'America/New_York',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-    return { time: t, label: 'ET' };
+export function getDisplayTime(race, timezone = 'America/New_York') {
+  if (['USA', 'CAN'].includes((race.region || '').toUpperCase()) && race.off_dt) {
+    const { time, abbr } = formatRaceTime(race.off_dt, timezone);
+    const opt = TIMEZONE_OPTIONS.find((o) => o.value === timezone);
+    return { time, label: abbr ?? opt?.abbr ?? 'ET' };
   }
   return { time: race.time || race.off_time || '', label: null };
 }
 
 /**
- * Display prize/purse with correct currency symbol.
- * The API always returns £ — for US/CAN races swap to $.
+ * Display prize/purse with correct currency symbol for the race's region.
+ * Delegates to currency.js which handles USA/CAN/GB/IRE/AUS/FRA.
  */
 export function formatPurse(race) {
   const raw = race.prize || race.purse;
   if (raw == null || raw === '') return null;
-  const isNorthAmerica = ['USA', 'CAN'].includes((race.region || '').toUpperCase());
-  if (typeof raw === 'number') {
-    return isNorthAmerica ? `$${raw.toLocaleString('en-US')}` : `£${raw.toLocaleString('en-US')}`;
-  }
-  return isNorthAmerica ? String(raw).replace(/£/g, '$') : String(raw);
+  return formatPurseUtil(raw, race.region) || null;
 }
 
 /**
- * Use off_dt (ISO 8601 with timezone, e.g. "2026-04-04T14:30:00+01:00") when
- * available — it is timezone-correct regardless of where the race is held.
- * Fallback: compare HH:MM against current UK time (BST/GMT offset applied).
+ * Determine whether a race is definitively finished.
+ *
+ * Rules:
+ * 1. Return true only when the API status field explicitly says "result",
+ *    "resulted", "finished", "complete", "official", or "void".
+ * 2. OR when off_dt (timezone-aware ISO string) is more than 10 minutes in
+ *    the past.  The 10-minute buffer allows results to be processed.
+ * 3. Never mark a race as finished from the scheduled post_time string alone —
+ *    that is local track time with no timezone and will produce wrong results
+ *    for NA races compared against the user's clock.
  */
-export function isRacePast(race) {
-  if (race.off_dt) {
-    return Date.now() > new Date(race.off_dt).getTime() + 5 * 60 * 1000;
+export function isRaceDefinitelyFinished(race) {
+  const finishedStatuses = ['result', 'resulted', 'finished', 'complete', 'official', 'void'];
+  if (race.status && finishedStatuses.includes(race.status.toLowerCase())) {
+    return true;
   }
-  // Fallback for races without off_dt
-  const timeStr = race.time || race.off_time;
-  if (!timeStr) return false;
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})/);
-  if (!match) return false;
-  const now = new Date();
-  const ukOffset = now.getUTCMonth() >= 2 && now.getUTCMonth() <= 9 ? 60 : 0;
-  const ukNow = now.getUTCHours() * 60 + now.getUTCMinutes() + ukOffset;
-  const raceMin = parseInt(match[1]) * 60 + parseInt(match[2]);
-  return ukNow > raceMin + 5;
+  if (race.off_dt) {
+    const offTime = new Date(race.off_dt);
+    if (!isNaN(offTime.getTime())) {
+      return (Date.now() - offTime.getTime()) > 10 * 60 * 1000;
+    }
+  }
+  return false;
 }
+
+/** Alias kept for any callers that haven't migrated yet. */
+export const isRacePast = isRaceDefinitelyFinished;
 
 /**
  * Format distance as decimal miles / remainder furlongs.
@@ -97,8 +101,9 @@ export function RaceCardSkeleton() {
 
 export function RaceCard({ race, isTomorrow = false }) {
   const navigate = useNavigate();
+  const timezone = useAppStore((s) => s.userProfile?.timezone);
   const past = !isTomorrow && isRacePast(race);
-  const { time: displayTime, label: timeLabel } = getDisplayTime(race);
+  const { time: displayTime, label: timeLabel } = getDisplayTime(race, timezone);
   const runnersCount = race.runners?.length ?? race.no_of_runners;
 
   return (

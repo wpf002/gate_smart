@@ -35,6 +35,14 @@ def _parse_json(text: str) -> dict:
     return json.loads(text.strip())
 
 
+class SecretariatBusyError(Exception):
+    """Raised when Claude returns HTTP 529 (overloaded)."""
+
+
+class LargeFieldError(Exception):
+    """Raised when a race has too many runners for full analysis."""
+
+
 SECRETARIAT_SYSTEM = """You are Secretariat, an elite horse racing handicapper and betting strategist. Your primary expertise is North American thoroughbred racing — US tracks, US trainers, US jockeys, and US betting markets. You also have strong working knowledge of UK, Irish, and international racing.
 
 Your job inside GateSmart is to analyze races and give users clear, honest, actionable betting intelligence.
@@ -53,6 +61,32 @@ US RACING EXPERTISE (primary focus):
 INTERNATIONAL EXPERTISE (secondary):
 - UK/Irish racing: form strings, Racing Post Ratings, fractional odds, going descriptions
 - Pace shape, class changes, layoffs universally applied
+
+US HANDICAPPING FACTORS — evaluate ALL of these explicitly in every analysis:
+
+1. CLASS MOVEMENT: Is this horse moving up or down in class today? A horse dropping from a $25k claimer to a $15k claimer has a significant advantage. Always note class drops/rises.
+
+2. TRAINER/JOCKEY COMBINATIONS: High-percentage trainer-jockey partnerships at this specific track are a major factor. Note when a top trainer has their regular jockey. Father-son or long-term partnerships are especially significant.
+
+3. BREEDING FOR CONDITIONS: Does the horse's sire/dam suggest aptitude for today's distance and surface? Especially important for maiden races and turf races.
+
+4. BEYER SPEED FIGURE TRAJECTORY: Is the horse's speed figure trending up, down, or flat over last 3 starts? A horse improving 5+ points per race is a strong sign. Always state the last 3 Beyer figures if available.
+
+5. CONNECTIONS/STABLE REPUTATION: Top stables (e.g. Asmussen, McPeek, Hartman at Oaklawn) win at higher rates. Weight this in your analysis.
+
+6. RECENCY AND FITNESS: Days since last race. A horse returning from a long layoff (60+ days) needs scrutiny. A horse with a recent good workout is a positive sign.
+
+7. EQUIPMENT CHANGES: Blinkers on/off is significant. A horse adding blinkers for the first time often improves. Note equipment changes.
+
+Always include the program number (#) with every horse name in predictions and recommendations. Program numbers are how bettors identify horses at the teller window.
+
+DUAL EXPLANATION REQUIREMENT:
+For every analysis, write TWO versions of your summary:
+1. Technical version (overall_summary): use proper handicapping terminology (Beyer figures, pace scenarios, class relief, etc.)
+2. Beginner version (overall_summary_beginner): explain as if talking to someone who has NEVER been to a horse race. No jargon. Examples:
+   - Instead of "class relief" say "this horse is competing against easier opponents today"
+   - Instead of "pace scenario" say "how fast the race will be run and whether that helps this horse"
+   - Instead of "vulnerable favorite" say "the horse most people are betting on might not win because..."
 
 BEGINNER EDUCATION:
 - Always explain US-specific terms when they appear (Beyer, claiming race, allowance, etc.)
@@ -257,23 +291,30 @@ def _trunc(s: str, limit: int) -> str:
 
 def _truncate_analysis(data: dict) -> dict:
     """Hard-cap field lengths after Claude generation — prompt instructions can't guarantee this."""
-    SENT = 180   # one sentence
+    SENT = 220   # one sentence (increased to accommodate richer content)
     PHRASE = 60  # short phrase
 
     data['race_summary'] = _trunc(data.get('race_summary', ''), SENT)
     data['pace_scenario'] = _trunc(data.get('pace_scenario', ''), SENT)
     data['overall_summary'] = _trunc(data.get('overall_summary', ''), SENT)
+    data['overall_summary_beginner'] = _trunc(data.get('overall_summary_beginner', ''), SENT)
+    data['beginner_tip'] = _trunc(data.get('beginner_tip', ''), SENT)
 
     la = data.get('longshot_alert') or {}
     la['reason'] = _trunc(la.get('reason', ''), SENT)
 
     for r in data.get('runners', []):
         r['summary'] = _trunc(r.get('summary', ''), SENT)
+        r['summary_beginner'] = _trunc(r.get('summary_beginner', ''), SENT)
         r['strengths'] = [_trunc(s, PHRASE) for s in r.get('strengths', [])]
         r['weaknesses'] = [_trunc(s, PHRASE) for s in r.get('weaknesses', [])]
 
     for b in data.get('recommended_bets', []):
         b['reasoning'] = _trunc(b.get('reasoning', ''), SENT)
+
+    for pos in ('first', 'second', 'third', 'fourth'):
+        pf = (data.get('predicted_finish') or {}).get(pos) or {}
+        pf['reasoning'] = _trunc(pf.get('reasoning', ''), SENT)
 
     return data
 
@@ -312,12 +353,21 @@ def _slim_race_for_prompt(race_data: dict) -> dict:
         "spotlight", "comment", "dob", "colour", "sex", "sire", "dam",
         "dam_sire", "owner", "bred", "prize", "or_adjusted",
     }
+    # For large fields (10+ runners), drop even more to stay within token limits
+    _RUNNER_DROP_LARGE = _RUNNER_DROP | {
+        "form", "weight", "stall_number", "cloth_number", "spotlight",
+        "trainer_14_days", "rpr", "ts", "distance_winner", "course_winner",
+        "going_winner", "headgear", "headgear_first_time",
+    }
     _RACE_DROP = {"raw", "big_race", "type_of_race", "region", "pattern",
                   "age_band", "sex_restriction", "field_size"}
+    runners = race_data.get("runners", [])
+    large_field = len(runners) > 10
+    drop_set = _RUNNER_DROP_LARGE if large_field else _RUNNER_DROP
     slim = {k: v for k, v in race_data.items() if k not in _RACE_DROP and k != "runners"}
     slim["runners"] = [
-        {k: v for k, v in r.items() if k not in _RUNNER_DROP and v not in (None, "", [])}
-        for r in race_data.get("runners", [])
+        {k: v for k, v in r.items() if k not in drop_set and v not in (None, "", [])}
+        for r in runners
     ]
     return slim
 
@@ -350,42 +400,92 @@ Return this JSON exactly:
     {{
       "horse_id": "id",
       "horse_name": "name",
+      "number": "program number",
       "contender_score": 0-100,
       "value_score": 0-100,
       "strengths": ["short phrase"],
       "weaknesses": ["short phrase"],
-      "summary": "one sentence",
+      "summary": "one sentence technical",
+      "summary_beginner": "one sentence plain English — no jargon",
       "fair_odds": "e.g. 3/1",
       "recommended_bet": "win/place/show/avoid/use-in-exotics or null"
     }}
   ],
-  "top_contenders": ["name1", "name2"],
+  "predicted_finish": {{
+    "first":  {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }},
+    "second": {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }},
+    "third":  {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }},
+    "fourth": {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }}
+  }},
+  "top_contenders": ["#N name1", "#N name2"],
   "longshot_alert": {{
     "horse_name": "name or null",
+    "number": "#N or null",
     "reason": "one sentence",
     "odds": "current odds"
   }},
   "recommended_bets": [
     {{
       "bet_type": "Win/Exacta/etc",
-      "selection": "horse(s)",
+      "selection": "#N HorseName",
       "reasoning": "one sentence",
       "suggested_stake": "e.g. $10",
       "risk_level": "low/medium/high"
     }}
   ],
-  "overall_summary": "one sentence",
+  "bet_recommendations": {{
+    "win":       {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
+    "place":     {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
+    "show":      {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
+    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "e.g. $2", "box_option": "Box #N-#M for $X more" }},
+    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "e.g. $1", "wheel_option": "optional wheel description" }},
+    "superfecta":{{ "selection": "#N/#M/#K/#J", "reasoning": "one sentence", "stake_suggestion": "e.g. $0.10" }}
+  }},
+  "teller_script": {{
+    "win":       "Say to teller: '$X to Win on number N, race R'",
+    "exacta":    "Say to teller: '$X Exacta, N over M, race R'",
+    "trifecta":  "Say to teller: '$X Trifecta, N-M-K, race R'",
+    "superfecta":"Say to teller: '$X Superfecta, N-M-K-J, race R'"
+  }},
+  "overall_summary": "one sentence — technical, for experienced bettors",
+  "overall_summary_beginner": "one sentence — plain English, no jargon, for first-time racegoers",
+  "beginner_tip": "one concrete action a first-time bettor can take today",
   "confidence": "low/medium/high"
 }}"""
 
-    response = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=4096,
-        system=SECRETARIAT_SYSTEM,
-        messages=[{"role": "user", "content": prompt}]
-    )
+    try:
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4096,
+            system=SECRETARIAT_SYSTEM,
+            messages=[{"role": "user", "content": prompt}]
+        )
+    except anthropic.APIStatusError as exc:
+        if exc.status_code == 529:
+            raise SecretariatBusyError("Secretariat is busy right now. Try again in 30 seconds.")
+        raise
 
-    result = _truncate_analysis(_parse_json(response.content[0].text))
+    raw_text = response.content[0].text
+    try:
+        result = _truncate_analysis(_parse_json(raw_text))
+    except json.JSONDecodeError:
+        # Retry once with a simplified prompt asking only for JSON
+        retry_prompt = (
+            "Return ONLY the JSON object from your previous analysis — "
+            "no explanation, no markdown, just the raw JSON."
+        )
+        retry_response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4096,
+            system=SECRETARIAT_SYSTEM,
+            messages=[
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": raw_text},
+                {"role": "user", "content": retry_prompt},
+            ]
+        )
+        result = _truncate_analysis(_parse_json(retry_response.content[0].text))
+
     try:
         await extract_and_store_fair_prices(race_data.get("race_id", ""), result)
     except Exception:
@@ -418,31 +518,56 @@ Return this JSON exactly:
     {{
       "horse_id": "id",
       "horse_name": "name",
+      "number": "program number",
       "contender_score": 0-100,
       "value_score": 0-100,
       "strengths": ["short phrase"],
       "weaknesses": ["short phrase"],
-      "summary": "one sentence",
+      "summary": "one sentence technical",
+      "summary_beginner": "one sentence plain English — no jargon",
       "fair_odds": "e.g. 3/1",
       "recommended_bet": "win/place/show/avoid/use-in-exotics or null"
     }}
   ],
-  "top_contenders": ["name1", "name2"],
+  "predicted_finish": {{
+    "first":  {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }},
+    "second": {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }},
+    "third":  {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }},
+    "fourth": {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }}
+  }},
+  "top_contenders": ["#N name1", "#N name2"],
   "longshot_alert": {{
     "horse_name": "name or null",
+    "number": "#N or null",
     "reason": "one sentence",
     "odds": "current odds"
   }},
   "recommended_bets": [
     {{
       "bet_type": "Win/Exacta/etc",
-      "selection": "horse(s)",
+      "selection": "#N HorseName",
       "reasoning": "one sentence",
       "suggested_stake": "e.g. $10",
       "risk_level": "low/medium/high"
     }}
   ],
-  "overall_summary": "one sentence",
+  "bet_recommendations": {{
+    "win":       {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
+    "place":     {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
+    "show":      {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
+    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "e.g. $2", "box_option": "Box #N-#M for $X more" }},
+    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "e.g. $1", "wheel_option": "optional wheel description" }},
+    "superfecta":{{ "selection": "#N/#M/#K/#J", "reasoning": "one sentence", "stake_suggestion": "e.g. $0.10" }}
+  }},
+  "teller_script": {{
+    "win":       "Say to teller: '$X to Win on number N, race R'",
+    "exacta":    "Say to teller: '$X Exacta, N over M, race R'",
+    "trifecta":  "Say to teller: '$X Trifecta, N-M-K, race R'",
+    "superfecta":"Say to teller: '$X Superfecta, N-M-K-J, race R'"
+  }},
+  "overall_summary": "one sentence — technical, for experienced bettors",
+  "overall_summary_beginner": "one sentence — plain English, no jargon, for first-time racegoers",
+  "beginner_tip": "one concrete action a first-time bettor can take today",
   "confidence": "low/medium/high"
 }}"""
 

@@ -377,12 +377,15 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
         else:
             trainer_name = str(trainer)
 
+        scratch_indicator = entry.get("scratch_indicator", "")
+        is_scratched = scratch_indicator and scratch_indicator.lower() not in ("", "n", "no")
         runners.append({
             "horse_id": str(entry.get("registration_number", "")),
             "horse_name": entry.get("horse_name", ""),
             "horse": entry.get("horse_name", ""),
             "jockey": jockey_name,
             "trainer": trainer_name,
+            "program_number": str(entry.get("program_number", "")),
             "number": str(entry.get("program_number", "")),
             "cloth_number": str(entry.get("program_number", "")),
             "age": "",
@@ -392,6 +395,9 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
             "odds": entry.get("morning_line_odds", ""),
             "sp": entry.get("morning_line_odds", ""),
             "official_rating": None,
+            "non_runner": is_scratched,
+            "scratched": is_scratched,
+            "status": "scratched" if is_scratched else "",
         })
 
     return {
@@ -411,7 +417,7 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
         "prize": race.get("purse"),
         "race_class": race.get("race_class", ""),
         "pattern": race.get("grade", ""),
-        "region": "USA",
+        "region": "usa",
         "runners": runners,
         "field_size": len(runners),
     }

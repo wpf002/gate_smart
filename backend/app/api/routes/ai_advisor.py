@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from datetime import datetime, timezone
@@ -78,8 +79,34 @@ async def analyze_race(request: Request) -> JSONResponse:
 
     try:
         analysis = await secretariat.analyze_race(race_data, mode=req.mode, bankroll=req.bankroll)
+    except secretariat.SecretariatBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     except Exception:
-        raise HTTPException(status_code=502, detail="AI analysis unavailable")
+        # If the field is large, retry with top-8 runners by odds
+        runners = race_data.get("runners", [])
+        if len(runners) > 10:
+            def _odds_key(r):
+                odds = r.get("odds", "") or ""
+                try:
+                    if "/" in str(odds):
+                        n, d = str(odds).split("/")
+                        return int(n) / int(d)
+                    return float(odds)
+                except Exception:
+                    return 9999
+            trimmed = sorted(runners, key=_odds_key)[:8]
+            race_data_trimmed = {**race_data, "runners": trimmed}
+            try:
+                analysis = await secretariat.analyze_race(
+                    race_data_trimmed, mode=req.mode, bankroll=req.bankroll
+                )
+            except Exception:
+                raise HTTPException(
+                    status_code=502,
+                    detail="This race has too many runners for full analysis. Secretariat will analyse the top 8 contenders — try again.",
+                )
+        else:
+            raise HTTPException(status_code=502, detail="AI analysis unavailable")
 
     await cache_set(cache_key, analysis, ex=300)
     await _store_prediction(race_data, analysis)
@@ -246,6 +273,61 @@ async def explain_form(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+async def _find_race_result(race_id: str) -> dict | None:
+    """
+    Find results for a race by ID, handling both UK/IRE and NA races.
+    NA race IDs use the format "{meet_id}-{race_number}".
+    Tries up to 3 times with 2-second delays.
+    """
+    for attempt in range(3):
+        try:
+            if "-" in race_id:
+                # NA race — extract meet_id and race_number
+                meet_id, race_number = race_id.rsplit("-", 1)
+                meet_results = await racing_api.get_na_meet_results(meet_id)
+                races = meet_results.get("races", [])
+                for race in races:
+                    race_key = race.get("race_key") or {}
+                    rnum = str(race_key.get("race_number", "")) if isinstance(race_key, dict) else ""
+                    if rnum == str(race_number):
+                        # Normalize runners for the debrief
+                        runners = []
+                        for entry in race.get("runners", []):
+                            runners.append({
+                                "horse_id": str(entry.get("registration_number", "")),
+                                "horse_name": entry.get("horse_name", ""),
+                                "horse": entry.get("horse_name", ""),
+                                "position": str(
+                                    entry.get("official_finish_position") or
+                                    entry.get("finish_position") or ""
+                                ),
+                                "sp": str(entry.get("final_odds") or entry.get("morning_line_odds", "SP")),
+                                "number": str(entry.get("program_number", "")),
+                            })
+                        if runners:
+                            return {
+                                "race_id": race_id,
+                                "runners": runners,
+                                "title": race.get("race_name", ""),
+                            }
+            else:
+                # UK/IRE race
+                results_data = await racing_api.get_results()
+                found = next(
+                    (r for r in results_data.get("results", []) if r.get("race_id") == race_id),
+                    None,
+                )
+                if found:
+                    return found
+        except Exception:
+            pass
+
+        if attempt < 2:
+            await asyncio.sleep(2)
+
+    return None
+
+
 @router.post("/debrief")
 @limiter.limit("20/minute")
 async def race_debrief(request: Request) -> JSONResponse:
@@ -268,17 +350,17 @@ async def race_debrief(request: Request) -> JSONResponse:
     except Exception:
         raise HTTPException(status_code=502, detail="Racing data unavailable")
 
-    try:
-        results_data = await racing_api.get_results()
-        race_result = next(
-            (r for r in results_data.get("results", []) if r.get("race_id") == req.race_id),
-            None,
-        )
-    except Exception:
-        raise HTTPException(status_code=502, detail="Results data unavailable")
+    race_result = await _find_race_result(req.race_id)
 
     if not race_result:
-        raise HTTPException(status_code=404, detail="Results not yet available for this race")
+        return JSONResponse(
+            {
+                "status": "pending",
+                "message": "Race results are being processed. Try again in 2-3 minutes.",
+                "retry_after_seconds": 180,
+            },
+            status_code=202,
+        )
 
     prior_analysis = await cache_get(f"ai_analysis:{req.race_id}:balanced")
 
@@ -288,6 +370,18 @@ async def race_debrief(request: Request) -> JSONResponse:
         raise HTTPException(status_code=502, detail="AI debrief unavailable")
 
     return JSONResponse(result)
+
+
+@router.delete("/analysis/{race_id}")
+async def clear_race_analysis(race_id: str) -> JSONResponse:
+    """Clear cached analysis and scorecard for a race (used by the Reset button)."""
+    _validate_race_id(race_id)
+    from app.core.cache import cache_keys, cache_delete
+    keys = await cache_keys(f"ai_analysis:{race_id}:*")
+    keys += await cache_keys(f"scorecard:{race_id}")
+    for key in keys:
+        await cache_delete(key)
+    return JSONResponse({"cleared": True, "keys_removed": len(keys)})
 
 
 @router.get("/accuracy")

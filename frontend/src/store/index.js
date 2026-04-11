@@ -37,6 +37,7 @@ export const useAppStore = create(
         experienceLevel: 'beginner',
         region: 'usa',
         name: '',
+        timezone: 'America/New_York',
       },
       setUserProfile: (updates) =>
         set((state) => ({
@@ -45,20 +46,36 @@ export const useAppStore = create(
 
       // Bet slip
       betSlip: [],
+      betSlipToast: null,          // { message, id } — shown briefly then cleared
       addToBetSlip: (bet) =>
         set((state) => {
           const exists = state.betSlip.find(
-            (b) => b.horse_id === bet.horse_id && b.bet_type === bet.bet_type
+            (b) =>
+              b.horse_id === bet.horse_id &&
+              b.bet_type === bet.bet_type &&
+              b.race_id === bet.race_id
           );
-          if (exists) return state;
+          if (exists) {
+            return {
+              betSlipToast: {
+                message: `${bet.horse_name} (${bet.bet_type}) is already in your slip`,
+                id: Date.now(),
+              },
+            };
+          }
           return {
             betSlip: [...state.betSlip, {
               ...bet,
               stake: bet.stake ?? 10,
               placed_at: new Date().toISOString(),
             }],
+            betSlipToast: {
+              message: `${bet.horse_name} added to slip`,
+              id: Date.now(),
+            },
           };
         }),
+      clearBetSlipToast: () => set({ betSlipToast: null }),
       removeFromBetSlip: (horse_id, bet_type) =>
         set((state) => ({
           betSlip: state.betSlip.filter(

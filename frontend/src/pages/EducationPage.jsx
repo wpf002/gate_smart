@@ -323,14 +323,14 @@ const FORM_GUIDE = {
 
 const GLOSSARY = [
   // ── Bet Types ──────────────────────────────────────────────────────────────
-  { term: 'Win', def: 'Bet on a horse to finish 1st. The simplest and most common bet. Best starting point for new bettors.' },
-  { term: 'Place', def: 'Bet on a horse to finish 1st or 2nd. Lower payout than Win, but safer.' },
-  { term: 'Show', def: 'Bet on a horse to finish 1st, 2nd, or 3rd. Lowest payout of the straight bets. Use sparingly — value is often poor.' },
-  { term: 'Across the Board', def: 'Three bets in one: Win + Place + Show on the same horse. Costs 3× base stake. Pays something even for a 3rd-place finish.' },
-  { term: 'Exacta', def: 'Predict the 1st and 2nd place finishers in exact order. Box it to cover both orderings (costs double).' },
-  { term: 'Quinella', def: 'Predict 1st and 2nd in any order — a pre-boxed exacta. Easier to hit, lower payout.' },
-  { term: 'Trifecta', def: 'Predict 1st, 2nd, and 3rd in exact order. Huge payouts. Box 3+ horses to cover all orderings.' },
-  { term: 'Superfecta', def: 'Predict 1st through 4th in exact order. Use $0.10 base bets and box liberally — very hard to hit straight.' },
+  { term: 'Win', plain_english: 'Your horse has to cross the finish line first. You get paid; otherwise you lose your stake.', def: 'Bet on a horse to finish 1st. The simplest and most common bet. Best starting point for new bettors.' },
+  { term: 'Place', plain_english: 'Your horse has to finish 1st or 2nd. Safer than Win, but pays less.', def: 'Bet on a horse to finish 1st or 2nd. Lower payout than Win, but safer.' },
+  { term: 'Show', plain_english: 'Your horse has to finish in the top 3. Very safe, but the payout is often barely more than your stake.', def: 'Bet on a horse to finish 1st, 2nd, or 3rd. Lowest payout of the straight bets. Use sparingly — value is often poor.' },
+  { term: 'Across the Board', plain_english: 'You bet Win + Place + Show all at once. You still get something back even if your horse only finishes 3rd.', def: 'Three bets in one: Win + Place + Show on the same horse. Costs 3× base stake. Pays something even for a 3rd-place finish.' },
+  { term: 'Exacta', plain_english: 'Pick who comes 1st AND who comes 2nd — in the right order. Hard to hit but pays much more than a Win bet.', def: 'Predict the 1st and 2nd place finishers in exact order. Box it to cover both orderings (costs double).' },
+  { term: 'Quinella', plain_english: 'Pick who comes 1st and 2nd in ANY order — easier than an Exacta but pays less.', def: 'Predict 1st and 2nd in any order — a pre-boxed exacta. Easier to hit, lower payout.' },
+  { term: 'Trifecta', plain_english: 'Pick 1st, 2nd, AND 3rd in the right order. Big payouts. "Box" your picks so any order counts.', def: 'Predict 1st, 2nd, and 3rd in exact order. Huge payouts. Box 3+ horses to cover all orderings.' },
+  { term: 'Superfecta', plain_english: 'Pick the top 4 finishers in exact order. Very hard but can pay thousands. Use 10-cent bets and box many horses.', def: 'Predict 1st through 4th in exact order. Use $0.10 base bets and box liberally — very hard to hit straight.' },
   { term: 'Daily Double', def: 'Pick the winner of two consecutive designated races. Wheel one leg if confident in the other.' },
   { term: 'Pick 3', def: 'Pick winners of 3 consecutive races. A great medium-risk multi-race bet to build up.' },
   { term: 'Pick 4', def: 'Pick winners of 4 consecutive races. Single out one leg where you have a strong opinion to keep cost down.' },
@@ -352,7 +352,7 @@ const GLOSSARY = [
   { term: 'Turf race', def: 'Run on a grass course. Separate from dirt racing. Some horses specialize on turf — check past turf form specifically.' },
   { term: 'Synthetic / All-Weather', def: 'Artificial surface (Polytrack, Tapeta, Cushion Track) that rides differently from dirt. Form on synthetic doesn\'t always transfer to dirt and vice versa.' },
   // ── Speed & Form ───────────────────────────────────────────────────────────
-  { term: 'Beyer Speed Figure', def: 'US speed rating invented by Andrew Beyer, published in Daily Racing Form. Scale ~40–120. Adjusted for track speed (variant). A 100+ Beyer is elite. Compare figures run at similar class levels.' },
+  { term: 'Beyer Speed Figure', plain_english: 'A number that grades how fast a horse ran, adjusted for track conditions. Higher = faster. Compare it to the other horses in today\'s race.', def: 'US speed rating invented by Andrew Beyer, published in Daily Racing Form. Scale ~40–120. Adjusted for track speed (variant). A 100+ Beyer is elite. Compare figures run at similar class levels.' },
   { term: 'Equibase Speed Figure', def: 'Official speed figure compiled by Equibase (JCSA). Comparable concept to Beyer — higher is faster, adjusted for track variant.' },
   { term: 'TimeForm Rating', def: 'UK/Ireland performance rating. 130+ is top class on the flat, 170+ is elite over jumps. Also used internationally.' },
   { term: 'RPR (Racing Post Rating)', def: 'UK/Ireland rating comparable to TimeForm. 130+ flat, 170+ jumps is elite level.' },
@@ -375,7 +375,7 @@ const GLOSSARY = [
   { term: 'Good (turf)', def: 'Standard turf condition — not too firm, not too soft. Most turf horses handle good going.' },
   { term: 'Firm (turf)', def: 'Hard, dry turf. Fast ground. Some horses prefer firm, others struggle.' },
   { term: 'Yielding / Soft / Heavy (turf)', def: 'Increasingly wet turf conditions. Heavy = very soft and tiring. Horses with breeding for soft ground (e.g. certain European bloodlines) are favored.' },
-  { term: 'Track bias', def: 'A systematic advantage for horses in certain positions or running styles on a given day (e.g. rail advantage, speed bias). Watch early races to identify it, then bet WITH the bias.' },
+  { term: 'Track bias', plain_english: 'Some days, horses on a specific part of the track (e.g. the inside lane) consistently win. If you notice a pattern in the first few races, bet horses that run in that zone.', def: 'A systematic advantage for horses in certain positions or running styles on a given day (e.g. rail advantage, speed bias). Watch early races to identify it, then bet WITH the bias.' },
   { term: 'Rail', def: 'The inside barrier of the track. Rail position can be a big advantage (rail bias) or disadvantage (dead rail). Check how the inside has been running.' },
   { term: 'Post position', def: 'The starting gate stall number (1 = inside rail). Inside posts (1–3) can be advantageous on tight turns. Outside posts (8+) force wider paths.' },
   { term: 'Furlong', def: '1/8th of a mile = 201 meters. US race distances are measured in furlongs. A 6-furlong race is 6/8 = 0.75 miles. A 1-mile race = 8 furlongs.' },
@@ -386,9 +386,9 @@ const GLOSSARY = [
   { term: 'Claiming price', def: 'The price at which a horse in a claiming race can be purchased by another licensed trainer. A horse in a $25,000 claiming race can be claimed for $25,000.' },
   // ── Odds & Value ──────────────────────────────────────────────────────────
   { term: 'Morning line', def: 'Estimated odds set by the track handicapper before betting opens. A guide only — final tote odds depend on public money.' },
-  { term: 'Overlay', def: 'A horse whose tote odds are higher than its true winning probability. This is value — the core concept of profitable betting.' },
-  { term: 'Underlay', def: 'A horse whose tote odds are lower than its true winning chance. Overbacked by the public. Avoid — negative expected value.' },
-  { term: 'Parimutuel', def: 'Betting system where all money on a bet type pools together. Track takes a cut (~17–25%), the rest is paid to winners. Standard at US racetracks.' },
+  { term: 'Overlay', plain_english: 'The horse is priced higher than it should be — you\'re getting more money than the risk deserves. This is where profit comes from.', def: 'A horse whose tote odds are higher than its true winning probability. This is value — the core concept of profitable betting.' },
+  { term: 'Underlay', plain_english: 'The horse is priced too low — everyone loves it, so the payout is poor relative to the actual risk. Skip it.', def: 'A horse whose tote odds are lower than its true winning chance. Overbacked by the public. Avoid — negative expected value.' },
+  { term: 'Parimutuel', plain_english: 'All bets go into one pool, the track takes a cut, and the rest is divided among the winners. Your payout depends on how much others bet on the same horse.', def: 'Betting system where all money on a bet type pools together. Track takes a cut (~17–25%), the rest is paid to winners. Standard at US racetracks.' },
   { term: 'Takeout', def: 'The percentage the track keeps from each wagering pool (house edge). Typically 15–25% depending on bet type. Exactas/trifectas have higher takeout than Win.' },
   { term: 'Chalk', def: 'Slang for the race favorite — the horse with the most money bet on it.' },
   { term: 'Longshot', def: 'A horse at long odds (+1000 or higher). Very low win probability but massive payout if it hits.' },
@@ -806,15 +806,20 @@ function GlossaryTab() {
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
         {filtered.length} terms
       </div>
-      {filtered.map(({ term, def }) => (
+      {filtered.map(({ term, def, plain_english }) => (
         <div key={term} style={{
           padding: '12px 0',
           borderBottom: '1px solid var(--border-subtle)',
         }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--accent-gold-bright)', marginBottom: 4 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--accent-gold-bright)', marginBottom: plain_english ? 3 : 4 }}>
             {term}
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{def}</div>
+          {plain_english && (
+            <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 4 }}>
+              {plain_english}
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{def}</div>
         </div>
       ))}
     </div>

@@ -110,7 +110,7 @@ function BetItem({ bet }) {
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Stake £</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Stake $</span>
           <input
             type="number"
             min="1"
@@ -128,13 +128,78 @@ function BetItem({ bet }) {
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Returns</div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--accent-gold-bright)' }}>
-              £{payout}
+              ${payout}
             </div>
             <div style={{ fontSize: 11, color: 'var(--accent-green-bright)' }}>
-              +£{profit} profit
+              +${profit} profit
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function buildTellerScript(bets) {
+  if (!bets.length) return '';
+  const lines = bets.map((b) => {
+    const stake = `$${(b.stake || 10).toFixed(2)}`;
+    const type = (b.bet_type || 'win').toUpperCase();
+    return `"${stake} ${type} on ${b.horse_name}${b.course ? ` in the ${b.course} race` : ''} at ${b.odds || 'SP'}."`;
+  });
+  return lines.join('\n');
+}
+
+function TellerScriptModal({ bets, onClose }) {
+  const script = buildTellerScript(bets);
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard?.writeText(script).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      zIndex: 9000,
+    }} onClick={onClose}>
+      <div style={{
+        background: 'var(--bg-elevated)',
+        borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
+        padding: '20px 20px 32px',
+        width: '100%',
+        maxWidth: 480,
+        maxHeight: '70vh',
+        overflowY: 'auto',
+      }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
+          Teller Script
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.5 }}>
+          Read each line aloud at the counter or window:
+        </p>
+        <div style={{
+          background: 'var(--bg-card)',
+          borderRadius: 'var(--radius-md)',
+          padding: '14px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 13,
+          lineHeight: 1.8,
+          whiteSpace: 'pre-wrap',
+          marginBottom: 14,
+          border: '1px solid var(--border-subtle)',
+        }}>
+          {script}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={copy}>
+            {copied ? '✓ Copied' : 'Copy to Clipboard'}
+          </button>
+          <button className="btn" style={{ flex: 1, border: '1px solid var(--border-subtle)' }} onClick={onClose}>
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -147,6 +212,7 @@ export default function BetSlipPage() {
   const [trading, setTrading] = useState(false);
   const [tradeResult, setTradeResult] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [tellerOpen, setTellerOpen] = useState(false);
 
   // Deduplicate by horse_id + bet_type in case of stale persisted state
   const seen = new Set();
@@ -203,7 +269,7 @@ export default function BetSlipPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Total stake</span>
                 <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-                  £{totalStake.toFixed(2)}
+                  ${totalStake.toFixed(2)}
                 </span>
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
@@ -214,15 +280,22 @@ export default function BetSlipPage() {
                 style={{ fontSize: 15, marginBottom: 8 }}
                 onClick={() => setDrawerOpen(true)}
               >
-                Place Bets · £{totalStake.toFixed(2)}
+                Place Bets · ${totalStake.toFixed(2)}
               </button>
               <button
                 className="btn btn-secondary btn-full"
-                style={{ fontSize: 14 }}
+                style={{ fontSize: 14, marginBottom: 8 }}
                 disabled={trading}
                 onClick={() => paperTradeBets(dedupedSlip, qc, setTrading, setTradeResult, navigate)}
               >
                 {trading ? 'Placing paper bets…' : 'Paper Trade These Bets'}
+              </button>
+              <button
+                className="btn btn-full"
+                style={{ fontSize: 14, border: '1px solid var(--accent-gold-dim)', color: 'var(--accent-gold)' }}
+                onClick={() => setTellerOpen(true)}
+              >
+                Place Bet at Counter
               </button>
               {tradeResult && (
                 <div style={{ marginTop: 8, fontSize: 12, color: 'var(--accent-red-bright)', textAlign: 'center' }}>
@@ -251,6 +324,9 @@ export default function BetSlipPage() {
         onClose={() => setDrawerOpen(false)}
         region={userProfile?.region || 'usa'}
       />
+      {tellerOpen && (
+        <TellerScriptModal bets={dedupedSlip} onClose={() => setTellerOpen(false)} />
+      )}
     </div>
   );
 }

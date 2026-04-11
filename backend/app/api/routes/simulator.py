@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -166,6 +167,52 @@ def _settle_bet(bet: dict, runner: Optional[dict], place_positions: int) -> dict
     return bet
 
 
+async def _find_race_result_for_settle(race_id: str) -> dict | None:
+    """
+    Look up results for any race ID (UK or NA), with 3 retries and 2-second delays.
+    NA race IDs follow the pattern "{meet_id}-{race_number}".
+    """
+    for attempt in range(3):
+        try:
+            if "-" in race_id:
+                meet_id, race_number = race_id.rsplit("-", 1)
+                meet_results = await racing_api.get_na_meet_results(meet_id)
+                races = meet_results.get("races", [])
+                for race in races:
+                    race_key = race.get("race_key") or {}
+                    rnum = str(race_key.get("race_number", "")) if isinstance(race_key, dict) else ""
+                    if rnum == str(race_number):
+                        runners = []
+                        for entry in race.get("runners", []):
+                            runners.append({
+                                "horse_id": str(entry.get("registration_number", "")),
+                                "horse_name": entry.get("horse_name", ""),
+                                "horse": entry.get("horse_name", ""),
+                                "position": str(
+                                    entry.get("official_finish_position") or
+                                    entry.get("finish_position") or ""
+                                ),
+                                "sp": str(entry.get("final_odds") or entry.get("morning_line_odds", "SP")),
+                            })
+                        if runners:
+                            return {"race_id": race_id, "runners": runners}
+            else:
+                results_data = await racing_api.get_results()
+                found = next(
+                    (r for r in results_data.get("results", []) if r.get("race_id") == race_id),
+                    None,
+                )
+                if found:
+                    return found
+        except Exception:
+            pass
+
+        if attempt < 2:
+            await asyncio.sleep(2)
+
+    return None
+
+
 async def _settle_race_pg(
     db: AsyncSession,
     user_id: Optional[int],
@@ -191,14 +238,7 @@ async def _settle_race_pg(
     if not pending_bets:
         return [], "no_bets"
 
-    try:
-        results_data = await racing_api.get_results()
-        race_result = next(
-            (r for r in results_data.get("results", []) if r.get("race_id") == race_id),
-            None,
-        )
-    except Exception:
-        return [], "error"
+    race_result = await _find_race_result_for_settle(race_id)
 
     if not race_result:
         return [], "no_results"
@@ -369,10 +409,10 @@ async def settle(
     messages = {
         "settled":    f"{len(settled)} bet(s) settled",
         "no_bets":    "No pending bets found for this race",
-        "no_results": "Race result not available yet — check back after the race finishes",
+        "no_results": "Results not available yet. TheRacingAPI typically publishes results 5-10 minutes after the race. Try again shortly.",
         "error":      "Could not fetch results — try again in a moment",
     }
-    return JSONResponse({"message": messages[status], "settled": settled})
+    return JSONResponse({"message": messages[status], "settled": settled, "status": status})
 
 
 @router.get("/bets")
