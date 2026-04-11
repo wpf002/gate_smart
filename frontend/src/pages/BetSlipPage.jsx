@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import AffiliateDrawer from '../components/common/AffiliateDrawer';
-import { simPlaceBet } from '../utils/api';
+import { simPlaceBet, getRaceDetail } from '../utils/api';
 import { trackPaperBetPlaced } from '../utils/analytics';
 
 // Standalone helper so it can be called in the paper-trade handler
@@ -55,6 +55,72 @@ function parseFractionalOdds(odds) {
   return null;
 }
 
+function RaceStatusBar({ raceId, horseName }) {
+  const { data: race } = useQuery({
+    queryKey: ['race', raceId],
+    queryFn: () => getRaceDetail(raceId),
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
+    enabled: !!raceId,
+  });
+
+  if (!race) return null;
+
+  const status = (race.status || '').toLowerCase();
+  const isFinished = ['result', 'finished', 'complete', 'completed'].includes(status) || (race.results?.length > 0);
+  const isOff = !isFinished && ['off', 'active', 'in_running', 'in running'].includes(status);
+
+  const runner = race.runners?.find(r =>
+    (r.horse_name || r.horse) === horseName
+  );
+  const isScratched = runner && (runner.non_runner || runner.scratched ||
+    ['scratched', 'non-runner', 'nr', 'withdrawn'].includes((runner.status || '').toLowerCase())
+  );
+
+  const timeStr = race.off_time || race.scheduled_time || race.time || race.race_time || '';
+  let postDisplay = '';
+  if (timeStr && !isFinished && !isOff) {
+    try {
+      postDisplay = new Date(timeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {}
+  }
+
+  if (!isScratched && !isFinished && !isOff && !postDisplay) return null;
+
+  return (
+    <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      {isScratched && (
+        <span style={{
+          fontSize: 11, fontWeight: 700,
+          color: 'var(--accent-red-bright)',
+          background: 'rgba(239,68,68,0.1)',
+          border: '1px solid rgba(239,68,68,0.25)',
+          padding: '2px 7px', borderRadius: 4,
+        }}>
+          Scratched — remove from slip
+        </span>
+      )}
+      {isFinished && (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Race finished</span>
+      )}
+      {isOff && !isFinished && (
+        <span style={{
+          fontSize: 11, fontWeight: 700,
+          color: 'var(--accent-red-bright)',
+          background: 'rgba(239,68,68,0.1)',
+          border: '1px solid rgba(239,68,68,0.25)',
+          padding: '2px 7px', borderRadius: 4,
+        }}>
+          Race Off
+        </span>
+      )}
+      {postDisplay && (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Post {postDisplay}</span>
+      )}
+    </div>
+  );
+}
+
 function BetItem({ bet }) {
   const { removeFromBetSlip, updateStake } = useAppStore();
   const navigate = useNavigate();
@@ -100,6 +166,7 @@ function BetItem({ bet }) {
               Added: {new Date(bet.placed_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
+          <RaceStatusBar raceId={bet.race_id} horseName={bet.horse_name} />
         </div>
         <button
           onClick={() => removeFromBetSlip(bet.horse_id, bet.bet_type)}

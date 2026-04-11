@@ -208,16 +208,27 @@ function BetCard({ bet, onSettle, settling, settleMsg, onDelete, deleting }) {
             </>
           )}
         </div>
-        {isPending && (
-          <button
-            className="btn btn-secondary"
-            disabled={isThisSettling}
-            onClick={() => onSettle(bet.race_id)}
-            style={{ fontSize: 11, padding: '4px 10px' }}
-          >
-            {isThisSettling ? 'Checking…' : 'Check Result'}
-          </button>
-        )}
+        {isPending && (() => {
+          const DELAY_MS = 15 * 60 * 1000;
+          const placedMs = bet.placed_at ? new Date(bet.placed_at).getTime() : 0;
+          const elapsed = placedMs ? Date.now() - placedMs : DELAY_MS;
+          const canCheck = elapsed >= DELAY_MS;
+          const minsLeft = canCheck ? 0 : Math.ceil((DELAY_MS - elapsed) / 60000);
+          return canCheck ? (
+            <button
+              className="btn btn-secondary"
+              disabled={isThisSettling}
+              onClick={() => onSettle(bet.race_id)}
+              style={{ fontSize: 11, padding: '4px 10px' }}
+            >
+              {isThisSettling ? 'Checking…' : 'Check Result'}
+            </button>
+          ) : (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              Results in {minsLeft}m
+            </span>
+          );
+        })()}
         {!isPending && (
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: pnlColor, fontWeight: 700 }}>
             {bet.pnl >= 0 ? '+' : ''}${bet.pnl.toFixed(2)}
