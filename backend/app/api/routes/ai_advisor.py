@@ -382,7 +382,7 @@ async def _settle_prediction(race_id: str, race_result: dict) -> None:
     """
     try:
         pred = await cache_get(f"predictions:{race_id}")
-        if not pred or pred.get("status") == "settled":
+        if not pred or pred.get("status") != "pending":
             return
 
         # Find the winner (position == "1")
@@ -412,7 +412,7 @@ async def _settle_prediction(race_id: str, race_result: dict) -> None:
 
         # Mark as settled so we don't double-count
         pred.update({
-            "status": "settled",
+            "status": "correct" if is_correct else "incorrect",
             "actual_winner": actual_winner_name,
             "actual_winner_id": actual_winner_id,
             "is_correct": is_correct,
