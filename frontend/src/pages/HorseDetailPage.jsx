@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getHorse, explainHorse, explainFormString, getHorsePastPerformances } from '../utils/api';
 import PageHeader from '../components/common/PageHeader';
@@ -22,6 +22,7 @@ function StatRow({ label, value }) {
 
 export default function HorseDetailPage() {
   const { horseId } = useParams();
+  const navigate = useNavigate();
   const [explanation, setExplanation] = useState(null);
   const [formExplanation, setFormExplanation] = useState(null);
   const [explainError, setExplainError] = useState(null);
@@ -87,6 +88,17 @@ export default function HorseDetailPage() {
       />
 
       <div style={{ padding: '16px' }}>
+        {/* View Race shortcut */}
+        {horse?.race_context?.race_id && (
+          <button
+            className="btn btn-primary btn-full"
+            onClick={() => navigate(`/race/${horse.race_context.race_id}`)}
+            style={{ marginBottom: 14 }}
+          >
+            View Race: {horse.race_context.course || horse.race_context.title} →
+          </button>
+        )}
+
         {/* Key stats */}
         <div className="card" style={{ marginBottom: 14 }}>
           <StatRow label="Age" value={horse?.age} />
