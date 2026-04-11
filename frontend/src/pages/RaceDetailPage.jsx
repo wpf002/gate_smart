@@ -810,31 +810,80 @@ export default function RaceDetailPage() {
               <>
                 {/* Trainer / Jockey connections */}
                 {(trainers.length > 0 || jockeys.length > 0) && (
-                  <div style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                      {race?.course} — Trainers & Jockeys
+                  <div style={{ marginBottom: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+                    {/* Header */}
+                    <div style={{
+                      padding: '8px 14px',
+                      background: 'linear-gradient(90deg, rgba(201,162,39,0.12) 0%, rgba(201,162,39,0.04) 100%)',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                    }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        {race?.course}
+                      </span>
+                      <span style={{ width: 1, height: 12, background: 'var(--border-subtle)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Connections</span>
                     </div>
-                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+
+                    {/* Two-column body */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+                      {/* Trainers */}
                       {trainers.length > 0 && (
-                        <div style={{ flex: 1, minWidth: 120 }}>
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>TRAINERS</div>
-                          {trainers.slice(0, 6).map(([name, info]) => (
-                            <div key={name} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3, display: 'flex', gap: 6, alignItems: 'baseline' }}>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent-gold)', flexShrink: 0 }}>#{info.nums.join(' #')}</span>
-                              <span style={{ minWidth: 0 }}>{name}{info.winPct != null ? <span style={{ color: 'var(--text-muted)', marginLeft: 4, fontSize: 10 }}>{info.winPct}%</span> : ''}</span>
-                            </div>
-                          ))}
+                        <div style={{ padding: '10px 14px', borderRight: '1px solid var(--border-subtle)' }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                            Trainers
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {trainers.slice(0, 6).map(([name, info]) => (
+                              <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{
+                                  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                                  color: 'var(--accent-gold-bright)',
+                                  background: 'rgba(201,162,39,0.1)',
+                                  border: '1px solid rgba(201,162,39,0.2)',
+                                  borderRadius: 4, padding: '1px 5px',
+                                  flexShrink: 0,
+                                }}>
+                                  #{info.nums.join(',')}
+                                </span>
+                                <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {name}
+                                </span>
+                                {info.winPct != null && (
+                                  <span style={{ fontSize: 10, color: 'var(--accent-green-bright)', fontFamily: 'var(--font-mono)', flexShrink: 0, marginLeft: 'auto' }}>
+                                    {info.winPct}%
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
+                      {/* Jockeys */}
                       {jockeys.length > 0 && (
-                        <div style={{ flex: 1, minWidth: 120 }}>
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>JOCKEYS</div>
-                          {jockeys.slice(0, 6).map(([name, info]) => (
-                            <div key={name} style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 3, display: 'flex', gap: 6, alignItems: 'baseline' }}>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent-gold)', flexShrink: 0 }}>#{info.nums.join(' #')}</span>
-                              <span style={{ minWidth: 0 }}>{name}</span>
-                            </div>
-                          ))}
+                        <div style={{ padding: '10px 14px' }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                            Jockeys
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {jockeys.slice(0, 6).map(([name, info]) => (
+                              <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{
+                                  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                                  color: 'var(--accent-gold-bright)',
+                                  background: 'rgba(201,162,39,0.1)',
+                                  border: '1px solid rgba(201,162,39,0.2)',
+                                  borderRadius: 4, padding: '1px 5px',
+                                  flexShrink: 0,
+                                }}>
+                                  #{info.nums.join(',')}
+                                </span>
+                                <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {name}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
