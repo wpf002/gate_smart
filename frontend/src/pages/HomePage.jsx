@@ -76,7 +76,7 @@ export default function HomePage() {
   const isAll = selectedRegion === null;
 
   // Standard (UK/IRE/etc.) fetch — always runs
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ['races', selectedDay, selectedRegion],
     queryFn: () =>
       selectedDay === 'today'
@@ -85,7 +85,7 @@ export default function HomePage() {
   });
 
   // NA fetch — only runs when "All" is selected
-  const { data: naData, refetch: naRefetch } = useQuery({
+  const { data: naData, isFetching: naFetching, refetch: naRefetch } = useQuery({
     queryKey: ['races', selectedDay, 'USA,CAN'],
     queryFn: () =>
       selectedDay === 'today'
@@ -94,6 +94,7 @@ export default function HomePage() {
     enabled: isAll,
   });
 
+  const isRefreshing = isFetching || (isAll && naFetching);
   const handleRefetch = () => { refetch(); if (isAll) naRefetch(); };
 
   const races = isAll
@@ -137,7 +138,13 @@ export default function HomePage() {
         right={
           <button
             onClick={handleRefetch}
-            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 18 }}
+            disabled={isRefreshing}
+            style={{
+              background: 'none', border: 'none', cursor: isRefreshing ? 'default' : 'pointer',
+              fontSize: 18, color: 'var(--text-muted)',
+              display: 'inline-flex', alignItems: 'center',
+              animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none',
+            }}
           >
             ↻
           </button>
