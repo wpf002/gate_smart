@@ -496,7 +496,7 @@ export default function RaceDetailPage() {
       }}>
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>←</button>
         {race && (() => {
-          const { time: displayTime, label: timeLabel } = getDisplayTime(race);
+          const { time: displayTime, label: timeLabel } = getDisplayTime(race, userProfile?.timezone);
           return (
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent-gold)' }}>
@@ -515,7 +515,7 @@ export default function RaceDetailPage() {
         {/* ── Race meta ─────────────────────────────────────────────── */}
         {race && !isLoading && (
           <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-secondary)' }}>
-            {(race.distance || race.distance_f) && <span>📏 {formatDistance(race.distance, race.distance_f)}</span>}
+            {(race.distance || race.distance_f) && <span>📏 {formatDistance(race.distance, race.distance_f, race.region)}</span>}
             {race.surface && <span>🌿 {race.surface}</span>}
             {race.going && <span>⛅ Going: {race.going}</span>}
             {formatPurse(race) && <span>💰 {formatPurse(race)}</span>}
@@ -617,7 +617,6 @@ export default function RaceDetailPage() {
                   scorecards={scorecardData?.scorecards || []}
                   course={race?.course || ''}
                   raceName={race?.title || race?.race_name || ''}
-                  raceResults={raceResults}
                 />
               ))}
             </div>
