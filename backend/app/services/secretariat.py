@@ -456,7 +456,7 @@ Return this JSON exactly:
     try:
         response = await client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
+            max_tokens=8192,
             system=SECRETARIAT_SYSTEM,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -476,7 +476,7 @@ Return this JSON exactly:
         )
         retry_response = await client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=4096,
+            max_tokens=8192,
             system=SECRETARIAT_SYSTEM,
             messages=[
                 {"role": "user", "content": prompt},
@@ -574,7 +574,7 @@ Return this JSON exactly:
     full_text = ""
     async with client.messages.stream(
         model="claude-haiku-4-5-20251001",
-        max_tokens=4096,
+        max_tokens=8192,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     ) as stream:
@@ -582,7 +582,22 @@ Return this JSON exactly:
             full_text += text
             yield ("chunk", text)
 
-    result = _truncate_analysis(_parse_json(full_text))
+    try:
+        result = _truncate_analysis(_parse_json(full_text))
+    except (json.JSONDecodeError, ValueError, KeyError):
+        # JSON was truncated — retry without streaming to get a complete response
+        retry_response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=8192,
+            system=SECRETARIAT_SYSTEM,
+            messages=[
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": full_text},
+                {"role": "user", "content": "Complete the JSON object you started. Return ONLY the complete, valid JSON — no other text."},
+            ]
+        )
+        result = _truncate_analysis(_parse_json(retry_response.content[0].text))
+
     yield ("result", result)
 
 
