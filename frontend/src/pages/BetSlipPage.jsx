@@ -125,10 +125,13 @@ function RaceStatusBar({ raceId, horseName }) {
   );
 }
 
+const EXOTIC_TYPES = ['exacta', 'trifecta', 'superfecta', 'daily double', 'pick3', 'pick4', 'pick5', 'pick6'];
+
 function BetItem({ bet }) {
   const { removeFromBetSlip, updateStake } = useAppStore();
   const navigate = useNavigate();
-  const decimal = parseFractionalOdds(bet.odds);
+  const isExotic = EXOTIC_TYPES.includes((bet.bet_type || '').toLowerCase());
+  const decimal = !isExotic ? parseFractionalOdds(bet.odds) : null;
   const payout = decimal ? (bet.stake * decimal).toFixed(2) : null;
   const profit = decimal ? (bet.stake * (decimal - 1)).toFixed(2) : null;
 
@@ -138,13 +141,17 @@ function BetItem({ bet }) {
       borderRadius: 'var(--radius-md)',
       padding: '14px',
       marginBottom: 10,
-      border: '1px solid var(--border-subtle)',
+      border: `1px solid ${isExotic ? 'rgba(201,162,39,0.2)' : 'var(--border-subtle)'}`,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
-          <div style={{ fontWeight: 700, fontSize: 14 }}>{bet.horse_name}</div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>
+            {isExotic ? (
+              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-gold-bright)' }}>{bet.horse_name}</span>
+            ) : bet.horse_name}
+          </div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            {bet.bet_type?.toUpperCase()} · {bet.odds}
+            {bet.bet_type?.toUpperCase()}{!isExotic && bet.odds !== '?' && ` · ${bet.odds}`}
             {bet.course && <span> · {bet.course}</span>}
             {bet.race_id && (
               <button

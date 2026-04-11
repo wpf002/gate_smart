@@ -254,6 +254,39 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], raceId = '', cou
                     {SIMPLE_BETS.includes(type) && (
                       <AddBtn name={rec.selection} betType={type} />
                     )}
+                    {!SIMPLE_BETS.includes(type) && rec.selection && (() => {
+                      const exoticKey = `exotic-${type}-${raceId}`;
+                      const isDone = addedKeys.has(exoticKey);
+                      const parseStake = (s) => { const m = String(s || '2').match(/[\d.]+/); return m ? parseFloat(m[0]) : 2; };
+                      return (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToBetSlip({
+                              horse_id: exoticKey,
+                              horse_name: rec.selection,
+                              race_id: raceId,
+                              bet_type: type,
+                              odds: '?',
+                              stake: parseStake(rec.stake_suggestion),
+                              course,
+                              race_name: '',
+                            });
+                            setAddedKeys(prev => new Set(prev).add(exoticKey));
+                            setTimeout(() => setAddedKeys(prev => { const n = new Set(prev); n.delete(exoticKey); return n; }), 2000);
+                          }}
+                          style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+                            border: `1px solid ${isDone ? 'var(--accent-green-bright)' : 'var(--accent-gold-dim)'}`,
+                            background: isDone ? 'rgba(34,197,94,0.12)' : 'transparent',
+                            color: isDone ? 'var(--accent-green-bright)' : 'var(--accent-gold)',
+                            cursor: isDone ? 'default' : 'pointer', flexShrink: 0,
+                          }}
+                        >
+                          {isDone ? '✓ Added' : '+ Slip'}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
