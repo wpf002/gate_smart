@@ -702,7 +702,14 @@ export default function RaceDetailPage() {
             {(race.distance || race.distance_f) && <span>📏 {formatDistance(race.distance, race.distance_f, race.region)}</span>}
             {race.surface && <span>🌿 {race.surface}</span>}
             {race.going && <span>🏁 Track: {race.going}</span>}
-            {race.race_class && <span>🏷 {race.race_class}</span>}
+            {race.race_class && (() => {
+              const m = race.race_class.match(/^(.+?)\s+(CLAIMING\(\$[\d,]+\))$/i);
+              return m ? (
+                <span>🏷 {m[1]} <span style={{ color: 'var(--border-medium)', margin: '0 2px' }}>|</span> {m[2]}</span>
+              ) : (
+                <span>🏷 {race.race_class}</span>
+              );
+            })()}
             {formatPurse(race) && <span>💰 {formatPurse(race)}</span>}
             {race.runners?.length && <span>🏇 {race.runners.length} runners</span>}
             {raceFinished && <span style={{ color: 'var(--accent-gold-bright)', fontWeight: 600 }}>✓ Finished</span>}
