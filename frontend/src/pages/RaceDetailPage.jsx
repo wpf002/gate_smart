@@ -21,10 +21,60 @@ const MODES = [
 const FINISH_MEDALS = { first: '🥇', second: '🥈', third: '🥉', fourth: '4️⃣' };
 
 // ── AnalysisPanel ─────────────────────────────────────────────────────────────
-function AnalysisPanel({ analysis, loading, mode }) {
+function AnalysisPanel({ analysis, loading, mode, runners = [], raceId = '', course = '' }) {
   const [viewMode, setViewMode] = useState('beginner'); // 'technical' | 'beginner'
   const [tellerOpen, setTellerOpen] = useState(false);
   const [copied, setCopied] = useState(null);
+  const [addedKeys, setAddedKeys] = useState(new Set());
+  const addToBetSlip = useAppStore((s) => s.addToBetSlip);
+
+  // Normalise a name for fuzzy matching (lowercase, strip punctuation/numbers)
+  const normName = (s) => (s || '').toLowerCase().replace(/[^a-z\s]/g, '').trim();
+
+  // Find runner by horse name (Secretariat may include number prefix like "4 Best Horse")
+  const findRunner = (nameOrSelection) => {
+    const raw = (nameOrSelection || '').replace(/^#?\d+\s+[-–]?\s*/, '').trim();
+    const norm = normName(raw);
+    return runners.find(r => normName(r.horse_name) === norm || normName(r.horse_name).includes(norm) || norm.includes(normName(r.horse_name)));
+  };
+
+  const handleAddBet = (nameOrSelection, betType = 'win') => {
+    const runner = findRunner(nameOrSelection);
+    if (!runner) return;
+    const key = `${runner.horse_id}:${betType}`;
+    addToBetSlip({
+      horse_id: runner.horse_id,
+      horse_name: runner.horse_name,
+      race_id: raceId,
+      bet_type: betType,
+      odds: runner.odds || runner.sp || '?',
+      stake: 10,
+      course,
+    });
+    setAddedKeys(prev => new Set(prev).add(key));
+    setTimeout(() => setAddedKeys(prev => { const n = new Set(prev); n.delete(key); return n; }), 2000);
+  };
+
+  const AddBtn = ({ name, betType = 'win' }) => {
+    const runner = findRunner(name);
+    if (!runner) return null;
+    const key = `${runner.horse_id}:${betType}`;
+    const done = addedKeys.has(key);
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); handleAddBet(name, betType); }}
+        style={{
+          fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+          border: `1px solid ${done ? 'var(--accent-green-bright)' : 'var(--accent-gold-dim)'}`,
+          background: done ? 'rgba(34,197,94,0.12)' : 'transparent',
+          color: done ? 'var(--accent-green-bright)' : 'var(--accent-gold)',
+          cursor: done ? 'default' : 'pointer', flexShrink: 0,
+        }}
+      >
+        {done ? '✓ Added' : '+ Slip'}
+      </button>
+    );
+  };
 
   const copyToClipboard = (text, key) => {
     navigator.clipboard?.writeText(text).catch(() => {});
@@ -129,10 +179,11 @@ function AnalysisPanel({ analysis, loading, mode }) {
           {['first', 'second', 'third', 'fourth'].map(pos => {
             const p = analysis.predicted_finish[pos];
             if (!p?.horse_name) return null;
+            const betType = pos === 'first' ? 'win' : pos === 'second' ? 'place' : 'show';
             return (
-              <div key={pos} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 6 }}>
+              <div key={pos} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
                 <span style={{ fontSize: 20, lineHeight: 1, flexShrink: 0 }}>{FINISH_MEDALS[pos]}</span>
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold-bright)' }}>
                     {p.number ? `${p.number} ` : ''}{p.horse_name}
                   </span>
@@ -140,6 +191,7 @@ function AnalysisPanel({ analysis, loading, mode }) {
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 6 }}>— {p.reasoning}</span>
                   )}
                 </div>
+                <AddBtn name={p.horse_name} betType={betType} />
               </div>
             );
           })}
@@ -158,9 +210,15 @@ function AnalysisPanel({ analysis, loading, mode }) {
               <div key={type} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid var(--border-subtle)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                   <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', textTransform: 'capitalize' }}>{type}</span>
-                  {rec.stake_suggestion && (
-                    <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)' }}>{rec.stake_suggestion}</span>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {rec.stake_suggestion && (
+                      <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)' }}>{rec.stake_suggestion}</span>
+                    )}
+                    {/* Only add to slip for single-horse bets (win/place/show) */}
+                    {['win', 'place', 'show'].includes(type) && (
+                      <AddBtn name={rec.selection} betType={type} />
+                    )}
+                  </div>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{rec.reasoning}</div>
@@ -183,7 +241,12 @@ function AnalysisPanel({ analysis, loading, mode }) {
             <div key={i} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid var(--border-subtle)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)' }}>{bet.bet_type}</span>
-                <span className={`badge badge-${bet.risk_level === 'low' ? 'green' : bet.risk_level === 'high' ? 'red' : 'gold'}`}>{bet.risk_level}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className={`badge badge-${bet.risk_level === 'low' ? 'green' : bet.risk_level === 'high' ? 'red' : 'gold'}`}>{bet.risk_level}</span>
+                  {['win', 'place', 'show'].includes((bet.bet_type || '').toLowerCase()) && (
+                    <AddBtn name={bet.selection} betType={(bet.bet_type || 'win').toLowerCase()} />
+                  )}
+                </div>
               </div>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{bet.selection}</div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{bet.reasoning}</div>
@@ -601,7 +664,7 @@ export default function RaceDetailPage() {
         {showTabs && (
           <div style={{ marginBottom: 16 }}>
             {tabs.length > 1 && <TabBar tabs={tabs} active={validTab} onChange={setActiveTab} />}
-            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} />}
+            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} runners={race?.runners || []} raceId={raceId} course={race?.course || ''} />}
             {validTab === 'scorecard' && <ScorecardPanel raceScorecards={scorecardData} loading={false} />}
             {validTab === 'debrief' && <DebriefPanel debrief={debrief} loading={debriefLoading} />}
           </div>
