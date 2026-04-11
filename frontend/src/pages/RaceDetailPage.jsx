@@ -787,9 +787,10 @@ export default function RaceDetailPage() {
             const coupledIds = new Set();
             Object.values(baseGroups).forEach(ids => { if (ids.length > 1) ids.forEach(id => coupledIds.add(id)); });
 
-            // Race connections summary (trainers + jockeys)
+            // Race connections summary (trainers + jockeys + owners)
             const trainerMap = {};
             const jockeyMap = {};
+            const ownerMap = {};
             sortedRunners.forEach(r => {
               const num = r.program_number || r.cloth_number || '?';
               if (r.trainer) {
@@ -800,14 +801,19 @@ export default function RaceDetailPage() {
                 if (!jockeyMap[r.jockey]) jockeyMap[r.jockey] = { nums: [] };
                 jockeyMap[r.jockey].nums.push(num);
               }
+              if (r.owner) {
+                if (!ownerMap[r.owner]) ownerMap[r.owner] = { nums: [] };
+                ownerMap[r.owner].nums.push(num);
+              }
             });
             const trainers = Object.entries(trainerMap).sort((a, b) => b[1].nums.length - a[1].nums.length);
             const jockeys  = Object.entries(jockeyMap).sort((a, b)  => b[1].nums.length - a[1].nums.length);
+            const owners   = Object.entries(ownerMap).sort((a, b)   => b[1].nums.length - a[1].nums.length);
 
             return (
               <>
                 {/* Trainer / Jockey connections */}
-                {(trainers.length > 0 || jockeys.length > 0) && (
+                {(trainers.length > 0 || jockeys.length > 0 || owners.length > 0) && (
                   <div style={{ marginBottom: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
                     {/* Header */}
                     <div style={{
@@ -823,24 +829,22 @@ export default function RaceDetailPage() {
                       <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Connections</span>
                     </div>
 
-                    {/* Two-column body */}
+                    {/* Trainers | Jockeys */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-                      {/* Trainers */}
                       {trainers.length > 0 && (
                         <div style={{ padding: '10px 14px', borderRight: '1px solid var(--border-subtle)' }}>
                           <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
                             Trainers
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {trainers.slice(0, 6).map(([name, info]) => (
+                            {trainers.map(([name, info]) => (
                               <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <span style={{
                                   fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
                                   color: 'var(--accent-gold-bright)',
                                   background: 'rgba(201,162,39,0.1)',
                                   border: '1px solid rgba(201,162,39,0.2)',
-                                  borderRadius: 4, padding: '1px 5px',
-                                  flexShrink: 0,
+                                  borderRadius: 4, padding: '1px 5px', flexShrink: 0,
                                 }}>
                                   #{info.nums.join(',')}
                                 </span>
@@ -857,22 +861,20 @@ export default function RaceDetailPage() {
                           </div>
                         </div>
                       )}
-                      {/* Jockeys */}
                       {jockeys.length > 0 && (
                         <div style={{ padding: '10px 14px' }}>
                           <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
                             Jockeys
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {jockeys.slice(0, 6).map(([name, info]) => (
+                            {jockeys.map(([name, info]) => (
                               <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <span style={{
                                   fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
                                   color: 'var(--accent-gold-bright)',
                                   background: 'rgba(201,162,39,0.1)',
                                   border: '1px solid rgba(201,162,39,0.2)',
-                                  borderRadius: 4, padding: '1px 5px',
-                                  flexShrink: 0,
+                                  borderRadius: 4, padding: '1px 5px', flexShrink: 0,
                                 }}>
                                   #{info.nums.join(',')}
                                 </span>
@@ -885,6 +887,33 @@ export default function RaceDetailPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Owners — full width below */}
+                    {owners.length > 0 && (
+                      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border-subtle)' }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                          Owners
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
+                          {owners.map(([name, info]) => (
+                            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{
+                                fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                                color: 'var(--accent-gold-bright)',
+                                background: 'rgba(201,162,39,0.1)',
+                                border: '1px solid rgba(201,162,39,0.2)',
+                                borderRadius: 4, padding: '1px 5px', flexShrink: 0,
+                              }}>
+                                #{info.nums.join(',')}
+                              </span>
+                              <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {name}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
