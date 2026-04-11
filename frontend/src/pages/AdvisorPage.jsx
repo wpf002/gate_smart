@@ -16,6 +16,101 @@ const SUGGESTED_QUESTIONS = [
   'How does parimutuel betting work?',
 ];
 
+/** Render inline markdown: **bold**, *italic*, `code` */
+function renderInline(text) {
+  const parts = [];
+  const re = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
+  let last = 0, m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    if (m[2]) parts.push(<strong key={m.index}>{m[2]}</strong>);
+    else if (m[3]) parts.push(<em key={m.index}>{m[3]}</em>);
+    else if (m[4]) parts.push(
+      <code key={m.index} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9em', background: 'rgba(255,255,255,0.07)', padding: '1px 4px', borderRadius: 3 }}>{m[4]}</code>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
+/** Render assistant markdown: headings, bullets, numbered lists, paragraphs */
+function MarkdownContent({ text }) {
+  const lines = text.split('\n');
+  const elements = [];
+  let listItems = [];
+  let listType = null; // 'ul' | 'ol'
+  let key = 0;
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    const Tag = listType === 'ol' ? 'ol' : 'ul';
+    elements.push(
+      <Tag key={key++} style={{ margin: '6px 0', paddingLeft: 20 }}>
+        {listItems.map((item, i) => (
+          <li key={i} style={{ marginBottom: 3, lineHeight: 1.6 }}>{renderInline(item)}</li>
+        ))}
+      </Tag>
+    );
+    listItems = [];
+    listType = null;
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+
+    // Heading
+    const hMatch = line.match(/^(#{1,3})\s+(.*)/);
+    if (hMatch) {
+      flushList();
+      const level = hMatch[1].length;
+      const fs = level === 1 ? 17 : level === 2 ? 15 : 14;
+      elements.push(
+        <div key={key++} style={{ fontWeight: 700, fontSize: fs, color: 'var(--accent-gold-bright)', margin: '12px 0 4px', lineHeight: 1.3 }}>
+          {renderInline(hMatch[2])}
+        </div>
+      );
+      continue;
+    }
+
+    // Unordered list
+    const ulMatch = line.match(/^[-*•]\s+(.*)/);
+    if (ulMatch) {
+      if (listType === 'ol') flushList();
+      listType = 'ul';
+      listItems.push(ulMatch[1]);
+      continue;
+    }
+
+    // Ordered list
+    const olMatch = line.match(/^\d+\.\s+(.*)/);
+    if (olMatch) {
+      if (listType === 'ul') flushList();
+      listType = 'ol';
+      listItems.push(olMatch[1]);
+      continue;
+    }
+
+    flushList();
+
+    // Blank line
+    if (!line.trim()) {
+      elements.push(<div key={key++} style={{ height: 8 }} />);
+      continue;
+    }
+
+    // Normal paragraph line
+    elements.push(
+      <span key={key++} style={{ display: 'block', lineHeight: 1.7 }}>
+        {renderInline(line)}
+      </span>
+    );
+  }
+
+  flushList();
+  return <div style={{ fontSize: 14 }}>{elements}</div>;
+}
+
 function Message({ msg }) {
   const isUser = msg.role === 'user';
   const isError = msg.role === 'error';
@@ -50,22 +145,12 @@ function Message({ msg }) {
             ? 'rgba(192,57,43,0.08)'
             : 'var(--bg-card)',
         border: `1px solid ${isUser ? 'var(--border-gold)' : isError ? 'rgba(192,57,43,0.25)' : 'var(--border-subtle)'}`,
-        fontSize: 14,
         lineHeight: 1.7,
         color: isError ? 'var(--accent-red-bright)' : 'var(--text-primary)',
       }}>
         {isUser || isError
-          ? msg.content
-          : msg.content.split('\n\n').map((para, i) => (
-              <p key={i} style={{ margin: i === 0 ? 0 : '10px 0 0' }}>
-                {para.split('\n').map((line, j) => (
-                  <span key={j}>
-                    {j > 0 && <br />}
-                    {line}
-                  </span>
-                ))}
-              </p>
-            ))
+          ? <span style={{ fontSize: 14 }}>{msg.content}</span>
+          : <MarkdownContent text={msg.content} />
         }
       </div>
     </div>
