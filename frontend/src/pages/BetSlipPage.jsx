@@ -12,7 +12,7 @@ async function paperTradeBets(betSlip, qc, setTrading, setTradeResult, navigate)
   setTrading(true);
   setTradeResult(null);
   let placed = 0;
-  let failed = 0;
+  const errors = [];
   for (const bet of betSlip) {
     try {
       await simPlaceBet({
@@ -30,17 +30,21 @@ async function paperTradeBets(betSlip, qc, setTrading, setTradeResult, navigate)
       });
       trackPaperBetPlaced(bet.bet_type, bet.stake);
       placed++;
-    } catch {
-      failed++;
+    } catch (err) {
+      const detail = err?.response?.data?.detail || err?.message || 'Unknown error';
+      errors.push(`${bet.horse_name}: ${detail}`);
     }
   }
-  qc.invalidateQueries({ queryKey: ['sim-stats'] });
-  qc.invalidateQueries({ queryKey: ['sim-bets'] });
+  await qc.invalidateQueries({ queryKey: ['sim-stats'] });
+  await qc.invalidateQueries({ queryKey: ['sim-bets'] });
   setTrading(false);
-  if (failed === 0) {
-    navigate('/simulator');
+  if (errors.length === 0) {
+    navigate('/simulator', { state: { tab: 'bets' } });
+  } else if (placed > 0) {
+    setTradeResult(`${placed} placed. Issues: ${errors.join(' · ')}`);
+    navigate('/simulator', { state: { tab: 'bets' } });
   } else {
-    setTradeResult(`${placed} placed, ${failed} failed (check bank balance)`);
+    setTradeResult(errors.join(' · '));
   }
 }
 

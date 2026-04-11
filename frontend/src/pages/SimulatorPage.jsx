@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../components/common/PageHeader';
 import { simGetBets, simGetStats, simTopup, simReset, simSettle, simDeleteBet } from '../utils/api';
@@ -423,7 +423,8 @@ function StatsTab({ stats }) {
 }
 
 export default function SimulatorPage() {
-  const [tab, setTab] = useState('bank');
+  const location = useLocation();
+  const [tab, setTab] = useState(location.state?.tab || 'bank');
   const [settling, setSettling] = useState(null);
   const [settleMsg, setSettleMsg] = useState(null);
   const qc = useQueryClient();
