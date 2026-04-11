@@ -3,11 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { searchHorses } from '../utils/api';
 import PageHeader from '../components/common/PageHeader';
+import { getDisplayTime } from '../components/races/RaceCard';
+import { useAppStore } from '../store';
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
   const [submitted, setSubmitted] = useState('');
   const navigate = useNavigate();
+  const timezone = useAppStore((s) => s.userProfile?.timezone);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['horse-search', submitted],
@@ -104,61 +107,77 @@ export default function SearchPage() {
           </div>
         )}
 
-        {horses.map((horse, idx) => (
-          <div
-            key={horse.horse_id || idx}
-            onClick={() => navigate(`/horse/${horse.horse_id}`)}
-            style={{
-              background: 'var(--bg-card)',
-              borderRadius: 'var(--radius-md)',
-              padding: '14px',
-              marginBottom: 8,
-              border: '1px solid var(--border-subtle)',
-              cursor: 'pointer',
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-card)'}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-                  {horse.horse_name || horse.horse}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {[
-                    horse.trainer && `T: ${horse.trainer}`,
-                    horse.jockey && `J: ${horse.jockey}`,
-                    horse.age && `${horse.age}yo`,
-                  ].filter(Boolean).join('  ·  ')}
-                </div>
-                {horse.form && (
-                  <div style={{ marginTop: 4 }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Form (oldest→newest): </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)', letterSpacing: '0.12em' }}>
-                      {horse.form}
-                    </span>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                      1=won · 2–9=position · P=pulled up · F=fell · -/=season break
+        {horses.map((horse, idx) => {
+          const { time: displayTime, label: timeLabel } = getDisplayTime(horse, timezone);
+          return (
+            <div
+              key={horse.horse_id || idx}
+              style={{
+                background: 'var(--bg-card)',
+                borderRadius: 'var(--radius-md)',
+                padding: '14px',
+                marginBottom: 8,
+                border: '1px solid var(--border-subtle)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                    {horse.horse_name || horse.horse}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                    {[
+                      horse.trainer && `T: ${horse.trainer}`,
+                      horse.jockey && `J: ${horse.jockey}`,
+                      horse.age && `${horse.age}yo`,
+                    ].filter(Boolean).join('  ·  ')}
+                  </div>
+                  {horse.form && (
+                    <div style={{ marginTop: 4 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Form: </span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)', letterSpacing: '0.12em' }}>
+                        {horse.form}
+                      </span>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                  {horse.course && (
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-gold-bright)' }}>
+                      {horse.course}
+                    </div>
+                  )}
+                  {(displayTime || horse.off_time) && (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {displayTime || horse.off_time}
+                      {timeLabel && <span style={{ marginLeft: 3 }}>{timeLabel}</span>}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
-                {horse.course && (
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-gold-bright)' }}>
-                    {horse.course}
-                  </div>
+
+              {/* Action row */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                {horse.race_id && (
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => navigate(`/race/${horse.race_id}`)}
+                    style={{ fontSize: 12, padding: '5px 12px' }}
+                  >
+                    View Race →
+                  </button>
                 )}
-                {horse.off_time && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                    {horse.off_time}
-                  </div>
-                )}
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => navigate(`/horse/${horse.horse_id}`)}
+                  style={{ fontSize: 12, padding: '5px 12px' }}
+                >
+                  Horse Profile
+                </button>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
