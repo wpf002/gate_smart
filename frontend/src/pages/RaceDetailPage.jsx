@@ -625,6 +625,7 @@ export default function RaceDetailPage() {
                   scorecards={scorecardData?.scorecards || []}
                   course={race?.course || ''}
                   raceName={race?.title || race?.race_name || ''}
+                  region={race?.region || ''}
                 />
               ))}
             </div>

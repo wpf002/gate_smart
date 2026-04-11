@@ -20,14 +20,58 @@ function PosBadge({ pos, fieldSize }) {
   );
 }
 
-// ── Inline past performances ───────────────────────────────────────────────────
-function RecentForm({ horse }) {
+// ── UK/IRE form string chips ───────────────────────────────────────────────────
+const FORM_CHAR_COLOR = {
+  '1': '#FFD700', '2': '#C0C0C0', '3': '#CD7F32',
+  'F': 'var(--accent-red-bright)', 'P': 'var(--accent-red-bright)',
+  'U': 'var(--accent-red-bright)', 'R': 'var(--accent-red-bright)',
+  'B': 'var(--accent-red-bright)', 'S': 'var(--accent-red-bright)',
+};
+
+function FormChips({ formString }) {
+  // Split on separators, keep each meaningful run character
+  const tokens = (formString || '').split('').filter(c => c !== '/' );
+  if (tokens.every(c => c === '-')) return null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+        Recent Form
+      </div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+        {tokens.map((c, i) => {
+          if (c === '-') {
+            return <span key={i} style={{ color: 'var(--border-subtle)', fontSize: 14, lineHeight: 1 }}>·</span>;
+          }
+          const color = FORM_CHAR_COLOR[c] || (parseInt(c) ? 'var(--text-secondary)' : 'var(--text-muted)');
+          return (
+            <span key={i} style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 22, height: 22, borderRadius: 4,
+              background: 'var(--bg-card)',
+              border: `1px solid ${color === '#FFD700' ? 'rgba(201,162,39,0.4)' : 'var(--border-subtle)'}`,
+              fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12,
+              color,
+            }}>
+              {c}
+            </span>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginTop: 6, fontSize: 10, color: 'var(--text-muted)' }}>
+        <span>1=Win</span><span>2=2nd</span><span>3=3rd</span>
+        <span style={{ color: 'var(--accent-red-bright)' }}>F=Fell · P=PU · U=Unseated</span>
+      </div>
+    </div>
+  );
+}
+
+// ── US Equibase past performances ─────────────────────────────────────────────
+function EquibasePP({ horse }) {
   const [perf, setPerf] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const fetchedRef = useRef(false);
 
-  // Fire on first render of this component (called when row expands)
   if (!fetchedRef.current && !loading && !perf && !error) {
     fetchedRef.current = true;
     setLoading(true);
@@ -68,14 +112,11 @@ function RecentForm({ horse }) {
             borderRadius: 4,
             background: 'var(--bg-card)',
           }}>
-            {/* Date + track */}
             <div>
               <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>{r.pp_race_date?.slice(5)}</div>
               <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{r.pp_track_code}</div>
             </div>
-            {/* Position */}
             <PosBadge pos={r.official_finish} fieldSize={r.field_size > 0 ? r.field_size : null} />
-            {/* Dist / going / comment */}
             <div style={{ minWidth: 0 }}>
               <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>
                 {[r.pp_distance, r.pp_track_condition].filter(Boolean).join(' · ')}
@@ -86,7 +127,6 @@ function RecentForm({ horse }) {
                 </span>
               )}
             </div>
-            {/* Speed figure */}
             {r.speed_figure > 0 && (
               <span style={{
                 fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12,
@@ -100,6 +140,14 @@ function RecentForm({ horse }) {
       </div>
     </div>
   );
+}
+
+// ── Region-aware form display ──────────────────────────────────────────────────
+function RecentForm({ horse, region }) {
+  const isNA = ['USA', 'CAN'].includes((region || '').toUpperCase());
+  if (isNA) return <EquibasePP horse={horse} />;
+  if (horse.form) return <FormChips formString={horse.form} />;
+  return null;
 }
 
 export function HorseRowSkeleton() {
@@ -131,7 +179,7 @@ export function HorseRowSkeleton() {
  *   raceId     {string}
  *   scorecards {array}    array of scorecards from /advisor/scorecard (optional)
  */
-export function HorseRow({ horse, analysis, raceId, scorecards = [], course = '', raceName = '' }) {
+export function HorseRow({ horse, analysis, raceId, scorecards = [], course = '', raceName = '', region = '' }) {
   const navigate = useNavigate();
   const addToBetSlip = useAppStore((s) => s.addToBetSlip);
   const betSlip = useAppStore((s) => s.betSlip);
@@ -350,7 +398,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             )}
           </div>
 
-          <RecentForm horse={horse} />
+          <RecentForm horse={horse} region={region} />
 
           {/* View horse profile link */}
           <button
