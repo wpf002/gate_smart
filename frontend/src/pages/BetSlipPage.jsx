@@ -304,8 +304,8 @@ export default function BetSlipPage() {
                 {trading ? 'Placing paper bets…' : 'Paper Trade These Bets'}
               </button>
               <button
-                className="btn btn-full"
-                style={{ fontSize: 14, border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', background: 'transparent' }}
+                className="btn btn-primary btn-full"
+                style={{ fontSize: 14 }}
                 onClick={() => setTellerOpen(true)}
               >
                 Place Bet at Counter
