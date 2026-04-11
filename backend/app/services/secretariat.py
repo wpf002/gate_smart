@@ -777,6 +777,7 @@ async def score_race(race_data: dict) -> dict:
         "surface": race_data.get("surface", ""),
         "going": race_data.get("going", ""),
         "race_class": race_data.get("race_class", ""),
+        "region": race_data.get("region", ""),
         "field_size": len(runners),
         "runners_summary": [
             {
