@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { trackRaceAnalysis, trackScoreCardViewed, trackDebriefViewed } from '../utils/analytics';
 import { useQuery } from '@tanstack/react-query';
@@ -352,13 +352,14 @@ export default function RaceDetailPage() {
   const { data: race, isLoading } = useQuery({
     queryKey: ['race', raceId],
     queryFn: () => getRaceDetail(raceId),
-    onSuccess: (data) => {
-      // Auto-load results for finished races
-      if (isRaceDefinitelyFinished(data) && !raceResults) {
-        getRaceResults(raceId).then(setRaceResults).catch(() => {});
-      }
-    },
   });
+
+  // Auto-load official results when a finished race is loaded (onSuccess removed in RQ v5)
+  useEffect(() => {
+    if (race && isRaceDefinitelyFinished(race) && !raceResults) {
+      getRaceResults(raceId).then(setRaceResults).catch(() => {});
+    }
+  }, [race, raceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // B1: Fire analysis + scorecard concurrently
   const runAnalysisAndScore = (mode = analysisMode) => {

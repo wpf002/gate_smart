@@ -37,6 +37,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
   const navigate = useNavigate();
   const addToBetSlip = useAppStore((s) => s.addToBetSlip);
   const betSlip = useAppStore((s) => s.betSlip);
+  const experienceLevel = useAppStore((s) => s.userProfile?.experienceLevel);
   const [expanded, setExpanded] = useState(false);
   const [added, setAdded] = useState(false);
 
@@ -81,7 +82,10 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
     setTimeout(() => setAdded(false), 1500);
   };
 
-  const hasExpandedContent = analysisData?.summary || scorecard;
+  const summaryText = experienceLevel === 'beginner'
+    ? (analysisData?.summary_beginner || analysisData?.summary)
+    : analysisData?.summary;
+  const hasExpandedContent = !!(summaryText || scorecard);
 
   return (
     <div
@@ -205,7 +209,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
         }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
             {/* Analysis text */}
-            {analysisData?.summary && (
+            {summaryText && (
               <div style={{ flex: 1, minWidth: 0 }}>
                 {analysisData.strengths?.length > 0 && (
                   <div style={{ marginBottom: 6 }}>
@@ -228,7 +232,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
                   </div>
                 )}
                 <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                  {analysisData.summary}
+                  {summaryText}
                 </p>
               </div>
             )}
