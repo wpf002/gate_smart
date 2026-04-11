@@ -169,18 +169,20 @@ function TellerScriptModal({ bets, onClose }) {
   };
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 9000,
+      padding: '24px 16px',
     }} onClick={onClose}>
       <div style={{
         background: 'var(--bg-elevated)',
-        borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
-        padding: '20px 20px 32px',
+        borderRadius: 'var(--radius-lg)',
+        padding: '24px',
         width: '100%',
-        maxWidth: 480,
-        maxHeight: '70vh',
+        maxWidth: 440,
+        maxHeight: '80vh',
         overflowY: 'auto',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
       }} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
           Teller Script
@@ -303,7 +305,7 @@ export default function BetSlipPage() {
               </button>
               <button
                 className="btn btn-full"
-                style={{ fontSize: 14, border: '1px solid var(--accent-gold-dim)', color: 'var(--accent-gold)' }}
+                style={{ fontSize: 14, border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', background: 'transparent' }}
                 onClick={() => setTellerOpen(true)}
               >
                 Place Bet at Counter
