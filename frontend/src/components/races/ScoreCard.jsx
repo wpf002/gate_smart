@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import RadarChart from './RadarChart';
+import { useAppStore } from '../../store';
 
 const DIMENSIONS = [
-  { key: 'speed',          label: 'SPEED' },
-  { key: 'class',          label: 'CLASS' },
-  { key: 'form',           label: 'FORM'  },
-  { key: 'pace_fit',       label: 'PACE'  },
-  { key: 'value',          label: 'VALUE' },
-  { key: 'trainer_jockey', label: 'T/J'   },
+  { key: 'speed',          label: 'SPEED',        plainLabel: 'Speed',       plainDesc: 'How fast this horse has run compared to today\'s field' },
+  { key: 'class',          label: 'CLASS',        plainLabel: 'Competition', plainDesc: 'Quality of races it has competed in — higher is tougher' },
+  { key: 'form',           label: 'FORM',         plainLabel: 'Recent Runs', plainDesc: 'How it has finished in its most recent races' },
+  { key: 'pace_fit',       label: 'PACE',         plainLabel: 'Race Style',  plainDesc: 'Does its running style suit the way this race is likely to unfold' },
+  { key: 'value',          label: 'VALUE',        plainLabel: 'Bet Value',   plainDesc: 'Is the odds price better than what Secretariat thinks it should be' },
+  { key: 'trainer_jockey', label: 'T/J',          plainLabel: 'Connections', plainDesc: 'Trainer and jockey win rates and their history together' },
 ];
 
 function scoreTextColor(score) {
@@ -50,6 +51,8 @@ function overallBadgeStyle(score) {
  */
 export default function ScoreCard({ scorecard, expanded, onToggle }) {
   const [activeDim, setActiveDim] = useState(null);
+  const experienceLevel = useAppStore((s) => s.userProfile?.experienceLevel);
+  const isPlain = experienceLevel === 'beginner';
 
   const {
     horse_name = '',
@@ -135,27 +138,35 @@ export default function ScoreCard({ scorecard, expanded, onToggle }) {
             />
           </div>
 
+          {/* Score legend */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, fontSize: 10, marginBottom: 10 }}>
+            <span style={{ color: 'var(--accent-red-bright)' }}>0–49 weak</span>
+            <span style={{ color: 'var(--accent-gold-bright)' }}>50–69 average</span>
+            <span style={{ color: 'var(--accent-green-bright)' }}>70+ strong</span>
+          </div>
+
           {/* Score bars — tap/click to reveal note */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 12 }}>
-            {DIMENSIONS.map(({ key, label }) => {
+            {DIMENSIONS.map(({ key, label, plainLabel, plainDesc }) => {
               const score = scores[key] ?? 0;
               const noteVisible = activeDim === key;
+              const dimLabel = isPlain ? plainLabel : label;
               return (
                 <div
                   key={key}
                   onClick={() => setActiveDim(noteVisible ? null : key)}
-                  style={{ cursor: score_notes[key] ? 'pointer' : 'default' }}
+                  style={{ cursor: 'pointer' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 3, paddingBottom: 3 }}>
                     <span style={{
                       fontFamily: 'var(--font-mono)',
                       fontSize: 11,
-                      textTransform: 'uppercase',
+                      textTransform: isPlain ? 'none' : 'uppercase',
                       color: 'var(--text-muted)',
                       width: 90,
                       flexShrink: 0,
                     }}>
-                      {label}
+                      {dimLabel}
                     </span>
                     <div style={{
                       flex: 1,
@@ -182,7 +193,7 @@ export default function ScoreCard({ scorecard, expanded, onToggle }) {
                       {score}
                     </span>
                   </div>
-                  {noteVisible && score_notes[key] && (
+                  {noteVisible && (
                     <div style={{
                       fontSize: 11,
                       fontStyle: 'italic',
@@ -191,7 +202,7 @@ export default function ScoreCard({ scorecard, expanded, onToggle }) {
                       paddingBottom: 4,
                       lineHeight: 1.4,
                     }}>
-                      {score_notes[key]}
+                      {isPlain ? plainDesc : (score_notes[key] || plainDesc)}
                     </div>
                   )}
                 </div>

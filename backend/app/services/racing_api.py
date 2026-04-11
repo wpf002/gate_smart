@@ -398,6 +398,7 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
             "non_runner": is_scratched,
             "scratched": is_scratched,
             "status": "scratched" if is_scratched else "",
+            "claiming_price": entry.get("claiming_price"),
         })
 
     return {

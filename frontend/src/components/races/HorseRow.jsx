@@ -257,28 +257,29 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
         onMouseEnter={e => { if (hasExpandedContent) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
       >
-        {/* Score ring or program number */}
-        {scoreClass ? (
-          <div className={`score-ring ${scoreClass}`}>{score}</div>
-        ) : (
-          <div style={{
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
-            background: isScratched ? 'var(--bg-elevated)' : 'rgba(201,162,39,0.15)',
-            border: `2px solid ${isScratched ? 'var(--border-subtle)' : 'var(--accent-gold-dim)'}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontFamily: 'var(--font-display)',
-            fontSize: 15,
-            fontWeight: 700,
-            color: isScratched ? 'var(--text-muted)' : 'var(--accent-gold)',
-            flexShrink: 0,
+        {/* Program number + score ring */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+            color: 'var(--text-muted)', lineHeight: 1,
           }}>
-            {horse.program_number || horse.cloth_number || horse.stall_number || '?'}
-          </div>
-        )}
+            #{horse.program_number || horse.cloth_number || horse.stall_number || '?'}
+          </span>
+          {scoreClass ? (
+            <div className={`score-ring ${scoreClass}`}>{score}</div>
+          ) : (
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: isScratched ? 'var(--bg-elevated)' : 'rgba(201,162,39,0.15)',
+              border: `2px solid ${isScratched ? 'var(--border-subtle)' : 'var(--accent-gold-dim)'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700,
+              color: isScratched ? 'var(--text-muted)' : 'var(--accent-gold)',
+            }}>
+              {horse.program_number || horse.cloth_number || horse.stall_number || '?'}
+            </div>
+          )}
+        </div>
 
         {/* Horse info */}
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -300,6 +301,11 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
             {[horse.jockey, horse.trainer].filter(Boolean).join(' · ')}
           </div>
+          {horse.claiming_price && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+              Claim: ${Number(horse.claiming_price).toLocaleString()}
+            </div>
+          )}
           {analysisData?.recommended_bet && (
             <div style={{ marginTop: 4 }}>
               {(() => {

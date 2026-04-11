@@ -149,7 +149,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], raceId = '', cou
         {summaryText}
       </p>
 
-      {analysis.pace_scenario && (
+      {analysis.pace_scenario && viewMode === 'technical' && (
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
             Pace Scenario
@@ -205,6 +205,13 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], raceId = '', cou
                   <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold-bright)' }}>
                     {p.number ? `${p.number} ` : ''}{p.horse_name}
                   </span>
+                  {(() => {
+                    const r = findRunner(p.horse_name);
+                    const odds = r?.odds || r?.sp;
+                    return odds ? (
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent-gold)', marginLeft: 6 }}>{odds}</span>
+                    ) : null;
+                  })()}
                   {p.reasoning && viewMode === 'technical' && (
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 6 }}>— {p.reasoning}</span>
                   )}
@@ -620,6 +627,7 @@ export default function RaceDetailPage() {
             {(race.distance || race.distance_f) && <span>📏 {formatDistance(race.distance, race.distance_f, race.region)}</span>}
             {race.surface && <span>🌿 {race.surface}</span>}
             {race.going && <span>🏁 Track: {race.going}</span>}
+            {race.race_class && <span>🏷 {race.race_class}</span>}
             {formatPurse(race) && <span>💰 {formatPurse(race)}</span>}
             {race.runners?.length && <span>🏇 {race.runners.length} runners</span>}
             {raceFinished && <span style={{ color: 'var(--accent-gold-bright)', fontWeight: 600 }}>✓ Finished</span>}
