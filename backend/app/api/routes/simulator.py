@@ -1,7 +1,10 @@
 import asyncio
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 import msgspec
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -204,12 +207,13 @@ async def _find_race_result_for_settle(race_id: str) -> dict | None:
                 )
                 if found:
                     return found
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Race result lookup failed (attempt %d/3) for %s: %s", attempt + 1, race_id, exc)
 
         if attempt < 2:
             await asyncio.sleep(2)
 
+    logger.warning("Could not find results for race_id=%s after 3 attempts", race_id)
     return None
 
 

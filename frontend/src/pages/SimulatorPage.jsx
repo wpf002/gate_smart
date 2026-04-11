@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../components/common/PageHeader';
@@ -186,7 +186,7 @@ function BetCard({ bet, onSettle, settling, settleMsg, onDelete, deleting }) {
               cursor: 'pointer',
               fontSize: 16,
               lineHeight: 1,
-              padding: '2px 4px',
+              padding: '6px 8px',
             }}
             title="Remove bet"
           >
@@ -283,7 +283,7 @@ function TodayPnlBanner({ bets }) {
   );
 }
 
-function BetsTab({ bets, onSettle, settling, settleMsg, onReset, resetting, onDelete, deleting }) {
+function BetsTab({ bets, onSettle, settling, settleMsg, onReset, resetting, onDelete, deleting, deleteError, onClearDeleteError }) {
   if (!bets || bets.length === 0) {
     return (
       <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -317,6 +317,19 @@ function BetsTab({ bets, onSettle, settling, settleMsg, onReset, resetting, onDe
           {resetting ? 'Clearing…' : 'Clear All'}
         </button>
       </div>
+      {deleteError && (
+        <div
+          onClick={onClearDeleteError}
+          style={{
+            marginBottom: 10, padding: '8px 12px',
+            background: 'rgba(239,68,68,0.1)', borderRadius: 8,
+            borderLeft: '2px solid var(--accent-red-bright)',
+            fontSize: 12, color: 'var(--accent-red-bright)', cursor: 'pointer',
+          }}
+        >
+          {deleteError} · tap to dismiss
+        </div>
+      )}
       {bets.map((bet) => (
         <BetCard key={bet.bet_id} bet={bet} onSettle={onSettle} settling={settling} settleMsg={settleMsg} onDelete={onDelete} deleting={deleting} />
       ))}
@@ -438,14 +451,16 @@ export default function SimulatorPage() {
   });
 
   const [deleting, setDeleting] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
   const handleDelete = useCallback(async (betId) => {
     setDeleting(betId);
+    setDeleteError(null);
     try {
       await simDeleteBet(betId);
       qc.invalidateQueries({ queryKey: ['sim-bets'] });
       qc.invalidateQueries({ queryKey: ['sim-stats'] });
     } catch {
-      // silent — bet stays visible
+      setDeleteError('Could not remove bet — try again');
     } finally {
       setDeleting(null);
     }
@@ -477,7 +492,7 @@ export default function SimulatorPage() {
   }, [resetMutation]);
 
   const stats = statsData;
-  const bets = betsData?.bets || [];
+  const bets = useMemo(() => betsData?.bets || [], [betsData]);
 
   const TABS = [
     { id: 'bank',  label: 'Bank' },
@@ -543,6 +558,8 @@ export default function SimulatorPage() {
           resetting={resetMutation.isPending}
           onDelete={handleDelete}
           deleting={deleting}
+          deleteError={deleteError}
+          onClearDeleteError={() => setDeleteError(null)}
         />
       )}
       {tab === 'stats' && (

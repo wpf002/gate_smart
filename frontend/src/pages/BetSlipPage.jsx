@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store';
@@ -224,13 +224,15 @@ export default function BetSlipPage() {
   const [tellerOpen, setTellerOpen] = useState(false);
 
   // Deduplicate by horse_id + bet_type in case of stale persisted state
-  const seen = new Set();
-  const dedupedSlip = betSlip.filter((b) => {
-    const key = `${b.horse_id}::${b.bet_type}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const dedupedSlip = useMemo(() => {
+    const seen = new Set();
+    return betSlip.filter((b) => {
+      const key = `${b.horse_id}::${b.bet_type}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [betSlip]);
 
   const totalStake = dedupedSlip.reduce((sum, b) => sum + (b.stake || 0), 0);
 
