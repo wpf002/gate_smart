@@ -6,7 +6,7 @@ const NAV_ITEMS = [
   { path: '/search', icon: '🔍', label: 'Search' },
   { path: '/advisor', icon: '🤖', label: 'Advisor' },
   { path: '/betslip', icon: '🎫', label: 'Bet Slip' },
-  { path: '/education', icon: '📚', label: 'Learn' },
+  { path: '/profile', icon: '👤', label: 'Profile' },
 ];
 
 export default function BottomNav() {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import PageHeader from '../components/common/PageHeader';
 import { authLogin, authRegister } from '../utils/api';
@@ -14,12 +14,16 @@ export default function LoginPage() {
 
   const { setAuth, userProfile } = useAppStore();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Support ?from= query param or location.state.from for redirect-back
+  const params = new URLSearchParams(location.search);
+  const returnTo = params.get('from') || location.state?.from || '/';
 
   const loginMutation = useMutation({
     mutationFn: () => authLogin(email.trim().toLowerCase(), password),
     onSuccess: ({ token, user }) => {
       setAuth(token, user);
-      navigate('/profile');
+      navigate(returnTo, { replace: true });
     },
     onError: (err) => {
       setError(err?.response?.data?.detail || 'Login failed');
@@ -36,7 +40,7 @@ export default function LoginPage() {
       }),
     onSuccess: ({ token, user }) => {
       setAuth(token, user);
-      navigate('/profile');
+      navigate(returnTo, { replace: true });
     },
     onError: (err) => {
       setError(err?.response?.data?.detail || 'Registration failed');

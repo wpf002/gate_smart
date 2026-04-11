@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
@@ -64,6 +64,7 @@ function SectionLabel({ children }) {
 export default function ProfilePage() {
   const { userProfile, setUserProfile, authUser, authToken, setAuth, clearAuth } = useAppStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
 
   const isLoggedIn = !!(authToken && authUser);
@@ -155,7 +156,7 @@ export default function ProfilePage() {
             </div>
             <button
               className="btn btn-primary"
-              onClick={() => navigate('/login')}
+              onClick={() => navigate('/login', { state: { from: location.pathname } })}
               style={{ fontSize: 12, padding: '6px 14px', whiteSpace: 'nowrap' }}
             >
               Sign in

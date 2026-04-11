@@ -522,6 +522,7 @@ export default function RaceDetailPage() {
     setAnalysis(null);
     setScorecardData(null);
     setAnalyzeError(null);
+    setValueAlerts(null);
     setActiveTab('analysis');
   };
 
