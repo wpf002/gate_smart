@@ -465,9 +465,11 @@ async def get_na_racecards_full(date: str = None) -> dict:
         meet_id = meet.get("meet_id", "")
         if not meet_id:
             continue
-        # Skip exotic wager pool "meets" — they duplicate individual race entries
-        track_name = meet.get("track_name", "")
-        if _WAGER_POOL.search(track_name):
+        # Skip exotic wager pool "meets" — they duplicate individual race entries.
+        # Check all string fields on the meet object (name, track_name, meet_id, etc.)
+        # because the API stores the wager name in different fields depending on pool type.
+        meet_text = " ".join(str(v) for v in meet.values() if isinstance(v, str))
+        if _WAGER_POOL.search(meet_text):
             continue
         try:
             entries_data = await get_na_meet_entries(meet_id)
