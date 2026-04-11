@@ -427,9 +427,31 @@ async def get_na_racecards_full(date: str = None) -> dict:
     """
     Fetch all NA meets for a date and expand each with full entries.
     Returns a unified structure matching the standard racecards format.
+
+    Note: get_na_meet_entries returns ALL entries for a meet (which can span
+    multiple days). We filter by post_time_long so we only return races whose
+    scheduled post time falls on the requested date (UTC calendar day).
     """
+    from datetime import date as date_cls, timedelta, datetime, timezone as tz
+
     meets_data = await get_na_meets(date)
     meets = meets_data.get("meets", [])
+
+    # Build UTC millisecond window for the target date
+    if not date or date == "today":
+        target_date = date_cls.today()
+    elif date == "tomorrow":
+        target_date = date_cls.today() + timedelta(days=1)
+    else:
+        try:
+            target_date = date_cls.fromisoformat(date)
+        except Exception:
+            target_date = date_cls.today()
+
+    # Start of target day UTC (inclusive) through start of the day after (exclusive)
+    day_start_ms = int(datetime(target_date.year, target_date.month, target_date.day,
+                                tzinfo=tz.utc).timestamp() * 1000)
+    day_end_ms = day_start_ms + 86_400_000  # +24 hours
 
     all_races = []
     for meet in meets:
@@ -442,6 +464,14 @@ async def get_na_racecards_full(date: str = None) -> dict:
             # entries_data carries track_name, track_id, date, meet_id
             meet_info = {k: v for k, v in entries_data.items() if k != "races"}
             for race in races:
+                # Skip races whose post time is not on the target date
+                ptl = race.get("post_time_long")
+                if ptl:
+                    try:
+                        if not (day_start_ms <= int(ptl) < day_end_ms):
+                            continue
+                    except (TypeError, ValueError):
+                        pass
                 all_races.append(_normalize_na_race(race, meet_info))
         except Exception:
             continue
