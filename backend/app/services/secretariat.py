@@ -291,13 +291,14 @@ def _trunc(s: str, limit: int) -> str:
 
 def _truncate_analysis(data: dict) -> dict:
     """Hard-cap field lengths after Claude generation — prompt instructions can't guarantee this."""
-    SENT = 220   # one sentence (increased to accommodate richer content)
-    PHRASE = 60  # short phrase
+    SUMMARY = 600  # 2-3 sentence race/overall summaries
+    SENT = 300     # single-sentence fields
+    PHRASE = 60    # short phrases
 
-    data['race_summary'] = _trunc(data.get('race_summary', ''), SENT)
+    data['race_summary'] = _trunc(data.get('race_summary', ''), SUMMARY)
     data['pace_scenario'] = _trunc(data.get('pace_scenario', ''), SENT)
-    data['overall_summary'] = _trunc(data.get('overall_summary', ''), SENT)
-    data['overall_summary_beginner'] = _trunc(data.get('overall_summary_beginner', ''), SENT)
+    data['overall_summary'] = _trunc(data.get('overall_summary', ''), SUMMARY)
+    data['overall_summary_beginner'] = _trunc(data.get('overall_summary_beginner', ''), SUMMARY)
     data['beginner_tip'] = _trunc(data.get('beginner_tip', ''), SENT)
 
     la = data.get('longshot_alert') or {}
@@ -447,8 +448,8 @@ Return this JSON exactly:
     "trifecta":  "Say to teller: '$X Trifecta, N-M-K, race R'",
     "superfecta":"Say to teller: '$X Superfecta, N-M-K-J, race R'"
   }},
-  "overall_summary": "one sentence — technical, for experienced bettors",
-  "overall_summary_beginner": "one sentence — plain English, no jargon, for first-time racegoers",
+  "overall_summary": "2-3 sentences — technical, for experienced bettors. Complete sentences, do not cut off mid-thought.",
+  "overall_summary_beginner": "2-3 sentences — plain English, no jargon, for first-time racegoers. Complete sentences.",
   "beginner_tip": "one concrete action a first-time bettor can take today",
   "confidence": "low/medium/high"
 }}"""
@@ -565,8 +566,8 @@ Return this JSON exactly:
     "trifecta":  "Say to teller: '$X Trifecta, N-M-K, race R'",
     "superfecta":"Say to teller: '$X Superfecta, N-M-K-J, race R'"
   }},
-  "overall_summary": "one sentence — technical, for experienced bettors",
-  "overall_summary_beginner": "one sentence — plain English, no jargon, for first-time racegoers",
+  "overall_summary": "2-3 sentences — technical, for experienced bettors. Complete sentences, do not cut off mid-thought.",
+  "overall_summary_beginner": "2-3 sentences — plain English, no jargon, for first-time racegoers. Complete sentences.",
   "beginner_tip": "one concrete action a first-time bettor can take today",
   "confidence": "low/medium/high"
 }}"""
