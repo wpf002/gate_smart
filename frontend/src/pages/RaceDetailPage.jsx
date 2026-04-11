@@ -859,7 +859,7 @@ export default function RaceDetailPage() {
                         {race?.course}
                       </span>
                       <span style={{ width: 1, height: 12, background: 'var(--border-subtle)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Connections</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trainers & Jockeys</span>
                     </div>
 
                     {/* Trainers | Jockeys */}
