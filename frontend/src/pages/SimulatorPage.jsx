@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../components/common/PageHeader';
 import { simGetBets, simGetStats, simTopup, simReset, simSettle, simDeleteBet } from '../utils/api';
@@ -125,6 +126,7 @@ function BetStatusBadge({ status }) {
 }
 
 function BetCard({ bet, onSettle, settling, settleMsg, onDelete, deleting }) {
+  const navigate = useNavigate();
   const isPending = bet.status === 'pending';
   const pnlColor = bet.pnl >= 0 ? 'var(--accent-green-bright)' : 'var(--accent-red-bright)';
   const isThisSettling = settling === bet.race_id;
@@ -147,6 +149,14 @@ function BetCard({ bet, onSettle, settling, settleMsg, onDelete, deleting }) {
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
             {bet.bet_type?.toUpperCase()} · {bet.odds}
             {bet.course && <span> · {bet.course}</span>}
+            {bet.race_id && (
+              <button
+                onClick={() => navigate(`/race/${bet.race_id}`)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-gold-dim)', fontSize: 11, padding: '0 0 0 6px' }}
+              >
+                → Race
+              </button>
+            )}
           </div>
           {(bet.jockey || bet.trainer) && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>

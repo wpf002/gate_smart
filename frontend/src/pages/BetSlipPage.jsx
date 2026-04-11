@@ -57,6 +57,7 @@ function parseFractionalOdds(odds) {
 
 function BetItem({ bet }) {
   const { removeFromBetSlip, updateStake } = useAppStore();
+  const navigate = useNavigate();
   const decimal = parseFractionalOdds(bet.odds);
   const payout = decimal ? (bet.stake * decimal).toFixed(2) : null;
   const profit = decimal ? (bet.stake * (decimal - 1)).toFixed(2) : null;
@@ -75,6 +76,14 @@ function BetItem({ bet }) {
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
             {bet.bet_type?.toUpperCase()} · {bet.odds}
             {bet.course && <span> · {bet.course}</span>}
+            {bet.race_id && (
+              <button
+                onClick={() => navigate(`/race/${bet.race_id}`)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-gold-dim)', fontSize: 11, padding: '0 0 0 6px' }}
+              >
+                → Race
+              </button>
+            )}
           </div>
           {(bet.jockey || bet.trainer) && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>

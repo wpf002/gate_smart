@@ -256,6 +256,24 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* Quick nav to pages not in mobile bottom nav */}
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <button
+            className="btn btn-secondary"
+            style={{ flex: 1, fontSize: 13 }}
+            onClick={() => navigate('/simulator')}
+          >
+            📈 Simulator
+          </button>
+          <button
+            className="btn btn-secondary"
+            style={{ flex: 1, fontSize: 13 }}
+            onClick={() => navigate('/education')}
+          >
+            📚 Learn
+          </button>
+        </div>
+
         <div style={{
           marginTop: 16,
           padding: '10px 14px',
