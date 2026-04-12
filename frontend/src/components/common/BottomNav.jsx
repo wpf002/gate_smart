@@ -5,7 +5,7 @@ const NAV_ITEMS = [
   { path: '/', icon: '🏠', label: 'Races' },
   { path: '/search', icon: '🔍', label: 'Search' },
   { path: '/advisor', icon: '🤖', label: 'Advisor' },
-  { path: '/betslip', icon: '🎫', label: 'Bet Slip' },
+  { path: '/betslip', icon: '🏇', label: 'My Picks' },
   { path: '/profile', icon: '👤', label: 'Profile' },
 ];
 
@@ -26,8 +26,6 @@ export default function BottomNav() {
       {NAV_ITEMS.map(({ path, icon, label }) => {
         const active = location.pathname === path ||
           (path !== '/' && location.pathname.startsWith(path));
-        const isBetSlip = path === '/betslip';
-
         return (
           <button
             key={path}
@@ -51,7 +49,7 @@ export default function BottomNav() {
             <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em' }}>
               {label}
             </span>
-            {isBetSlip && betSlip.length > 0 && (
+            {path === '/betslip' && betSlip.length > 0 && (
               <span style={{
                 position: 'absolute',
                 top: 6,

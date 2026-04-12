@@ -6,10 +6,9 @@ import RaceDetailPage from './pages/RaceDetailPage';
 import HorseDetailPage from './pages/HorseDetailPage';
 import SearchPage from './pages/SearchPage';
 import AdvisorPage from './pages/AdvisorPage';
-import BetSlipPage from './pages/BetSlipPage';
+import MyPicksPage from './pages/MyPicksPage';
 import EducationPage from './pages/EducationPage';
 import ProfilePage from './pages/ProfilePage';
-import SimulatorPage from './pages/SimulatorPage';
 import LoginPage from './pages/LoginPage';
 import AccuracyPage from './pages/AccuracyPage';
 import OnboardingFlow from './components/common/OnboardingFlow';
@@ -58,9 +57,8 @@ class ErrorBoundary extends Component {
 const NAV_ITEMS = [
   { path: '/', icon: '🏠', label: 'Races' },
   { path: '/search', icon: '🔍', label: 'Search' },
-  { path: '/simulator', icon: '📈', label: 'Simulator' },
   { path: '/advisor', icon: '🤖', label: 'Advisor' },
-  { path: '/betslip', icon: '🎫', label: 'Bet Slip' },
+  { path: '/betslip', icon: '🏇', label: 'My Picks' },
   { path: '/education', icon: '📚', label: 'Learn' },
   { path: '/profile', icon: '👤', label: 'Profile' },
 ];
@@ -76,7 +74,7 @@ function SideNav() {
       {NAV_ITEMS.map(({ path, icon, label }) => {
         const active = location.pathname === path ||
           (path !== '/' && location.pathname.startsWith(path));
-        const isBetSlip = path === '/betslip';
+        const isMyPicks = path === '/betslip';
         return (
           <button
             key={path}
@@ -85,7 +83,7 @@ function SideNav() {
           >
             <span className="side-nav-icon">{icon}</span>
             <span>{label}</span>
-            {isBetSlip && betSlip.length > 0 && (
+            {isMyPicks && betSlip.length > 0 && (
               <span style={{
                 marginLeft: 'auto',
                 background: 'var(--accent-gold)',
@@ -168,9 +166,8 @@ function AppShell() {
             <Route path="/horse/:horseId" element={<HorseDetailPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/advisor" element={<AdvisorPage />} />
-            <Route path="/betslip" element={<BetSlipPage />} />
+            <Route path="/betslip" element={<MyPicksPage />} />
             <Route path="/education" element={<EducationPage />} />
-            <Route path="/simulator" element={<SimulatorPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/accuracy" element={<AccuracyPage />} />
