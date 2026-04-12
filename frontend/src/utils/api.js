@@ -113,7 +113,13 @@ export const getRaceFairPrices = (raceId) =>
 
 // ── Secretariat Accuracy ──────────────────────────────────────────────────────
 export const getSecretariatAccuracy = () =>
-  api.get('/advisor/accuracy').then((r) => r.data);
+  api.get('/advisor/accuracy').then((r) => r.data)
+
+export const getDailyAccuracy = (date) =>
+  api.get('/accuracy/daily', { params: date ? { date } : {} }).then((r) => r.data)
+
+export const getAccuracyHistory = () =>
+  api.get('/accuracy/history').then((r) => r.data);
 
 // ── Race Debrief ──────────────────────────────────────────────────────────────
 export const getRaceDebrief = (raceId) =>

@@ -350,43 +350,52 @@ export default function BetSlipPage() {
               <BetItem key={`${bet.horse_id}-${bet.bet_type}-${i}`} bet={bet} />
             ))}
 
+            {/* ── Place Bets Online ──────────────────────────────── */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(201,162,39,0.08) 0%, var(--bg-elevated) 100%)',
+              borderRadius: 'var(--radius-md)',
+              padding: '14px',
+              border: '1px solid var(--border-gold)',
+              marginTop: 8,
+              marginBottom: 12,
+            }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--accent-gold)', marginBottom: 4 }}>
+                Ready to bet? Choose where to place it:
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+                Total stake: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-primary)' }}>${totalStake.toFixed(2)}</span>
+              </div>
+              <button
+                className="btn btn-primary btn-full"
+                style={{ fontSize: 14 }}
+                onClick={() => setDrawerOpen(true)}
+              >
+                🏦 Bet Online — Open Sportsbook
+              </button>
+            </div>
+
+            {/* ── Teller / Paper Trade ───────────────────────────── */}
             <div style={{
               background: 'var(--bg-elevated)',
               borderRadius: 'var(--radius-md)',
               padding: '14px',
               border: '1px solid var(--border-medium)',
-              marginTop: 8,
+              marginBottom: 8,
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Total stake</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-                  ${totalStake.toFixed(2)}
-                </span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
-                Singles only. Each selection is an independent bet.
-              </div>
-              <button
-                className="btn btn-primary btn-full"
-                style={{ fontSize: 15, marginBottom: 8 }}
-                onClick={() => setDrawerOpen(true)}
-              >
-                Place Bets · ${totalStake.toFixed(2)}
-              </button>
               <button
                 className="btn btn-secondary btn-full"
                 style={{ fontSize: 14, marginBottom: 8 }}
+                onClick={() => setTellerOpen(true)}
+              >
+                🎯 Bet at Counter — Teller Script
+              </button>
+              <button
+                className="btn btn-secondary btn-full"
+                style={{ fontSize: 13 }}
                 disabled={trading}
                 onClick={() => paperTradeBets(dedupedSlip, qc, setTrading, setTradeResult, navigate)}
               >
-                {trading ? 'Placing paper bets…' : 'Paper Trade These Bets'}
-              </button>
-              <button
-                className="btn btn-primary btn-full"
-                style={{ fontSize: 14 }}
-                onClick={() => setTellerOpen(true)}
-              >
-                Place Bet at Counter
+                {trading ? 'Placing paper bets…' : 'Paper Trade (Practice)'}
               </button>
               {tradeResult && (
                 <div style={{ marginTop: 8, fontSize: 12, color: 'var(--accent-red-bright)', textAlign: 'center' }}>

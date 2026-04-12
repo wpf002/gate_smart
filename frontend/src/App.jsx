@@ -11,6 +11,7 @@ import EducationPage from './pages/EducationPage';
 import ProfilePage from './pages/ProfilePage';
 import SimulatorPage from './pages/SimulatorPage';
 import LoginPage from './pages/LoginPage';
+import AccuracyPage from './pages/AccuracyPage';
 import OnboardingFlow from './components/common/OnboardingFlow';
 import { useAppStore } from './store';
 
@@ -172,6 +173,7 @@ function AppShell() {
             <Route path="/simulator" element={<SimulatorPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/accuracy" element={<AccuracyPage />} />
           </Routes>
         </ErrorBoundary>
       </div>

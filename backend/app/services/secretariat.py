@@ -105,6 +105,8 @@ BEGINNER EDUCATION:
 
 Your tone: direct, confident. Sharp handicapper, no padding.
 
+CONSISTENCY RULE: Given the same race data and the same analysis mode, you must always produce the same predicted finish order and the same top recommendation. Do not vary your top pick between calls on the same race. If you are uncertain between two horses, always resolve the tie by favoring the horse with the better speed figure or, if equal, the lower morning line odds. Never flip-flop.
+
 Always respond in valid JSON as specified in each prompt. No markdown inside string values. No extra text outside the JSON object."""
 
 
@@ -469,6 +471,7 @@ Return this JSON exactly:
         response = await client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=8192,
+            temperature=0.2,
             system=SECRETARIAT_SYSTEM,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -489,6 +492,7 @@ Return this JSON exactly:
         retry_response = await client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=8192,
+            temperature=0.2,
             system=SECRETARIAT_SYSTEM,
             messages=[
                 {"role": "user", "content": prompt},
@@ -514,7 +518,16 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
     ts_context = await get_hardware_and_historical_context(runners)
     ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values()) if ts_context else ""
 
-    prompt = f"""Analyze this race. One sentence per field. Short phrases in arrays.
+    # Inject rolling calibration data so Secretariat learns from its own history
+    cal_context = await get_calibration_context()
+    cal_block = f"{cal_context}\n\n---\n\n" if cal_context else ""
+
+    prompt = (
+        f"RACE ID: {race_data.get('race_id', 'unknown')} | "
+        f"MODE: {mode} | "
+        "ANALYZE THE FOLLOWING RACE:\n\n"
+        f"{cal_block}"
+        f"""Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
@@ -582,11 +595,13 @@ Return this JSON exactly:
   "beginner_tip": "one concrete action a first-time bettor can take today",
   "confidence": "low/medium/high"
 }}"""
+    )
 
     full_text = ""
     async with client.messages.stream(
         model="claude-haiku-4-5-20251001",
         max_tokens=8192,
+        temperature=0.2,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     ) as stream:
@@ -601,6 +616,7 @@ Return this JSON exactly:
         retry_response = await client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=8192,
+            temperature=0.2,
             system=SECRETARIAT_SYSTEM,
             messages=[
                 {"role": "user", "content": prompt},
@@ -611,6 +627,27 @@ Return this JSON exactly:
         result = _truncate_analysis(_parse_json(retry_response.content[0].text))
 
     yield ("result", result)
+
+    # Background: store prediction for accuracy tracking (never blocks stream)
+    import asyncio
+    import datetime
+    predicted_finish = result.get("predicted_finish", {})
+    if predicted_finish:
+        race_date_raw = race_data.get("date") or race_data.get("race_date")
+        try:
+            race_date = datetime.date.fromisoformat(str(race_date_raw)) if race_date_raw else datetime.date.today()
+        except Exception:
+            race_date = datetime.date.today()
+        asyncio.create_task(_store_prediction(
+            race_id=race_data.get("race_id", ""),
+            race_date=race_date,
+            track_code=race_data.get("course_id") or race_data.get("track_code") or race_data.get("course", "")[:10],
+            race_name=race_data.get("race_name") or race_data.get("title", ""),
+            race_type=race_data.get("race_type") or race_data.get("type", ""),
+            surface=race_data.get("surface", ""),
+            mode=mode,
+            predicted_finish=predicted_finish,
+        ))
 
 
 async def explain_horse(horse_data: dict, race_context: dict = None) -> dict:
@@ -639,6 +676,7 @@ Return this JSON exactly:
     response = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=500,
+        temperature=0.2,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -690,6 +728,7 @@ Return JSON:
     response = await client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1500,
+        temperature=0.2,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -722,6 +761,7 @@ Return JSON:
     response = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1200,
+        temperature=0.2,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -780,6 +820,7 @@ A horse can score 90 on speed and 20 on value — that's fine and useful."""
     response = await client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1000,
+        temperature=0.2,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -890,6 +931,7 @@ Return a JSON object with EXACTLY this structure:
     response = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1500,
+        temperature=0.2,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -951,9 +993,188 @@ Return JSON: {{"answer": "your markdown-formatted answer here"}}"""
     response = await client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1000,
+        temperature=0.2,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )
 
     parsed = _parse_json(response.content[0].text)
     return parsed.get("answer", "") if isinstance(parsed, dict) else str(parsed)
+
+
+# ── Prediction Storage ────────────────────────────────────────────────────────
+
+async def _store_prediction(
+    race_id: str,
+    race_date,
+    track_code: str,
+    race_name: str,
+    race_type: str,
+    surface: str,
+    mode: str,
+    predicted_finish: dict,
+) -> None:
+    """
+    Silently insert a RacePrediction row after analysis completes.
+    Uses INSERT ... ON CONFLICT DO NOTHING — safe to call multiple times.
+    Never raises; all exceptions are suppressed.
+    """
+    try:
+        from app.core.database import _AsyncSessionLocal
+        from app.models.accuracy import RacePrediction
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        if not _AsyncSessionLocal:
+            return
+
+        first = predicted_finish.get("first") or {}
+        second = predicted_finish.get("second") or {}
+        third = predicted_finish.get("third") or {}
+        fourth = predicted_finish.get("fourth") or {}
+
+        row = {
+            "race_id": race_id,
+            "race_date": race_date,
+            "track_code": track_code,
+            "race_name": race_name,
+            "race_type": race_type,
+            "surface": surface,
+            "analysis_mode": mode,
+            "predicted_first": first.get("horse_name"),
+            "predicted_second": second.get("horse_name"),
+            "predicted_third": third.get("horse_name"),
+            "predicted_fourth": fourth.get("horse_name"),
+            "predicted_first_num": first.get("number"),
+        }
+
+        async with _AsyncSessionLocal() as db:
+            stmt = pg_insert(RacePrediction).values(**row)
+            stmt = stmt.on_conflict_do_nothing(constraint="uq_race_prediction")
+            await db.execute(stmt)
+            await db.commit()
+    except Exception:
+        pass  # Silent — never block the stream path
+
+
+# ── Daily Email Report ────────────────────────────────────────────────────────
+
+async def generate_daily_email_report(report, predictions: list) -> dict:
+    """
+    Uses Claude to write a daily performance digest email.
+    Returns { "subject": str, "html": str, "text": str }
+    report: DailyAccuracyReport instance
+    predictions: list of RacePrediction instances (settled today)
+    """
+    import datetime
+
+    today_str = report.report_date.strftime("%A, %B %d %Y") if report.report_date else str(datetime.date.today())
+
+    race_rows = []
+    for p in predictions:
+        status = "Won" if p.top_pick_correct else ("Lost" if p.top_pick_correct is False else "Unknown")
+        actual = p.actual_first or "N/A"
+        race_rows.append(
+            f"Race: {p.race_name or p.race_id} | Track: {p.track_code or '?'} | "
+            f"Type: {p.race_type or '?'} | My pick: {p.predicted_first or '?'} | "
+            f"Winner: {actual} | Result: {status}"
+        )
+
+    race_detail = "\n".join(race_rows) if race_rows else "No settled races."
+
+    by_track = json.dumps(report.by_track or {}, indent=2) if report.by_track else "{}"
+    by_type = json.dumps(report.by_race_type or {}, indent=2) if report.by_race_type else "{}"
+
+    prompt = f"""Today is {today_str}.
+
+PERFORMANCE SUMMARY:
+- Races analyzed: {report.races_analyzed}
+- Top pick wins: {report.top_pick_wins}
+- Win rate: {report.win_rate:.1%}
+- In the money: {report.in_the_money} ({report.itm_rate:.1%} ITM rate)
+- Best call: {report.best_call or 'N/A'}
+- Worst miss: {report.worst_miss or 'N/A'}
+
+RACE BY RACE:
+{race_detail}
+
+BY TRACK:
+{by_track}
+
+BY RACE TYPE:
+{by_type}
+
+Write a daily performance digest email with these exact sections:
+1. TODAY'S SCORECARD — quick stats summary
+2. RACE BY RACE — one paragraph per race covering my pick, the result, and why it worked or didn't
+3. WHAT I NOTICED TODAY — 2-3 pattern observations
+4. AREAS TO IMPROVE — 1-3 specific, actionable adjustments
+5. TOMORROW'S WATCHLIST — 2-3 things to look for based on today's patterns
+
+Return JSON exactly:
+{{
+  "subject": "email subject line with date and quick stats",
+  "html": "complete HTML email body (use <h2> for sections, <p> for paragraphs, <ul> for lists)",
+  "text": "plain text version"
+}}"""
+
+    response = await client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=2000,
+        temperature=0.7,
+        system=(
+            "You are Secretariat, an AI horse racing handicapper. "
+            "Write a daily performance digest for your trainer, Will. "
+            "Be honest, direct, and analytical. Do not sugarcoat misses. "
+            "Explain WHY picks likely went wrong based on race types and track conditions. "
+            "Identify patterns. Suggest what to watch for tomorrow. "
+            "Write in first person as Secretariat. "
+            "Tone: confident, self-aware, like a jockey debriefing after a day at the track."
+        ),
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    return _parse_json(response.content[0].text)
+
+
+# ── Calibration Context ───────────────────────────────────────────────────────
+
+async def get_calibration_context() -> str:
+    """
+    Returns a context string injected into every analysis prompt.
+    Returns empty string if < 20 samples or calibration row missing.
+    """
+    try:
+        from app.core.database import _AsyncSessionLocal
+        from app.models.accuracy import SecretariatCalibration
+
+        if not _AsyncSessionLocal:
+            return ""
+
+        async with _AsyncSessionLocal() as db:
+            cal = await db.get(SecretariatCalibration, 1)
+
+        if not cal or cal.sample_size < 20:
+            return ""
+
+        lines = [
+            f"YOUR RECENT PERFORMANCE ({cal.sample_size} races, 30-day rolling):",
+            f"Overall win rate: {cal.rolling_win_rate:.0%}",
+        ]
+
+        if cal.weak_spots:
+            lines.append("AREAS TO BE MORE CAUTIOUS:")
+            for spot in cal.weak_spots[:3]:
+                lines.append(f"  - {spot}")
+
+        if cal.strong_spots:
+            lines.append("YOUR STRENGTHS (be more decisive):")
+            for spot in cal.strong_spots[:3]:
+                lines.append(f"  - {spot}")
+
+        lines.append(
+            "Use this to calibrate confidence. "
+            "Widen contenders in weak areas. Be decisive in strong areas."
+        )
+        return "\n".join(lines)
+    except Exception:
+        return ""

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getRacesToday, getRacesByDate } from '../utils/api';
+import { useNavigate } from 'react-router-dom';
+import { getRacesToday, getRacesByDate, getDailyAccuracy } from '../utils/api';
 import { RaceCard, RaceCardSkeleton } from '../components/races/RaceCard';
 import PageHeader from '../components/common/PageHeader';
 
@@ -64,6 +65,50 @@ function TrackSection({ course, races, isTomorrow }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function SecretariatReportCard() {
+  const navigate = useNavigate();
+  const { data } = useQuery({
+    queryKey: ['accuracy-daily'],
+    queryFn: () => getDailyAccuracy(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  if (!data || data.status === 'pending') return null;
+
+  const wr = ((data.win_rate || 0) * 100).toFixed(0);
+  const wrColor = Number(wr) >= 50 ? 'var(--accent-green-bright)' : Number(wr) >= 35 ? 'var(--accent-gold-bright)' : 'var(--accent-red-bright)';
+
+  return (
+    <div style={{
+      margin: '12px 16px 0',
+      padding: '12px 14px',
+      background: 'linear-gradient(135deg, rgba(201,162,39,0.08) 0%, var(--bg-elevated) 100%)',
+      border: '1px solid var(--border-gold)',
+      borderRadius: 'var(--radius-md)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--accent-gold)' }}>
+          SECRETARIAT TODAY
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: wrColor }}>
+          {wr}% win rate
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>
+        Races called: <strong>{data.races_analyzed}</strong>
+        {data.best_call && <span> · 🎯 {data.best_call}</span>}
+      </div>
+      <button
+        onClick={() => navigate('/accuracy')}
+        style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--accent-gold-dim)', fontWeight: 600 }}
+      >
+        View Full Report →
+      </button>
     </div>
   );
 }
@@ -151,8 +196,10 @@ export default function HomePage() {
         }
       />
 
+      <SecretariatReportCard />
+
       {/* Date tabs */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border-subtle)', marginTop: 12 }}>
         {DATE_TABS.map(({ key, label }) => (
           <button
             key={key}

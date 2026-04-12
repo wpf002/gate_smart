@@ -2,18 +2,18 @@ import { useState, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../components/common/PageHeader';
-import { simGetBets, simGetStats, simTopup, simReset, simSettle, simDeleteBet } from '../utils/api';
+import { simGetBets, simGetStats, simReset, simSettle, simDeleteBet } from '../utils/api';
 
-const TOPUP_AMOUNTS = [50, 100, 200, 500];
-
-function BankTab({ stats, onTopup, onReset, topping, resetting, topupError }) {
-  const bank = stats?.bank ?? 500;
+function BankTab({ stats, onReset, resetting }) {
   const netPnl = stats?.net_pnl ?? 0;
   const pnlColor = netPnl >= 0 ? 'var(--accent-green-bright)' : 'var(--accent-red-bright)';
+  const winRate = stats?.settled_bets > 0
+    ? ((stats.won_bets / stats.settled_bets) * 100).toFixed(1)
+    : null;
 
   return (
     <div style={{ padding: '0 16px 16px' }}>
-      {/* Bank card */}
+      {/* Starting bank */}
       <div style={{
         background: 'var(--bg-elevated)',
         borderRadius: 'var(--radius-lg)',
@@ -23,51 +23,28 @@ function BankTab({ stats, onTopup, onReset, topping, resetting, topupError }) {
         marginBottom: 16,
       }}>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
-          Paper Bank
+          Starting Bank
         </div>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 42, fontWeight: 700, color: 'var(--accent-gold-bright)', lineHeight: 1 }}>
-          ${bank.toFixed(2)}
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 700, color: 'var(--accent-gold-bright)', lineHeight: 1 }}>
+          $500.00
         </div>
-        {stats?.total_wagered > 0 && (
-          <div style={{ marginTop: 10, fontSize: 14, color: pnlColor, fontFamily: 'var(--font-mono)' }}>
-            {netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)} net P&L
+        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center', gap: 24 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Theoretical P&L</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: pnlColor }}>
+              {netPnl >= 0 ? '+' : ''}${netPnl.toFixed(2)}
+            </div>
           </div>
-        )}
-      </div>
-
-      {/* Topup */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Top up bank
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {TOPUP_AMOUNTS.map((amt) => (
-            <button
-              key={amt}
-              className="btn btn-secondary"
-              disabled={topping}
-              onClick={() => onTopup(amt)}
-              style={{ fontFamily: 'var(--font-mono)' }}
-            >
-              +${amt}
-            </button>
-          ))}
+          {winRate !== null && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>Win Rate</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700 }}>
+                {winRate}%
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {topupError && (
-        <div style={{
-          padding: '8px 12px',
-          background: 'rgba(239,68,68,0.1)',
-          borderRadius: 'var(--radius-md)',
-          borderLeft: '2px solid var(--accent-red-bright)',
-          fontSize: 12,
-          color: 'var(--accent-red-bright)',
-          marginBottom: 12,
-        }}>
-          {topupError}
-        </div>
-      )}
 
       {/* Disclaimer */}
       <div style={{
@@ -80,8 +57,7 @@ function BankTab({ stats, onTopup, onReset, topping, resetting, topupError }) {
         marginBottom: 16,
         lineHeight: 1.5,
       }}>
-        Paper trading simulator — no real money involved.<br />
-        <span style={{ opacity: 0.8 }}>Your <strong>Profile Bankroll</strong> is a separate value used by Secretariat for stake sizing recommendations.</span>
+        Paper trading simulator — no real money involved. Track whether you would have followed Secretariat's picks.
       </div>
 
       {/* Reset */}
@@ -445,15 +421,6 @@ export default function SimulatorPage() {
     staleTime: 0,
   });
 
-  const topupMutation = useMutation({
-    mutationFn: simTopup,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sim-stats'] }),
-  });
-
-  const topupError = topupMutation.isError
-    ? (topupMutation.error?.response?.data?.detail || 'Top-up failed — is the backend running?')
-    : null;
-
   const resetMutation = useMutation({
     mutationFn: simReset,
     onSuccess: () => {
@@ -553,11 +520,8 @@ export default function SimulatorPage() {
       {tab === 'bank' && (
         <BankTab
           stats={stats}
-          onTopup={(amt) => topupMutation.mutate(amt)}
           onReset={handleReset}
-          topping={topupMutation.isPending}
           resetting={resetMutation.isPending}
-          topupError={topupError}
         />
       )}
       {tab === 'bets' && (

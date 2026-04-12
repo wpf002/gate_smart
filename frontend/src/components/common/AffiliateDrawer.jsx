@@ -9,7 +9,7 @@ function openAffiliate(affiliate, baseUrl, sessionId, onClose) {
   if (onClose) onClose();
 }
 
-export default function AffiliateDrawer({ open, onClose, region = 'usa', sessionId = '' }) {
+export default function AffiliateDrawer({ open, onClose, region = 'usa', sessionId = '', recommendedHorse = '', recommendedBet = '' }) {
   // Lock body scroll while open
   useEffect(() => {
     if (open) {
@@ -75,9 +75,16 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent-gold)' }}>
               PLACE YOUR BETS
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              GateSmart-recommended sportsbooks
-            </div>
+            {recommendedHorse ? (
+              <div style={{ fontSize: 12, color: 'var(--accent-gold-bright)', marginTop: 2 }}>
+                Secretariat recommends: <strong>{recommendedHorse}</strong>
+                {recommendedBet && <span style={{ color: 'var(--text-muted)' }}> · {recommendedBet}</span>}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                Open your sportsbook and place this bet:
+              </div>
+            )}
           </div>
           <button
             onClick={onClose}
