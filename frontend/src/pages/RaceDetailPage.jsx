@@ -688,7 +688,7 @@ export default function RaceDetailPage() {
       <div style={{ padding: '16px' }}>
         {/* ── Race meta ─────────────────────────────────────────────── */}
         {race && !isLoading && (() => {
-          const sep = <span style={{ color: 'var(--accent-gold-dim)', fontWeight: 300, fontSize: 14, userSelect: 'none' }}>|</span>;
+          const sep = <span aria-hidden="true" style={{ color: 'var(--accent-gold-dim)', fontWeight: 300, fontSize: 14, userSelect: 'none' }}>|</span>;
           const items = [
             (race.distance || race.distance_f) ? formatDistance(race.distance, race.distance_f, race.region) : null,
             race.surface || null,

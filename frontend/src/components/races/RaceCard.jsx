@@ -124,8 +124,8 @@ export function RaceCard({ race, isTomorrow = false }) {
         opacity: past ? 0.6 : 1,
         transition: 'background 0.15s',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-card)'; }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-card-hover)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.35)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.boxShadow = 'none'; }}
     >
       {/* Header row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
@@ -172,7 +172,7 @@ export function RaceCard({ race, isTomorrow = false }) {
 
       {/* Meta row */}
       {(() => {
-        const sep = <span style={{ color: 'var(--accent-gold-dim)', fontWeight: 300, fontSize: 13, userSelect: 'none' }}>|</span>;
+        const sep = <span aria-hidden="true" style={{ color: 'var(--accent-gold-dim)', fontWeight: 300, fontSize: 13, userSelect: 'none' }}>|</span>;
         const items = [
           (race.distance || race.distance_f) ? formatDistance(race.distance, race.distance_f, race.region) : null,
           race.surface || null,
@@ -188,7 +188,7 @@ export function RaceCard({ race, isTomorrow = false }) {
               </span>
             ))}
             {!past && (
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--accent-gold-dim)', fontWeight: 600 }}>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>
                 Analyze →
               </span>
             )}

@@ -11,8 +11,8 @@ const DATE_TABS = [
 ];
 
 const REGION_TABS = [
-  { key: 'USA,CAN', label: '🇺🇸 USA' },
-  { key: 'GB,IRE', label: '🇬🇧 UK & IRE' },
+  { key: 'USA,CAN', label: 'USA' },
+  { key: 'GB,IRE', label: 'UK & IRE' },
   { key: null, label: 'All' },
 ];
 
@@ -54,7 +54,7 @@ function TrackSection({ course, races, isTomorrow }) {
           {races.length} {races.length === 1 ? 'race' : 'races'}
         </span>
         <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-          {collapsed ? '▶' : '▼'}
+          {collapsed ? '›' : '‹'}
         </span>
       </button>
 

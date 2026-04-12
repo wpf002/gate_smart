@@ -46,7 +46,7 @@ export default function BottomNav() {
             }}
           >
             <span style={{ fontSize: 20, lineHeight: 1 }}>{icon}</span>
-            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em' }}>
               {label}
             </span>
             {path === '/betslip' && betSlip.length > 0 && (
