@@ -687,24 +687,33 @@ export default function RaceDetailPage() {
 
       <div style={{ padding: '16px' }}>
         {/* ── Race meta ─────────────────────────────────────────────── */}
-        {race && !isLoading && (
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-secondary)' }}>
-            {(race.distance || race.distance_f) && <span>📏 {formatDistance(race.distance, race.distance_f, race.region)}</span>}
-            {race.surface && <span>🌿 {race.surface}</span>}
-            {race.going && <span>🏁 Track: {race.going}</span>}
-            {race.race_class && (() => {
-              const m = race.race_class.match(/^(.+?)\s+(CLAIMING\(\$[\d,]+\))$/i);
-              return m ? (
-                <span>🏷 {m[1]} <span style={{ color: 'var(--border-medium)', margin: '0 2px' }}>|</span> {m[2]}</span>
-              ) : (
-                <span>🏷 {race.race_class}</span>
-              );
-            })()}
-            {formatPurse(race) && <span>💰 {formatPurse(race)}</span>}
-            {race.runners?.length && <span>🏇 {race.runners.length} runners</span>}
-            {raceFinished && <span style={{ color: 'var(--accent-gold-bright)', fontWeight: 600 }}>✓ Finished</span>}
-          </div>
-        )}
+        {race && !isLoading && (() => {
+          const sep = <span style={{ color: 'var(--accent-gold-dim)', fontWeight: 300, fontSize: 14, userSelect: 'none' }}>|</span>;
+          const items = [
+            (race.distance || race.distance_f) ? formatDistance(race.distance, race.distance_f, race.region) : null,
+            race.surface || null,
+            race.going ? `Track: ${race.going}` : null,
+            race.race_class || null,
+            formatPurse(race) || null,
+            race.runners?.length ? `${race.runners.length} runners` : null,
+          ].filter(Boolean);
+          return (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+              {items.map((item, i) => (
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {i > 0 && sep}
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item}</span>
+                </span>
+              ))}
+              {raceFinished && (
+                <>
+                  {items.length > 0 && sep}
+                  <span style={{ fontSize: 13, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>Finished</span>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── Finished race results ──────────────────────────────────── */}
         {raceFinished && raceResults && <ResultsPanel results={raceResults} />}

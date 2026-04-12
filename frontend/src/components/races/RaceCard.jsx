@@ -170,28 +170,31 @@ export function RaceCard({ race, isTomorrow = false }) {
         {race.title || race.race_name}
       </div>
 
-      {/* Meta chips */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {(race.distance || race.distance_f) && (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            📏 {formatDistance(race.distance, race.distance_f, race.region)}
-          </span>
-        )}
-        {race.surface && (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>🌿 {race.surface}</span>
-        )}
-        {runnersCount && (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>🏇 {runnersCount} runners</span>
-        )}
-        {formatPurse(race) && (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>💰 {formatPurse(race)}</span>
-        )}
-        {!past && (
-          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--accent-gold-dim)', fontWeight: 600 }}>
-            Analyze →
-          </span>
-        )}
-      </div>
+      {/* Meta row */}
+      {(() => {
+        const sep = <span style={{ color: 'var(--accent-gold-dim)', fontWeight: 300, fontSize: 13, userSelect: 'none' }}>|</span>;
+        const items = [
+          (race.distance || race.distance_f) ? formatDistance(race.distance, race.distance_f, race.region) : null,
+          race.surface || null,
+          runnersCount ? `${runnersCount} runners` : null,
+          formatPurse(race) || null,
+        ].filter(Boolean);
+        return (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {items.map((item, i) => (
+              <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {i > 0 && sep}
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{item}</span>
+              </span>
+            ))}
+            {!past && (
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--accent-gold-dim)', fontWeight: 600 }}>
+                Analyze →
+              </span>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
