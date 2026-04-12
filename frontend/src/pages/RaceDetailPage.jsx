@@ -20,13 +20,14 @@ const MODES = [
 const FINISH_MEDALS = { first: '🥇', second: '🥈', third: '🥉', fourth: '4️⃣' };
 
 // ── AnalysisPanel ─────────────────────────────────────────────────────────────
-function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa' }) {
+function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '' }) {
   const [viewMode, setViewMode] = useState('beginner'); // 'technical' | 'beginner'
   const [copied, setCopied] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerHorse, setDrawerHorse] = useState('');
   const [drawerBetType, setDrawerBetType] = useState('');
   const [tellerBet, setTellerBet] = useState(null); // { selection, script }
+  const { addToBetSlip } = useAppStore();
 
   // Normalise a name for fuzzy matching (lowercase, strip punctuation/numbers)
   const normName = (s) => (s || '').toLowerCase().replace(/[^a-z\s]/g, '').trim();
@@ -50,12 +51,47 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     setTellerBet({ selection, script });
   };
 
+  const EXOTIC_BET_TYPES = ['exacta', 'trifecta', 'superfecta', 'daily double', 'pick3', 'pick4', 'pick5', 'pick6'];
+
   // Two-button pattern for each recommended bet
   const BetButtons = ({ selection, betTypeKey = 'win', betTypeLabel = '' }) => {
     if (!selection) return null;
     const label = betTypeLabel || betTypeKey;
+    const isExotic = EXOTIC_BET_TYPES.includes(betTypeKey.toLowerCase());
+
+    const handleAddToPicks = (e) => {
+      e.stopPropagation();
+      const runner = findRunner(selection);
+      addToBetSlip({
+        horse_id: runner?.horse_id || selection,
+        horse_name: runner?.horse_name || runner?.horse || selection,
+        bet_type: betTypeKey,
+        odds: runner?.odds || runner?.sp || '?',
+        stake: 10,
+        race_id: raceId,
+        race_name: '',
+        course,
+        jockey: runner?.jockey || '',
+        trainer: runner?.trainer || '',
+        owner: runner?.owner || '',
+      });
+    };
+
     return (
       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        {!isExotic && (
+          <button
+            onClick={handleAddToPicks}
+            style={{
+              fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
+              border: '1px solid rgba(34,197,94,0.4)',
+              background: 'rgba(34,197,94,0.1)',
+              color: 'var(--accent-green-bright)', cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            + Bet
+          </button>
+        )}
         <button
           onClick={(e) => { e.stopPropagation(); openBetOnline(selection, label); }}
           style={{
@@ -602,18 +638,16 @@ export default function RaceDetailPage() {
   const analyzeMutation = { isPending: analysisStreaming, mutate: () => runAnalysisAndScore() };
 
   const hasAnalysisTab = !!(analysis || analysisStreaming);
-  const hasScorecardTab = !!(scorecardData);
   const hasDebriefTab = !!(debrief || debriefLoading);
-  const showTabs = hasAnalysisTab || hasScorecardTab || hasDebriefTab;
+  const showTabs = hasAnalysisTab || hasDebriefTab;
 
   const showAnalyseBtn = !analysis && !analysisStreaming;
   const showDebriefBtn = !debrief && !debriefLoading && !!race && isRaceDefinitelyFinished(race);
   const raceFinished = !!race && isRaceDefinitelyFinished(race);
 
   const tabs = [
-    ...(hasAnalysisTab  ? [{ id: 'analysis',  label: 'ANALYSIS'   }] : []),
-    ...(hasScorecardTab ? [{ id: 'scorecard', label: 'SCORE CARD' }] : []),
-    ...(hasDebriefTab   ? [{ id: 'debrief',   label: 'DEBRIEF'    }] : []),
+    ...(hasAnalysisTab ? [{ id: 'analysis', label: 'ANALYSIS' }] : []),
+    ...(hasDebriefTab  ? [{ id: 'debrief',  label: 'DEBRIEF'  }] : []),
   ];
   const validTab = tabs.find(t => t.id === activeTab) ? activeTab : tabs[0]?.id ?? 'analysis';
 
@@ -775,8 +809,7 @@ export default function RaceDetailPage() {
         {showTabs && (
           <div style={{ marginBottom: 16 }}>
             {tabs.length > 1 && <TabBar tabs={tabs} active={validTab} onChange={setActiveTab} />}
-            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} runners={race?.runners || []} userRegion={userProfile?.region || 'usa'} />}
-            {validTab === 'scorecard' && <ScorecardPanel raceScorecards={scorecardData} loading={false} runners={race?.runners || []} />}
+            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} runners={race?.runners || []} userRegion={userProfile?.region || 'usa'} raceId={raceId} course={race?.course || race?.venue || ''} />}
             {validTab === 'debrief' && <DebriefPanel debrief={debrief} loading={debriefLoading} />}
           </div>
         )}
@@ -962,6 +995,17 @@ export default function RaceDetailPage() {
                     />
                   ))}
                 </div>
+
+                {/* ── Score Card — auto-renders below runners ──────── */}
+                {scorecardData && (
+                  <div style={{ marginTop: 16 }}>
+                    <ScorecardPanel
+                      raceScorecards={scorecardData}
+                      loading={false}
+                      runners={race?.runners || []}
+                    />
+                  </div>
+                )}
               </>
             );
           })()}
