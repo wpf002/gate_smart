@@ -1171,9 +1171,15 @@ async def get_calibration_context() -> str:
             for spot in cal.strong_spots[:3]:
                 lines.append(f"  - {spot}")
 
+        if cal.lessons:
+            lines.append("LESSONS FROM RECENT RACES (apply these now):")
+            for lesson in cal.lessons[:5]:
+                lines.append(f"  - {lesson}")
+
         lines.append(
             "Use this to calibrate confidence. "
-            "Widen contenders in weak areas. Be decisive in strong areas."
+            "Widen contenders in weak areas. Be decisive in strong areas. "
+            "Apply the lessons above — they come from your own mistakes and wins."
         )
         return "\n".join(lines)
     except Exception:

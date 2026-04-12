@@ -50,6 +50,9 @@ class RacePrediction(Base):
     top_pick_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     in_the_money: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
+    # Post-race reflection — populated by nightly_reflect.py
+    reflection: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -109,3 +112,5 @@ class SecretariatCalibration(Base):
     strong_spots: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     sample_size: Mapped[int] = mapped_column(Integer, default=0)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Synthesized lessons from nightly_reflect.py — injected into every analysis prompt
+    lessons: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
