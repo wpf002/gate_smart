@@ -15,7 +15,7 @@ Health:   <https://backend-production-15e941.up.railway.app/health>
 ## Stack
 
 | Layer | Tech |
-|---|---|
+| --- | --- |
 | Frontend | React 18, React Router, Zustand, React Query |
 | Backend | FastAPI, Python 3.13, msgspec |
 | AI Engine | Anthropic Claude (Secretariat) |
@@ -30,11 +30,13 @@ Health:   <https://backend-production-15e941.up.railway.app/health>
 ### 1. Get API Keys
 
 **The Racing API** (horse racing data):
-- Sign up at https://www.theracingapi.com — 2-week free trial
+
+- Sign up at <https://www.theracingapi.com> — 2-week free trial
 - Get your username and password from the dashboard
 
 **Anthropic API** (Secretariat AI):
-- Get a key at https://console.anthropic.com
+
+- Get a key at <https://console.anthropic.com>
 
 ### 2. Configure
 
@@ -44,7 +46,8 @@ cp .env.example .env
 ```
 
 Fill in:
-```
+
+```text
 ANTHROPIC_API_KEY=sk-ant-...
 RACING_API_USERNAME=your_username
 RACING_API_PASSWORD=your_password
@@ -58,20 +61,21 @@ SECRET_KEY=any_random_string
 ```
 
 Or manually:
+
 ```bash
 docker compose up --build
 ```
 
 ### 4. Open
 
-- **App**: http://localhost:3000
-- **API docs**: http://localhost:8000/docs
+- **App**: <http://localhost:3000>
+- **API docs**: <http://localhost:8000/docs>
 
 ---
 
 ## Architecture
 
-```
+```text
 gatesmart/
 ├── backend/
 │   ├── main.py                    # FastAPI entrypoint
@@ -121,38 +125,43 @@ gatesmart/
 ## API Endpoints
 
 ### Races
+
 | Method | Path | Description |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/races/today?region=gb` | Today's race cards |
 | GET | `/api/races/date/{YYYY-MM-DD}` | Race cards by date |
 | GET | `/api/races/{race_id}` | Full race detail with runners |
 | GET | `/api/races/results/today` | Today's results |
 
 ### Horses
+
 | Method | Path | Description |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/horses/{horse_id}` | Horse profile |
 | GET | `/api/horses/{horse_id}/results` | Past performances |
 | GET | `/api/horses/{horse_id}/explain` | AI plain English explanation |
 | GET | `/api/horses/{horse_id}/form/decode?form=1-2-3` | Decode form string |
 
 ### Secretariat (AI)
+
 | Method | Path | Description |
-|---|---|---|
+| --- | --- | --- |
 | POST | `/api/advisor/analyze` | Full race AI analysis |
 | POST | `/api/advisor/recommend-bet` | Personalised bet recommendation |
 | POST | `/api/advisor/ask` | Free-form Q&A |
 
 ### Betting
+
 | Method | Path | Description |
-|---|---|---|
+| --- | --- | --- |
 | POST | `/api/betting/odds/convert` | Convert odds formats |
 | GET | `/api/betting/types` | All bet types with explanations |
 | POST | `/api/betting/payout/calculate` | Estimate payout |
 
 ### Education
+
 | Method | Path | Description |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/education/glossary` | Racing glossary |
 | GET | `/api/education/beginner-guide` | Step-by-step beginner guide |
 | GET | `/api/education/bankroll-guide` | Bankroll management guide |

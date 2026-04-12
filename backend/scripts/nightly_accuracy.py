@@ -28,13 +28,13 @@ def _norm(name: str) -> str:
 
 
 async def main(target_date: datetime.date, dry_run: bool):
-    from app.core.database import init_db, _AsyncSessionLocal
+    from app.core import database as _db
     from app.models.accuracy import RacePrediction, DailyAccuracyReport
     from sqlalchemy import select, update
 
-    await init_db()
+    await _db.init_db()
 
-    async with _AsyncSessionLocal() as db:
+    async with _db._AsyncSessionLocal() as db:
         # 1. Fetch all unsettled predictions for target_date
         result = await db.execute(
             select(RacePrediction).where(
@@ -119,7 +119,7 @@ async def main(target_date: datetime.date, dry_run: bool):
 
     # 3. Update DB rows
     if not dry_run:
-        async with _AsyncSessionLocal() as db:
+        async with _db._AsyncSessionLocal() as db:
             now = datetime.datetime.now(datetime.timezone.utc)
             for s in settled:
                 await db.execute(
@@ -168,7 +168,7 @@ async def main(target_date: datetime.date, dry_run: bool):
     }
 
     if not dry_run:
-        async with _AsyncSessionLocal() as db:
+        async with _db._AsyncSessionLocal() as db:
             stmt = pg_insert(DailyAccuracyReport).values(**report_row)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["report_date"],
@@ -178,7 +178,7 @@ async def main(target_date: datetime.date, dry_run: bool):
             await db.commit()
 
         # Reload report and predictions for email
-        async with _AsyncSessionLocal() as db:
+        async with _db._AsyncSessionLocal() as db:
             rpt = await db.execute(
                 select(DailyAccuracyReport).where(DailyAccuracyReport.report_date == target_date)
             )
@@ -238,7 +238,7 @@ async def main(target_date: datetime.date, dry_run: bool):
     else:
         sent = await send_daily_report(subject=subject, html_body=html, text_body=text)
         if sent:
-            async with _AsyncSessionLocal() as db:
+            async with _db._AsyncSessionLocal() as db:
                 await db.execute(
                     update(DailyAccuracyReport)
                     .where(DailyAccuracyReport.report_date == target_date)

@@ -12,6 +12,7 @@ Last deployed: April 2026
 ## Services
 
 Create three services in Railway:
+
 1. **backend** — connect to `/backend` directory
 2. **frontend** — connect to `/frontend` directory
 3. **Redis** — add via Railway Redis plugin (auto-provides `REDIS_URL`)
@@ -19,7 +20,7 @@ Create three services in Railway:
 ## Backend Environment Variables
 
 | Variable | Value |
-|---|---|
+| --- | --- |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key |
 | `RACING_API_USERNAME` | TheRacingAPI username |
 | `RACING_API_PASSWORD` | TheRacingAPI password |
@@ -33,7 +34,7 @@ Create three services in Railway:
 ## Frontend Environment Variables
 
 | Variable | Value |
-|---|---|
+| --- | --- |
 | `VITE_API_URL` | Set to your backend Railway URL |
 | `VITE_GA_MEASUREMENT_ID` | `G-K6G74W27FD` |
 
@@ -52,7 +53,7 @@ Create three services in Railway:
 
 ## Health Check
 
-```
+```text
 GET {backend_url}/health
 → { "status": "ok", "environment": "production", "redis": "connected", "version": "1.0.0" }
 ```

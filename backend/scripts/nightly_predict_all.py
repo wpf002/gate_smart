@@ -73,11 +73,11 @@ async def main(target_date: datetime.date, dry_run: bool):
     import anthropic
     import ssl
     from app.core.config import settings
-    from app.core.database import init_db, _AsyncSessionLocal
+    from app.core import database as _db
     from app.models.accuracy import RacePrediction
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-    await init_db()
+    await _db.init_db()
 
     ssl_ctx = ssl.create_default_context()
     client = anthropic.AsyncAnthropic(
@@ -163,7 +163,7 @@ async def main(target_date: datetime.date, dry_run: bool):
                     "predicted_third": pf.get("third"),
                     "predicted_fourth": pf.get("fourth"),
                 }
-                async with _AsyncSessionLocal() as db:
+                async with _db._AsyncSessionLocal() as db:
                     stmt = pg_insert(RacePrediction).values(**row)
                     stmt = stmt.on_conflict_do_nothing(constraint="uq_race_prediction")
                     await db.execute(stmt)

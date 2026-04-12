@@ -42,15 +42,15 @@ def _categorise(data: dict, min_samples: int = 10, low: float = 0.35, high: floa
 
 
 async def main(dry_run: bool):
-    from app.core.database import init_db, _AsyncSessionLocal
+    from app.core import database as _db
     from app.models.accuracy import RacePrediction, SecretariatCalibration
     from sqlalchemy import select
 
-    await init_db()
+    await _db.init_db()
 
     cutoff = datetime.date.today() - datetime.timedelta(days=30)
 
-    async with _AsyncSessionLocal() as db:
+    async with _db._AsyncSessionLocal() as db:
         result = await db.execute(
             select(RacePrediction).where(
                 RacePrediction.race_date >= cutoff,
@@ -109,7 +109,7 @@ async def main(dry_run: bool):
         print("\n[DRY RUN] Not writing to DB.")
         return
 
-    async with _AsyncSessionLocal() as db:
+    async with _db._AsyncSessionLocal() as db:
         existing = await db.get(SecretariatCalibration, 1)
         now = datetime.datetime.now(datetime.timezone.utc)
 
