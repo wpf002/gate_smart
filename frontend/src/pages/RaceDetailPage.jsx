@@ -11,13 +11,13 @@ import { useAppStore } from '../store';
 import AffiliateDrawer from '../components/common/AffiliateDrawer';
 
 const MODES = [
-  { id: 'safe',       label: '🛡 Safe',       desc: 'Minimize risk'  },
-  { id: 'balanced',   label: '⚖️ Balanced',   desc: 'Value + safety' },
-  { id: 'aggressive', label: '⚡ Aggressive', desc: 'Max upside'     },
-  { id: 'longshot',   label: '🎯 Longshot',   desc: 'Overlay value'  },
+  { id: 'safe',       label: 'Safe',       desc: 'Minimize risk'  },
+  { id: 'balanced',   label: 'Balanced',   desc: 'Value + safety' },
+  { id: 'aggressive', label: 'Aggressive', desc: 'Max upside'     },
+  { id: 'longshot',   label: 'Longshot',   desc: 'Overlay value'  },
 ];
 
-const FINISH_MEDALS = { first: '🥇', second: '🥈', third: '🥉', fourth: '4️⃣' };
+const FINISH_MEDALS = { first: '🥇', second: '🥈', third: '🥉', fourth: '🎗️' };
 
 // ── AnalysisPanel ─────────────────────────────────────────────────────────────
 function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '' }) {
@@ -51,14 +51,10 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     setTellerBet({ selection, script });
   };
 
-  const EXOTIC_BET_TYPES = ['exacta', 'trifecta', 'superfecta', 'daily double', 'pick3', 'pick4', 'pick5', 'pick6'];
-
   // Two-button pattern for each recommended bet
   const BetButtons = ({ selection, betTypeKey = 'win', betTypeLabel = '' }) => {
     if (!selection) return null;
     const label = betTypeLabel || betTypeKey;
-    const isExotic = EXOTIC_BET_TYPES.includes(betTypeKey.toLowerCase());
-
     const handleAddToPicks = (e) => {
       e.stopPropagation();
       const runner = findRunner(selection);
@@ -79,19 +75,17 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
     return (
       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-        {!isExotic && (
-          <button
-            onClick={handleAddToPicks}
-            style={{
-              fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
-              border: '1px solid rgba(34,197,94,0.4)',
-              background: 'rgba(34,197,94,0.1)',
-              color: 'var(--accent-green-bright)', cursor: 'pointer', whiteSpace: 'nowrap',
-            }}
-          >
-            + Bet
-          </button>
-        )}
+        <button
+          onClick={handleAddToPicks}
+          style={{
+            fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
+            border: '1px solid rgba(34,197,94,0.4)',
+            background: 'rgba(34,197,94,0.1)',
+            color: 'var(--accent-green-bright)', cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+        >
+          Simulate Bet
+        </button>
         <button
           onClick={(e) => { e.stopPropagation(); openBetOnline(selection, label); }}
           style={{
@@ -101,7 +95,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
             color: 'var(--accent-gold)', cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
-          🏦 Online
+          Bet Online
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); openBetAtCounter(selection, betTypeKey); }}
@@ -112,7 +106,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
             color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
-          🎯 Counter
+          Bet at Counter
         </button>
       </div>
     );
@@ -171,7 +165,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
               color: viewMode === v ? '#000' : 'var(--text-muted)',
               cursor: 'pointer', textTransform: 'capitalize',
             }}>
-              {v === 'beginner' ? '📖 Plain' : '🔬 Technical'}
+              {v === 'beginner' ? 'Plain' : 'Technical'}
             </button>
           ))}
         </div>
@@ -186,18 +180,18 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
             Pace Scenario
           </div>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{analysis.pace_scenario}</p>
+          <p style={{ fontSize: 13, color: 'var(--text-primary)' }}>{analysis.pace_scenario}</p>
         </div>
       )}
 
       {analysis.vulnerable_favorite && (
         <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 13 }}>
-          ⚠️ <strong style={{ color: 'var(--accent-red-bright)' }}>
+          <strong style={{ color: 'var(--accent-red-bright)' }}>
             {viewMode === 'beginner' ? 'The favorite looks beatable:' : 'Vulnerable Favorite:'}
           </strong>{' '}
-          <span style={{ color: 'var(--text-secondary)' }}>{analysis.vulnerable_favorite}</span>
+          <span style={{ color: 'var(--text-primary)' }}>{analysis.vulnerable_favorite}</span>
           {viewMode === 'beginner' && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
               The horse most people are betting on may not win today — consider looking at other runners.
             </div>
           )}
@@ -206,14 +200,14 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
       {analysis.longshot_alert?.horse_name && (
         <div style={{ background: 'rgba(42,122,75,0.1)', border: '1px solid rgba(42,122,75,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 13 }}>
-          🎯 <strong style={{ color: 'var(--accent-green-bright)' }}>
+          <strong style={{ color: 'var(--accent-green-bright)' }}>
             {viewMode === 'beginner' ? 'Surprise Pick:' : 'Longshot Alert:'}
           </strong>{' '}
           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-gold)' }}>{analysis.longshot_alert.odds}</span>{' '}
           <strong>{analysis.longshot_alert.number ? `${analysis.longshot_alert.number} ` : ''}{analysis.longshot_alert.horse_name}</strong>{' '}
-          <span style={{ color: 'var(--text-secondary)' }}>— {analysis.longshot_alert.reason}</span>
+          <span style={{ color: 'var(--text-primary)' }}>— {analysis.longshot_alert.reason}</span>
           {viewMode === 'beginner' && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
               A "longshot" is a horse with high odds — not many people are betting on it, but if it wins, the payout is much bigger than the favorite.
             </div>
           )}
@@ -244,7 +238,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
                     ) : null;
                   })()}
                   {p.reasoning && viewMode === 'technical' && (
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 6 }}>— {p.reasoning}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-primary)', marginLeft: 6 }}>— {p.reasoning}</span>
                   )}
                 </div>
               </div>
@@ -260,6 +254,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           place:      'Place — finish in the top 2',
           show:       'Show — finish in the top 3',
           exacta:     'Exacta',
+          quinella:   'Quinella',
           trifecta:   'Trifecta',
           superfecta: 'Superfecta',
         };
@@ -283,7 +278,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
                       )}
                     </div>
                     <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{rec.reasoning}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>{rec.reasoning}</div>
                     {rec.box_option && viewMode === 'technical' && (
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>📦 {rec.box_option}</div>
                     )}

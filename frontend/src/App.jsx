@@ -71,36 +71,50 @@ function SideNav() {
   return (
     <nav className="side-nav">
       <div className="side-nav-logo">GATE<br />SMART</div>
-      {NAV_ITEMS.map(({ path, icon, label }) => {
+      {NAV_ITEMS.map(({ path, label }, idx) => {
         const active = location.pathname === path ||
           (path !== '/' && location.pathname.startsWith(path));
         const isMyPicks = path === '/betslip';
         return (
-          <button
-            key={path}
-            onClick={() => navigate(path)}
-            className={`side-nav-item${active ? ' active' : ''}`}
-          >
-            <span className="side-nav-icon">{icon}</span>
-            <span>{label}</span>
-            {isMyPicks && betSlip.length > 0 && (
-              <span style={{
-                marginLeft: 'auto',
-                background: 'var(--accent-gold)',
-                color: '#000',
-                borderRadius: '50%',
-                width: 18,
-                height: 18,
-                fontSize: 11,
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                {betSlip.length}
-              </span>
+          <div key={path}>
+            {idx > 0 && (
+              <div style={{
+                height: 1,
+                margin: '0 16px',
+                background: 'linear-gradient(to right, transparent, rgba(201,162,39,0.2), transparent)',
+              }} />
             )}
-          </button>
+            <button
+              onClick={() => navigate(path)}
+              className={`side-nav-item${active ? ' active' : ''}`}
+              style={{ justifyContent: 'space-between' }}
+            >
+              <span style={{
+                fontSize: 12,
+                fontWeight: active ? 700 : 500,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: active ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
+              }}>{label}</span>
+              {isMyPicks && betSlip.length > 0 && (
+                <span style={{
+                  background: 'var(--accent-gold)',
+                  color: '#000',
+                  borderRadius: '50%',
+                  width: 18,
+                  height: 18,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  {betSlip.length}
+                </span>
+              )}
+            </button>
+          </div>
         );
       })}
     </nav>

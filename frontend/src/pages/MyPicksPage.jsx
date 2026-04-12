@@ -376,7 +376,7 @@ export default function MyPicksPage() {
                   style={{ flex: 1, fontSize: 13 }}
                   onClick={() => setDrawerOpen(true)}
                 >
-                  🏦 Online
+                  Bet Online
                 </button>
                 <button
                   className="btn btn-secondary"
