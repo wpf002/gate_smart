@@ -101,7 +101,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
             color: 'var(--accent-gold)', cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
-          🏦 Bet Online
+          🏦 Online
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); openBetAtCounter(selection, betTypeKey); }}
@@ -229,8 +229,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           {['first', 'second', 'third', 'fourth'].map(pos => {
             const p = analysis.predicted_finish[pos];
             if (!p?.horse_name) return null;
-            const betTypeKey = pos === 'first' ? 'win' : pos === 'second' ? 'place' : 'show';
-            const selection = `${p.number ? p.number + ' ' : ''}${p.horse_name}`;
             return (
               <div key={pos} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 20, lineHeight: 1, flexShrink: 0 }}>{FINISH_MEDALS[pos]}</span>
@@ -249,7 +247,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 6 }}>— {p.reasoning}</span>
                   )}
                 </div>
-                {pos === 'first' && <BetButtons selection={selection} betTypeKey={betTypeKey} betTypeLabel={`${betTypeKey.charAt(0).toUpperCase() + betTypeKey.slice(1)}`} />}
               </div>
             );
           })}
