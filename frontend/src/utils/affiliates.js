@@ -38,6 +38,17 @@ export const AFFILIATES = [
     featured: false,
   },
   {
+    id: 'twinspires',
+    name: 'TwinSpires',
+    logo: '🌹',
+    tagline: 'Official Home of the Kentucky Derby',
+    cta: 'Bet Now',
+    baseUrl: 'https://www.twinspires.com',
+    utmParams: { utm_source: 'gatesmart', utm_medium: 'affiliate', utm_campaign: 'horses' },
+    regions: ['usa'],
+    featured: true,
+  },
+  {
     id: 'betfair',
     name: 'Betfair',
     logo: '📊',
