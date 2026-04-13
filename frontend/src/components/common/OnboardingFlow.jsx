@@ -43,7 +43,7 @@ function ProgressDots({ step }) {
   );
 }
 
-function OptionCard({ icon, label, desc, selected, onClick, multiSelect }) {
+function OptionCard({ label, desc, selected, onClick, multiSelect }) {
   return (
     <button
       onClick={onClick}
@@ -62,7 +62,6 @@ function OptionCard({ icon, label, desc, selected, onClick, multiSelect }) {
         marginBottom: 10,
       }}
     >
-      <span style={{ fontSize: 26, flexShrink: 0 }}>{icon}</span>
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 700, fontSize: 15, color: selected ? 'var(--accent-gold-bright)' : 'var(--text-primary)' }}>
           {label}
@@ -212,7 +211,7 @@ export default function OnboardingFlow() {
                     cursor: 'pointer',
                   }}
                 >
-                  £{amt}
+                  ${amt}
                 </button>
               ))}
             </div>
