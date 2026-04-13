@@ -130,6 +130,7 @@ export const useAppStore = create(
         sessionId: state.sessionId,
         authToken: state.authToken,
         authUser: state.authUser,
+        onboardingComplete: state.onboardingComplete,
         userProfile: state.userProfile,
         betSlip: state.betSlip,
         // advisorMessages, valueAlerts intentionally not persisted
