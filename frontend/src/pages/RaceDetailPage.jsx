@@ -272,22 +272,28 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
             </div>
             {entries.map(([type, rec]) => (
               <div key={type} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', marginBottom: 2 }}>
-                  {viewMode === 'beginner' ? (BET_LABELS[type] || type) : type.charAt(0).toUpperCase() + type.slice(1)}
-                  {rec.stake_suggestion && (
-                    <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>{rec.stake_suggestion}</span>
-                  )}
+                <div className="bet-rec-row">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', marginBottom: 2 }}>
+                      {viewMode === 'beginner' ? (BET_LABELS[type] || type) : type.charAt(0).toUpperCase() + type.slice(1)}
+                      {rec.stake_suggestion && (
+                        <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>{rec.stake_suggestion}</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 8 }}>{rec.reasoning}</div>
+                    {rec.box_option && viewMode === 'technical' && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>📦 {rec.box_option}</div>
+                    )}
+                  </div>
+                  <div className="bet-rec-buttons">
+                    <BetButtons
+                      selection={rec.selection}
+                      betTypeKey={type}
+                      betTypeLabel={BET_LABELS[type] || type}
+                    />
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 8 }}>{rec.reasoning}</div>
-                {rec.box_option && viewMode === 'technical' && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>📦 {rec.box_option}</div>
-                )}
-                <BetButtons
-                  selection={rec.selection}
-                  betTypeKey={type}
-                  betTypeLabel={BET_LABELS[type] || type}
-                />
               </div>
             ))}
           </div>

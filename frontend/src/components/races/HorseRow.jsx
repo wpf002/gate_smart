@@ -419,11 +419,11 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
 
             {/* Compact radar fingerprint */}
             {scorecard && (
-              <div style={{ flexShrink: 0 }}>
+              <div className="horse-radar-desktop">
                 <RadarChart
                   scores={scorecard.scores}
                   overall={scorecard.overall}
-                  size={100}
+                  size={130}
                   animate={false}
                   showLabels={false}
                   showOverall={false}

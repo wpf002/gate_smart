@@ -427,6 +427,37 @@ input::placeholder, textarea::placeholder {
   }
 }
 
+/* ─── Bet recommendation row — stacked on mobile, side-by-side on desktop ── */
+.bet-rec-row {
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 768px) {
+  .bet-rec-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .bet-rec-row .bet-rec-buttons {
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+}
+
+/* ─── Horse radar — bigger and centered on desktop ──────────────────────── */
+.horse-radar-desktop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+@media (min-width: 768px) {
+  .horse-radar-desktop {
+    align-self: center;
+  }
+}
+
 /* ─── Utility ────────────────────────────────────────────────────────────── */
 .text-gold { color: var(--accent-gold-bright); }
 .text-muted { color: var(--text-muted); }
