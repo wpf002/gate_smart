@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import PageHeader from '../components/common/PageHeader';
+import { PARTNERS } from '../utils/affiliates';
+import { trackEvent } from '../utils/analytics';
 
 // ─── Content ──────────────────────────────────────────────────────────────────
 
@@ -873,6 +875,57 @@ export default function EducationPage() {
         {activeTab === 'form' && <FormTab />}
         {activeTab === 'bankroll' && <BankrollTab />}
         {activeTab === 'glossary' && <GlossaryTab />}
+
+        {/* ── TAKE IT FURTHER ─────────────────────────────────────── */}
+        <div style={{ marginTop: 40, paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 11,
+            letterSpacing: '0.12em',
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            marginBottom: 16,
+          }}>
+            Take It Further
+          </div>
+
+          {/* West Point Thoroughbreds card */}
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-gold)',
+            borderRadius: 'var(--radius-md)',
+            padding: '20px',
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 12 }}>
+              🏆 Own a Piece of a Racehorse
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 16 }}>
+              Understanding racing is one thing. Owning a share of a thoroughbred is another level entirely.
+              West Point Thoroughbreds is the gold standard in racing partnerships — they've produced major
+              stakes winners and their partners get paddock access, winner's circle moments, and true
+              insider experience.
+            </p>
+            <button
+              onClick={() => {
+                trackEvent('partner_click', { partner: 'westpoint' });
+                window.open(PARTNERS.westpoint.url, '_blank', 'noopener,noreferrer');
+              }}
+              style={{
+                background: 'var(--accent-gold)',
+                color: '#000',
+                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                padding: '10px 20px',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                width: '100%',
+              }}
+            >
+              {PARTNERS.westpoint.cta} →
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

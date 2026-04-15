@@ -292,6 +292,7 @@ export default function AdvisorPage() {
 
       <div style={{
         padding: '12px 16px',
+        paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
         borderTop: '1px solid var(--border-subtle)',
         background: 'var(--bg-secondary)',
         display: 'flex',
@@ -303,7 +304,7 @@ export default function AdvisorPage() {
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
           placeholder="Ask about racing, horses, bets…"
           disabled={askMutation.isPending}
-          style={{ flex: 1, padding: '10px 14px', fontSize: 14, borderRadius: 'var(--radius-md)' }}
+          style={{ flex: 1, padding: '10px 14px', fontSize: 16, borderRadius: 'var(--radius-md)' }}
         />
         <button
           onClick={handleSend}

@@ -36,17 +36,18 @@ export default function BottomNav() {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 3,
+              gap: 0,
               background: 'none',
               border: 'none',
               cursor: 'pointer',
               position: 'relative',
               color: active ? 'var(--accent-gold-bright)' : 'var(--text-muted)',
               transition: 'color 0.15s',
+              minHeight: 44,
+              minWidth: 44,
             }}
           >
-            <span style={{ fontSize: 20, lineHeight: 1 }}>{icon}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em' }}>
               {label}
             </span>
             {path === '/betslip' && betSlip.length > 0 && (

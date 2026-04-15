@@ -11,6 +11,18 @@ server {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
 
+    # PWA manifest
+    location = /manifest.json {
+        add_header Cache-Control "no-cache";
+        add_header Content-Type "application/manifest+json";
+    }
+
+    # App service worker
+    location = /sw.js {
+        add_header Cache-Control "no-cache, no-store";
+        add_header Service-Worker-Allowed "/";
+    }
+
     # Proxy /api to backend
     location /api/ {
         proxy_pass ${VITE_API_URL}/api/;

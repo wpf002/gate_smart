@@ -1,4 +1,4 @@
-import { Component, useEffect, useRef } from 'react';
+import { Component, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import BottomNav from './components/common/BottomNav';
 import HomePage from './pages/HomePage';
@@ -193,7 +193,66 @@ function AppShell() {
   );
 }
 
+function IOSInstallBanner() {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches;
+  const [visible, setVisible] = useState(
+    isIOS && !isInStandaloneMode && !localStorage.getItem('gs_install_prompted')
+  );
+
+  if (!visible) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10000,
+      background: '#C9A84C',
+      color: '#0a0a0a',
+      padding: '12px 16px',
+      fontSize: 13,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    }}>
+      <span>
+        📱 Add GateSmart to your home screen for the best experience. Tap Share → Add to Home Screen
+      </span>
+      <button
+        onClick={() => {
+          localStorage.setItem('gs_install_prompted', '1');
+          setVisible(false);
+        }}
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          fontSize: 20,
+          lineHeight: 1,
+          color: '#0a0a0a',
+          flexShrink: 0,
+          padding: 4,
+        }}
+        aria-label="Dismiss"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
+  // Service Worker registration
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .catch(err => console.log('SW registration failed:', err));
+    }
+  }, []);
+
   // OneSignal
   useEffect(() => {
     const appId = import.meta.env.VITE_ONESIGNAL_APP_ID;
@@ -230,6 +289,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppShell />
+      <IOSInstallBanner />
     </BrowserRouter>
   );
 }

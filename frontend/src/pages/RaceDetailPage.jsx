@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { trackRaceAnalysis, trackScoreCardViewed, trackDebriefViewed } from '../utils/analytics';
+import { trackRaceAnalysis, trackScoreCardViewed, trackDebriefViewed, trackEvent } from '../utils/analytics';
 import { useQuery } from '@tanstack/react-query';
 import { getRaceDetail, getScoreCard, getRaceDebrief, clearRaceAnalysis, getRaceResults } from '../utils/api';
 import { HorseRow, HorseRowSkeleton } from '../components/races/HorseRow';
@@ -9,6 +9,7 @@ import DebriefPanel from '../components/races/DebriefPanel';
 import { getDisplayTime, formatDistance, formatPurse, isRaceDefinitelyFinished } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
 import AffiliateDrawer from '../components/common/AffiliateDrawer';
+import { PARTNERS } from '../utils/affiliates';
 
 const MODES = [
   { id: 'safe',       label: 'Safe',       desc: 'Minimize risk'  },
@@ -20,12 +21,14 @@ const MODES = [
 const FINISH_MEDALS = { first: '🥇', second: '🥈', third: '🥉', fourth: '🎗️' };
 
 // ── AnalysisPanel ─────────────────────────────────────────────────────────────
-function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '' }) {
+function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '', raceType = '' }) {
   const [viewMode, setViewMode] = useState('beginner'); // 'technical' | 'beginner'
   const [copied, setCopied] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerHorse, setDrawerHorse] = useState('');
   const [drawerBetType, setDrawerBetType] = useState('');
+  const [tgDismissed, setTgDismissed] = useState(!!sessionStorage.getItem('gs_tg_dismissed'));
+  const [wpDismissed, setWpDismissed] = useState(!!sessionStorage.getItem('gs_wp_dismissed'));
   const [tellerBet, setTellerBet] = useState(null); // { selection, script }
   const { addToBetSlip } = useAppStore();
 
@@ -269,26 +272,22 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
             </div>
             {entries.map(([type, rec]) => (
               <div key={type} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid var(--border-subtle)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4, gap: 8, flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', marginBottom: 2 }}>
-                      {viewMode === 'beginner' ? (BET_LABELS[type] || type) : type.charAt(0).toUpperCase() + type.slice(1)}
-                      {rec.stake_suggestion && (
-                        <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>{rec.stake_suggestion}</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>{rec.reasoning}</div>
-                    {rec.box_option && viewMode === 'technical' && (
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>📦 {rec.box_option}</div>
-                    )}
-                  </div>
-                  <BetButtons
-                    selection={rec.selection}
-                    betTypeKey={type}
-                    betTypeLabel={BET_LABELS[type] || type}
-                  />
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', marginBottom: 2 }}>
+                  {viewMode === 'beginner' ? (BET_LABELS[type] || type) : type.charAt(0).toUpperCase() + type.slice(1)}
+                  {rec.stake_suggestion && (
+                    <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>{rec.stake_suggestion}</span>
+                  )}
                 </div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 8 }}>{rec.reasoning}</div>
+                {rec.box_option && viewMode === 'technical' && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>📦 {rec.box_option}</div>
+                )}
+                <BetButtons
+                  selection={rec.selection}
+                  betTypeKey={type}
+                  betTypeLabel={BET_LABELS[type] || type}
+                />
               </div>
             ))}
           </div>
@@ -365,7 +364,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
         </div>
       )}
 
-      {/* ── Single-bet teller modal ───────────────────────────────── */}
+      {/* ── Single-bet teller modal (full-screen on mobile) ──────── */}
       {tellerBet && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: '24px 16px' }}
           onClick={() => setTellerBet(null)}>
@@ -388,6 +387,70 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
               <button className="btn" style={{ flex: 1, border: '1px solid var(--border-subtle)' }} onClick={() => setTellerBet(null)}>Close</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Thoro-Graph partner card (US/CAN only, after analysis) ── */}
+      {!tgDismissed && ['usa', 'can'].includes((userRegion || '').toLowerCase()) && (
+        <div style={{
+          background: '#1a1a1a',
+          border: '1px solid #C9A84C',
+          borderRadius: 8,
+          padding: 14,
+          marginTop: 12,
+          marginBottom: 4,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
+                📊 Want deeper speed figures?
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 10 }}>
+                {PARTNERS.thorograph.description}
+              </div>
+              <button
+                onClick={() => {
+                  trackEvent('partner_click', { partner: 'thorograph' });
+                  window.open(PARTNERS.thorograph.url, '_blank', 'noopener,noreferrer');
+                }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#C9A84C', fontSize: 13, fontWeight: 600, padding: 0,
+                  textDecoration: 'underline',
+                }}
+              >
+                {PARTNERS.thorograph.cta} →
+              </button>
+            </div>
+            <button
+              onClick={() => { sessionStorage.setItem('gs_tg_dismissed', '1'); setTgDismissed(true); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 18, lineHeight: 1, padding: 4, flexShrink: 0 }}
+              aria-label="Dismiss"
+            >×</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── West Point TB maiden prompt ───────────────────────────── */}
+      {!wpDismissed && (raceType?.toLowerCase().includes('maiden') || analysis?.overall_summary?.toLowerCase().includes('maiden') || analysis?.overall_summary_beginner?.toLowerCase().includes('maiden')) && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(201,168,76,0.7)', lineHeight: 1.6 }}>
+          🐎 Interested in horses like these?{' '}
+          <button
+            onClick={() => {
+              trackEvent('partner_click', { partner: 'westpoint' });
+              window.open(PARTNERS.westpoint.url, '_blank', 'noopener,noreferrer');
+              sessionStorage.setItem('gs_wp_dismissed', '1');
+              setWpDismissed(true);
+            }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(201,168,76,0.85)', fontSize: 12, padding: 0, textDecoration: 'underline' }}
+          >
+            West Point Thoroughbreds offers fractional ownership in top-level thoroughbreds. Learn more →
+          </button>
+          <button
+            onClick={() => { sessionStorage.setItem('gs_wp_dismissed', '1'); setWpDismissed(true); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: '0 0 0 6px', lineHeight: 1 }}
+            aria-label="Dismiss"
+          >×</button>
         </div>
       )}
 
@@ -698,16 +761,16 @@ export default function RaceDetailPage() {
             race.runners?.length ? `${race.runners.length} runners` : null,
           ].filter(Boolean);
           return (
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 0, marginBottom: 16, flexWrap: 'nowrap', overflowX: 'auto', alignItems: 'center', whiteSpace: 'nowrap' }}>
               {items.map((item, i) => (
-                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {i > 0 && sep}
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item}</span>
+                <span key={i} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {i > 0 && <span style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>}
+                  {item}
                 </span>
               ))}
               {raceFinished && (
                 <>
-                  {items.length > 0 && sep}
+                  <span style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>
                   <span style={{ fontSize: 13, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>Finished</span>
                 </>
               )}
@@ -718,29 +781,26 @@ export default function RaceDetailPage() {
         {/* ── Finished race results ──────────────────────────────────── */}
         {raceFinished && raceResults && <ResultsPanel results={raceResults} />}
 
-        {/* ── Mode selector (always visible) ────────────────────────── */}
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Analysis Mode</div>
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
-            {MODES.map(m => (
-              <button key={m.id} onClick={() => handleModeChange(m.id)} style={{
-                flexShrink: 0, padding: '6px 12px', borderRadius: 20, border: '1px solid',
-                borderColor: analysisMode === m.id ? 'var(--accent-gold)' : 'var(--border-subtle)',
-                background: analysisMode === m.id ? 'rgba(201,162,39,0.12)' : 'transparent',
-                color: analysisMode === m.id ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
-                fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-              }}>
-                {m.label}
-              </button>
-            ))}
-          </div>
+        {/* ── Mode selector ──────────────────────────────────────────── */}
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 10 }}>
+          {MODES.map(m => (
+            <button key={m.id} onClick={() => handleModeChange(m.id)} style={{
+              flexShrink: 0, padding: '6px 12px', borderRadius: 20, border: '1px solid',
+              borderColor: analysisMode === m.id ? 'var(--accent-gold)' : 'var(--border-subtle)',
+              background: analysisMode === m.id ? 'rgba(201,162,39,0.12)' : 'transparent',
+              color: analysisMode === m.id ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            }}>
+              {m.label}
+            </button>
+          ))}
         </div>
 
         {/* ── Action buttons ─────────────────────────────────────────── */}
-        <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {showAnalyseBtn && (
             <button className="btn btn-primary btn-full" onClick={() => analyzeMutation.mutate()} disabled={isLoading}>
-              Analyse with Secretariat
+              Analyze with Secretariat
             </button>
           )}
           {analysis && !analysisStreaming && (
@@ -810,7 +870,7 @@ export default function RaceDetailPage() {
         {showTabs && (
           <div style={{ marginBottom: 16 }}>
             {tabs.length > 1 && <TabBar tabs={tabs} active={validTab} onChange={setActiveTab} />}
-            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} runners={race?.runners || []} userRegion={userProfile?.region || 'usa'} raceId={raceId} course={race?.course || race?.venue || ''} />}
+            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} runners={race?.runners || []} userRegion={userProfile?.region || 'usa'} raceId={raceId} course={race?.course || race?.venue || ''} raceType={race?.race_type || race?.race_class || ''} />}
             {validTab === 'debrief' && <DebriefPanel debrief={debrief} loading={debriefLoading} />}
           </div>
         )}

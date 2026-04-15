@@ -195,7 +195,7 @@ function BetCard({ bet, onSettle, settling, settleMsg, onDelete, deleting }) {
               className="btn btn-secondary"
               disabled={isThisSettling}
               onClick={() => onSettle(bet.race_id)}
-              style={{ fontSize: 11, padding: '4px 10px' }}
+              style={{ fontSize: 13, padding: '0 14px', minHeight: 48, width: '100%', marginTop: 8 }}
             >
               {isThisSettling ? 'Checking…' : 'Check Result'}
             </button>
@@ -486,13 +486,11 @@ export default function SimulatorPage() {
         subtitle="Paper trading · no real money"
       />
 
-      {/* Tab bar */}
+      {/* Tab bar — full width equal columns, 44px min tap target */}
       <div style={{
         display: 'flex',
         borderBottom: '1px solid var(--border-subtle)',
-        padding: '0 16px',
         marginBottom: 16,
-        gap: 4,
       }}>
         {TABS.map(({ id, label }) => (
           <button
@@ -500,7 +498,8 @@ export default function SimulatorPage() {
             onClick={() => setTab(id)}
             style={{
               flex: 1,
-              padding: '10px 0',
+              padding: '12px 0',
+              minHeight: 44,
               background: 'none',
               border: 'none',
               borderBottom: tab === id ? '2px solid var(--accent-gold)' : '2px solid transparent',

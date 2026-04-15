@@ -1,5 +1,27 @@
 import { logAffiliateClick } from './api';
 
+// ── Content partner configuration ──────────────────────────────────────────────
+// Note: When affiliate agreements are signed, update these URLs to include
+// affiliate tracking parameters. For now they link directly to partner sites.
+export const PARTNERS = {
+  thorograph: {
+    name: 'Thoro-Graph',
+    url: 'https://www.thorograph.com',
+    description: 'Proprietary speed figures used by serious handicappers — especially valuable on turf and off tracks.',
+    cta: 'Get TG Figures',
+  },
+  westpoint: {
+    name: 'West Point Thoroughbreds',
+    url: 'https://www.westpointtb.com',
+    description: 'Own a share of a top-level thoroughbred racehorse. The gold standard in racing partnerships.',
+    cta: 'Explore Ownership',
+  },
+};
+
+export function getPartnerUrl(partnerKey) {
+  return PARTNERS[partnerKey]?.url || '#';
+}
+
 // Affiliate sportsbook configuration
 export const AFFILIATES = [
   {

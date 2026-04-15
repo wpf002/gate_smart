@@ -50,6 +50,11 @@ html, body, #root {
   width: 100%;
 }
 
+html {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -57,6 +62,12 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
+  overflow-x: hidden;
+}
+
+/* Prevent iOS zoom on input focus */
+input, textarea, select {
+  font-size: 16px;
 }
 
 /* ─── App Shell — Mobile ────────────────────────────────────────────────── */
@@ -73,7 +84,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: calc(var(--bottom-nav-height) + 16px);
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 16px);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -187,6 +198,7 @@ body {
   display: flex;
   align-items: stretch;
   flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ─── Cards ──────────────────────────────────────────────────────────────── */

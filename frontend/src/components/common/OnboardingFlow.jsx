@@ -98,6 +98,7 @@ export default function OnboardingFlow() {
   const [regions, setRegions] = useState(['usa']);
 
   const advance = () => setStep((s) => s + 1);
+  const back = () => setStep((s) => s - 1);
 
   const save = () => {
     const primaryRegion = regions[0] || 'usa';
@@ -181,6 +182,7 @@ export default function OnboardingFlow() {
         {/* ── Step 1: Bankroll ───────────────────────────────────────── */}
         {step === 1 && (
           <StepWrapper>
+            <button onClick={back} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 4 }}>← Back</button>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--accent-gold)', marginBottom: 6 }}>
               Set Your Paper Trading Bank
             </div>
@@ -233,6 +235,7 @@ export default function OnboardingFlow() {
         {/* ── Step 2: Risk ───────────────────────────────────────────── */}
         {step === 2 && (
           <StepWrapper>
+            <button onClick={back} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 4 }}>← Back</button>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--accent-gold)', marginBottom: 6 }}>
               How do you like to bet?
             </div>
@@ -253,6 +256,7 @@ export default function OnboardingFlow() {
         {/* ── Step 3: Region ─────────────────────────────────────────── */}
         {step === 3 && (
           <StepWrapper>
+            <button onClick={back} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 4 }}>← Back</button>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--accent-gold)', marginBottom: 6 }}>
               Where do you follow racing?
             </div>

@@ -123,6 +123,8 @@ export function RaceCard({ race, isTomorrow = false }) {
         cursor: 'pointer',
         opacity: past ? 0.6 : 1,
         transition: 'background 0.15s',
+        minHeight: 60,
+        overflow: 'hidden',
       }}
       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-card-hover)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.35)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.boxShadow = 'none'; }}
@@ -134,6 +136,12 @@ export function RaceCard({ race, isTomorrow = false }) {
           fontSize: 18,
           color: past ? 'var(--text-muted)' : 'var(--accent-gold)',
           letterSpacing: '0.04em',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          minWidth: 0,
+          flex: 1,
+          marginRight: 8,
         }}>
           {displayTime}
           {timeLabel && (

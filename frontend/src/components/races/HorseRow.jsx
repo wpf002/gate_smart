@@ -293,6 +293,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              maxWidth: 180,
               textDecoration: isScratched ? 'line-through' : 'none',
             }}>
               {horse.horse_name}
@@ -304,7 +305,14 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
               <span className="badge badge-gold" style={{ flexShrink: 0, fontSize: 9 }}>ENTRY</span>
             )}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+          <div style={{
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            marginTop: 2,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
             {[horse.jockey, horse.trainer].filter(Boolean).join(' · ')}
           </div>
           {horse.claiming_price && (
@@ -372,9 +380,11 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
           borderTop: '1px solid var(--border-subtle)',
           padding: '12px',
           background: 'var(--bg-secondary)',
+          maxWidth: '100%',
+          overflow: 'hidden',
         }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            {/* Analysis text */}
+          {/* Analysis text + radar: side-by-side on wider screens, radar below text on narrow */}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
             {summaryText && (
               <div style={{ flex: 1, minWidth: 0 }}>
                 {experienceLevel !== 'beginner' && analysisData.strengths?.length > 0 && (
@@ -407,13 +417,13 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
               </div>
             )}
 
-            {/* Compact radar fingerprint (visual only — no labels, no overall text) */}
+            {/* Compact radar fingerprint */}
             {scorecard && (
               <div style={{ flexShrink: 0 }}>
                 <RadarChart
                   scores={scorecard.scores}
                   overall={scorecard.overall}
-                  size={120}
+                  size={100}
                   animate={false}
                   showLabels={false}
                   showOverall={false}
