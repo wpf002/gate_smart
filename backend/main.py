@@ -27,8 +27,7 @@ async def lifespan(app: FastAPI):
 
     scheduler = create_scheduler()
     scheduler.start()
-    import logging
-    logging.getLogger(__name__).info("[scheduler] Nightly jobs scheduled and running")
+    print("[scheduler] Nightly jobs scheduled and running", flush=True)
     yield
     scheduler.shutdown(wait=False)
 
