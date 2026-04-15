@@ -13,6 +13,7 @@ from app.core.cache import init_redis
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.limiter import limiter
+from app.core.scheduler import create_scheduler
 
 
 @asynccontextmanager
@@ -23,7 +24,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Database init failed (non-fatal): {e}")
+
+    scheduler = create_scheduler()
+    scheduler.start()
+    import logging
+    logging.getLogger(__name__).info("[scheduler] Nightly jobs scheduled and running")
     yield
+    scheduler.shutdown(wait=False)
 
 
 app = FastAPI(
