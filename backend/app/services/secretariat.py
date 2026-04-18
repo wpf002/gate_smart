@@ -1060,80 +1060,189 @@ async def _store_prediction(
 
 async def generate_daily_email_report(report, predictions: list) -> dict:
     """
-    Uses Claude to write a daily performance digest email.
+    Builds a complete daily digest email for every settled race.
+
+    Strategy: Python builds the full results table (guaranteed complete coverage,
+    zero token cost). Claude writes only the pattern analysis sections.
     Returns { "subject": str, "html": str, "text": str }
-    report: DailyAccuracyReport instance
-    predictions: list of RacePrediction instances (settled today)
     """
     import datetime
+    from collections import defaultdict
 
-    today_str = report.report_date.strftime("%A, %B %d %Y") if report.report_date else str(datetime.date.today())
+    today_str = report.report_date.strftime("%A, %B %d, %Y") if report.report_date else str(datetime.date.today())
 
-    race_rows = []
-    for p in predictions:
-        status = "Won" if p.top_pick_correct else ("Lost" if p.top_pick_correct is False else "Unknown")
-        actual = p.actual_first or "N/A"
-        race_rows.append(
-            f"Race: {p.race_name or p.race_id} | Track: {p.track_code or '?'} | "
-            f"Type: {p.race_type or '?'} | My pick: {p.predicted_first or '?'} | "
-            f"Winner: {actual} | Result: {status}"
+    hits = [p for p in predictions if p.top_pick_correct]
+    misses = [p for p in predictions if not p.top_pick_correct]
+    total = len(predictions)
+    win_pct = f"{len(hits)/total:.1%}" if total else "0.0%"
+    itm_pct = f"{report.in_the_money/total:.1%}" if total else "0.0%"
+
+    # ── Build complete results table in Python (every race, no LLM needed) ──
+    def _row_text(p):
+        icon = "✅" if p.top_pick_correct else ("🔶" if p.in_the_money else "❌")
+        return (
+            f"{icon} {p.race_name or p.race_id} | {p.track_code or '?'} | "
+            f"{p.race_type or '?'} | Picked: {p.predicted_first or '?'} | "
+            f"Won: {p.actual_first or 'N/A'}"
         )
 
-    race_detail = "\n".join(race_rows) if race_rows else "No settled races."
+    def _row_html(p):
+        icon = "✅" if p.top_pick_correct else ("🔶" if p.in_the_money else "❌")
+        bg = "#f0fff0" if p.top_pick_correct else ("#fffbe6" if p.in_the_money else "#fff5f5")
+        return (
+            f'<tr style="background:{bg}">'
+            f'<td style="padding:4px 8px">{icon}</td>'
+            f'<td style="padding:4px 8px">{p.race_name or p.race_id}</td>'
+            f'<td style="padding:4px 8px">{p.track_code or "?"}</td>'
+            f'<td style="padding:4px 8px">{p.race_type or "?"}</td>'
+            f'<td style="padding:4px 8px"><strong>{p.predicted_first or "?"}</strong></td>'
+            f'<td style="padding:4px 8px">{p.actual_first or "N/A"}</td>'
+            f'</tr>'
+        )
 
-    by_track = json.dumps(report.by_track or {}, indent=2) if report.by_track else "{}"
-    by_type = json.dumps(report.by_race_type or {}, indent=2) if report.by_race_type else "{}"
+    text_table = "\n".join(_row_text(p) for p in predictions)
+    html_rows = "\n".join(_row_html(p) for p in predictions)
+    html_table = (
+        '<table style="border-collapse:collapse;width:100%;font-size:13px">'
+        '<tr style="background:#222;color:#fff">'
+        '<th style="padding:6px 8px"></th>'
+        '<th style="padding:6px 8px;text-align:left">Race</th>'
+        '<th style="padding:6px 8px;text-align:left">Track</th>'
+        '<th style="padding:6px 8px;text-align:left">Type</th>'
+        '<th style="padding:6px 8px;text-align:left">My Pick</th>'
+        '<th style="padding:6px 8px;text-align:left">Winner</th>'
+        '</tr>'
+        + html_rows
+        + '</table>'
+    )
 
-    prompt = f"""Today is {today_str}.
+    # ── Aggregate patterns for Claude's analysis (compact, not raw rows) ──
+    by_track: dict = defaultdict(lambda: {"wins": 0, "total": 0})
+    by_type: dict = defaultdict(lambda: {"wins": 0, "total": 0})
+    by_surface: dict = defaultdict(lambda: {"wins": 0, "total": 0})
+    for p in predictions:
+        for bucket, key in [
+            (by_track, p.track_code or "?"),
+            (by_type, p.race_type or "?"),
+            (by_surface, getattr(p, "surface", None) or "?"),
+        ]:
+            bucket[key]["total"] += 1
+            if p.top_pick_correct:
+                bucket[key]["wins"] += 1
 
-PERFORMANCE SUMMARY:
-- Races analyzed: {report.races_analyzed}
-- Top pick wins: {report.top_pick_wins}
-- Win rate: {report.win_rate:.1%}
-- In the money: {report.in_the_money} ({report.itm_rate:.1%} ITM rate)
-- Best call: {report.best_call or 'N/A'}
-- Worst miss: {report.worst_miss or 'N/A'}
+    def _fmt_bucket(b):
+        return ", ".join(
+            f"{k}: {v['wins']}/{v['total']}"
+            for k, v in sorted(b.items(), key=lambda x: -x[1]["total"])
+        )
 
-RACE BY RACE:
-{race_detail}
+    hit_sample = "; ".join(
+        f"{p.predicted_first} won at {p.track_code or '?'} ({p.race_type or '?'})"
+        for p in hits[:15]
+    ) or "none"
+    miss_sample = "; ".join(
+        f"picked {p.predicted_first}, {p.actual_first or 'N/A'} won at {p.track_code or '?'} ({p.race_type or '?'})"
+        for p in misses[:20]
+    ) or "none"
 
-BY TRACK:
-{by_track}
+    analysis_prompt = f"""Date: {today_str}
+Total races: {total} | Wins: {len(hits)} ({win_pct}) | ITM: {report.in_the_money} ({itm_pct})
 
-BY RACE TYPE:
-{by_type}
+By track (wins/total): {_fmt_bucket(by_track)}
+By race type (wins/total): {_fmt_bucket(by_type)}
+By surface (wins/total): {_fmt_bucket(by_surface)}
 
-Write a daily performance digest email with these exact sections:
-1. TODAY'S SCORECARD — quick stats summary
-2. RACE BY RACE — one paragraph per race covering my pick, the result, and why it worked or didn't
-3. WHAT I NOTICED TODAY — 2-3 pattern observations
-4. AREAS TO IMPROVE — 1-3 specific, actionable adjustments
-5. TOMORROW'S WATCHLIST — 2-3 things to look for based on today's patterns
+Sample correct picks: {hit_sample}
+Sample misses: {miss_sample}
 
+Write three analysis sections for Secretariat's nightly digest. Be specific and honest.
 Return JSON exactly:
 {{
-  "subject": "email subject line with date and quick stats",
-  "html": "complete HTML email body (use <h2> for sections, <p> for paragraphs, <ul> for lists)",
-  "text": "plain text version"
+  "subject": "Secretariat – {today_str} | {len(hits)}/{total} ({win_pct}) win rate",
+  "what_went_right": "2-4 sentences: which patterns produced correct picks today and why those signals worked. Name specific tracks, race types, or surfaces if there's a pattern.",
+  "what_went_wrong": "2-4 sentences: which patterns failed and the likely reason. Be honest about systematic weaknesses, not just bad luck.",
+  "how_im_evolving": "2-4 sentences: specific changes to reasoning or weighting I will apply going forward based on today. Must be concrete, not generic."
 }}"""
 
     response = await client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=4096,
-        temperature=0.7,
+        max_tokens=1200,
+        temperature=0.4,
         system=(
-            "You are Secretariat, an AI horse racing handicapper. "
-            "Write a daily performance digest for your trainer, Will. "
-            "Be honest, direct, and analytical. Do not sugarcoat misses. "
-            "Explain WHY picks likely went wrong based on race types and track conditions. "
-            "Identify patterns. Suggest what to watch for tomorrow. "
-            "Write in first person as Secretariat. "
-            "Tone: confident, self-aware, like a jockey debriefing after a day at the track."
+            "You are Secretariat, an AI horse racing handicapper reviewing your daily performance. "
+            "Write in first person. Be analytical, honest, and specific — name tracks, race types, and patterns. "
+            "Do not use filler phrases. Every sentence must contain a concrete observation."
         ),
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": analysis_prompt}],
     )
 
-    return _parse_json(response.content[0].text)
+    analysis = _parse_json(response.content[0].text)
+
+    subject = analysis.get("subject", f"Secretariat – {today_str} | {len(hits)}/{total} wins")
+    what_right = analysis.get("what_went_right", "")
+    what_wrong = analysis.get("what_went_wrong", "")
+    evolving = analysis.get("how_im_evolving", "")
+
+    # ── Assemble final email in Python ──
+    text_body = f"""SECRETARIAT DAILY DIGEST — {today_str.upper()}
+{'='*60}
+
+SCORECARD
+  Races analyzed : {total}
+  Wins           : {len(hits)} ({win_pct})
+  In the money   : {report.in_the_money} ({itm_pct})
+
+WHAT WENT RIGHT
+{what_right}
+
+WHAT WENT WRONG
+{what_wrong}
+
+HOW I'M EVOLVING
+{evolving}
+
+COMPLETE RESULTS ({total} races)
+{'─'*60}
+{text_table}
+"""
+
+    html_body = f"""<div style="font-family:Georgia,serif;max-width:800px;margin:auto;color:#1a1a1a">
+  <h1 style="border-bottom:3px solid #c8a84b;padding-bottom:8px">
+    🏇 Secretariat Daily Digest
+  </h1>
+  <p style="color:#666;font-size:13px">{today_str}</p>
+
+  <table style="width:100%;background:#f8f4ec;border-radius:6px;padding:16px;margin:16px 0">
+    <tr>
+      <td style="font-size:28px;font-weight:bold;text-align:center">{len(hits)}/{total}</td>
+      <td style="font-size:28px;font-weight:bold;text-align:center">{win_pct}</td>
+      <td style="font-size:28px;font-weight:bold;text-align:center">{itm_pct}</td>
+    </tr>
+    <tr>
+      <td style="text-align:center;color:#666;font-size:12px">Wins / Races</td>
+      <td style="text-align:center;color:#666;font-size:12px">Win Rate</td>
+      <td style="text-align:center;color:#666;font-size:12px">ITM Rate</td>
+    </tr>
+  </table>
+
+  <h2 style="color:#2d6a2d">✅ What Went Right</h2>
+  <p>{what_right}</p>
+
+  <h2 style="color:#a33">❌ What Went Wrong</h2>
+  <p>{what_wrong}</p>
+
+  <h2 style="color:#c8a84b">🔄 How I'm Evolving</h2>
+  <p>{evolving}</p>
+
+  <h2>📋 Complete Results — All {total} Races</h2>
+  {html_table}
+
+  <p style="font-size:11px;color:#999;margin-top:24px">
+    Secretariat · GateSmart · {today_str}
+  </p>
+</div>"""
+
+    return {"subject": subject, "html": html_body, "text": text_body}
 
 
 # ── Calibration Context ───────────────────────────────────────────────────────

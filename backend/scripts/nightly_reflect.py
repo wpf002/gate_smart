@@ -48,33 +48,37 @@ async def _ensure_columns(engine) -> None:
 
 async def reflect_batch(client, races: list[dict]) -> list[dict]:
     """
-    Ask Secretariat to reflect on a batch of races (mix of hits and misses).
-    Returns a list of {race_id, factor, lesson} dicts.
+    Reflect on a batch of races, distinguishing hits from misses.
+    Returns list of {race_id, hit, factor, lesson_type, lesson} dicts.
+    lesson_type is "continue" (hit) or "change" (miss).
     """
     items = []
     for r in races:
         outcome = "CORRECT" if r["hit"] else "MISSED"
         items.append(
-            f"- [{outcome}] {r['race_name']} | track={r['track']} surface={r['surface']} "
-            f"type={r['race_type']} | picked={r['predicted']} actual={r['actual']}"
+            f"  race_id={r['race_id']} [{outcome}] {r['race_name']} "
+            f"track={r['track']} surface={r['surface']} type={r['race_type']} "
+            f"picked={r['predicted']} actual={r['actual']}"
         )
 
     prompt = (
-        "You are Secretariat reviewing yesterday's predictions. "
-        "For each race below, return a JSON array. Each element must have:\n"
-        '  "race_id": the race_id string\n'
-        '  "factor": the single most important factor that explains the outcome '
-        "(e.g. pace collapse, surface switch, class drop, connections, market drift, trainer pattern)\n"
-        '  "lesson": one concise sentence — what to weigh differently next time in similar races\n\n'
-        "Races:\n"
-        + "\n".join(f"  race_id={r['race_id']} {line}" for r, line in zip(races, items))
-        + "\n\nReturn ONLY valid JSON array, no explanation."
+        "You are Secretariat reviewing your predictions. "
+        "For each race return a JSON array element with:\n"
+        '  "race_id": string\n'
+        '  "factor": the single key factor explaining the outcome '
+        "(pace shape, surface bias, class drop, connections, odds drift, field size, trainer pattern)\n"
+        '  "lesson_type": "continue" if CORRECT (this reasoning worked, keep it), '
+        '"change" if MISSED (this reasoning failed, adjust it)\n'
+        '  "lesson": one sentence — for CORRECT: what signal to keep trusting; '
+        "for MISSED: what specific thing to weigh differently next time\n\n"
+        "Races:\n" + "\n".join(items)
+        + "\n\nReturn ONLY a valid JSON array, no explanation."
     )
 
     try:
         resp = await client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=600,
+            max_tokens=1024,
             temperature=0.2,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -93,43 +97,36 @@ async def reflect_batch(client, races: list[dict]) -> list[dict]:
 
 async def synthesise_lessons(client, reflections: list[dict], date_str: str) -> list[str]:
     """
-    One Sonnet call to synthesise 5 durable lessons from all of yesterday's reflections.
-    Returns a list of lesson strings suitable for injection into future prompts.
+    Synthesise durable lessons from all reflections.
+    Produces 3 CONTINUE + 3 CHANGE + 2 WATCH = 8 structured lessons
+    injected into every future analysis prompt.
     """
-    hits = [r for r in reflections if r.get("hit")]
-    misses = [r for r in reflections if not r.get("hit")]
+    continues = [r for r in reflections if r.get("lesson_type") == "continue"]
+    changes = [r for r in reflections if r.get("lesson_type") == "change"]
 
-    summary_lines = []
-    if misses:
-        summary_lines.append(f"MISSES ({len(misses)}):")
-        for r in misses[:30]:  # cap to avoid blowing context
-            summary_lines.append(
-                f"  - {r['race_name']} | picked {r['predicted']}, actual {r['actual']} "
-                f"| surface={r['surface']} type={r['race_type']} | factor={r.get('factor','')} | {r.get('lesson','')}"
-            )
-    if hits:
-        summary_lines.append(f"CORRECT PICKS ({len(hits)}):")
-        for r in hits[:20]:
-            summary_lines.append(
-                f"  - {r['race_name']} | {r['predicted']} won "
-                f"| surface={r['surface']} type={r['race_type']} | factor={r.get('factor','')} | {r.get('lesson','')}"
-            )
+    def _fmt(items, n=25):
+        return "\n".join(
+            f"  - [{r.get('factor','')}] {r.get('lesson','')}"
+            for r in items[:n]
+        ) or "  (none)"
 
     prompt = (
-        f"You are Secretariat reviewing your performance on {date_str}.\n\n"
-        + "\n".join(summary_lines)
-        + "\n\nBased on this, write exactly 5 durable lessons I should carry into every future race "
-        "I handicap. Each lesson must be:\n"
-        "- Specific and actionable (not generic like 'consider all factors')\n"
-        "- Applicable across multiple races, not a one-off observation\n"
-        "- Written in first person (e.g. 'When the surface switches to turf, I tend to over-rely on dirt speed figures...')\n\n"
-        'Return ONLY a JSON array of 5 strings. Example: ["lesson 1", "lesson 2", ...]'
+        f"You are Secretariat synthesising what you learned on {date_str}.\n\n"
+        f"REASONING THAT WORKED ({len(continues)} races):\n{_fmt(continues)}\n\n"
+        f"REASONING THAT FAILED ({len(changes)} races):\n{_fmt(changes)}\n\n"
+        "Produce exactly 8 lessons I will carry into every future race I handicap:\n"
+        "- 3 labeled CONTINUE: patterns from correct picks to keep trusting\n"
+        "- 3 labeled CHANGE: specific adjustments to make based on failures\n"
+        "- 2 labeled WATCH: emerging patterns to monitor but not yet act on\n\n"
+        "Each lesson must be specific, actionable, and written in first person.\n"
+        "Format each as: 'CONTINUE: When...', 'CHANGE: When...', 'WATCH: When...'\n\n"
+        'Return ONLY a JSON array of 8 strings.'
     )
 
     try:
         resp = await client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=800,
+            max_tokens=1200,
             temperature=0.3,
             messages=[{"role": "user", "content": prompt}],
         )
