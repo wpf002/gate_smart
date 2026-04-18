@@ -25,6 +25,7 @@ async def _ensure_columns(engine) -> None:
     """Add columns that were introduced after initial table creation."""
     ddl = [
         "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS reflection TEXT",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)",
         "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
     ]
     async with engine.begin() as conn:
@@ -67,6 +68,8 @@ async def main(dry_run: bool):
             select(RacePrediction).where(
                 RacePrediction.race_date >= cutoff,
                 RacePrediction.result_fetched == True,  # noqa: E712
+                # NA-only calibration — international racing has different patterns
+                (RacePrediction.region == "na") | (RacePrediction.region == None),  # noqa: E711
             )
         )
         predictions = result.scalars().all()

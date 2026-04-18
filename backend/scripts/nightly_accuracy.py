@@ -26,6 +26,7 @@ async def _ensure_columns(engine) -> None:
     """Add columns that were introduced after initial table creation."""
     ddl = [
         "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS reflection TEXT",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)",
         "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
     ]
     async with engine.begin() as conn:
@@ -62,10 +63,11 @@ async def main(target_date: datetime.date, dry_run: bool):
         print("Nothing to settle — exiting.")
         return
 
-    # 2. Fetch NA results for target_date (NA race IDs use a different endpoint)
-    from app.services.racing_api import get_na_results_full
+    # 2. Fetch results from both NA and international endpoints
+    from app.services.racing_api import get_na_results_full, get_results
 
     date_str = target_date.isoformat()
+
     print(f"  Fetching NA results for {date_str}…")
     try:
         na_data = await get_na_results_full(date_str)
@@ -74,6 +76,17 @@ async def main(target_date: datetime.date, dry_run: bool):
     except Exception as e:
         print(f"  NA results fetch failed: {e}")
         na_results_by_id = {}
+
+    print(f"  Fetching international results for {date_str}…")
+    try:
+        int_data = await get_results(date=date_str)
+        int_results_by_id = {r.get("race_id"): r for r in int_data.get("results", []) if r.get("race_id")}
+        print(f"  Found {len(int_results_by_id)} international results.")
+    except Exception as e:
+        print(f"  International results fetch failed: {e}")
+        int_results_by_id = {}
+
+    all_results_by_id = {**int_results_by_id, **na_results_by_id}  # NA takes precedence on collision
 
     def _finisher(runners: list, pos: int) -> str | None:
         for r in runners:
@@ -88,7 +101,7 @@ async def main(target_date: datetime.date, dry_run: bool):
     settled = []
     for pred in predictions:
         try:
-            race_result = na_results_by_id.get(pred.race_id)
+            race_result = all_results_by_id.get(pred.race_id)
             if not race_result:
                 print(f"  ✗ {pred.race_id}: no result yet")
                 continue

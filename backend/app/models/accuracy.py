@@ -31,6 +31,7 @@ class RacePrediction(Base):
     race_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     race_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     surface: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    region: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # 'na' or 'int'
     analysis_mode: Mapped[str] = mapped_column(String(20), default="balanced")
 
     # Predicted finish (names as Secretariat returned them)

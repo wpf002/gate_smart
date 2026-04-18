@@ -39,6 +39,7 @@ async def _ensure_columns(engine) -> None:
     """Add new columns to existing tables if they don't exist yet."""
     ddl = [
         "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS reflection TEXT",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)",
         "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
     ]
     async with engine.begin() as conn:
@@ -163,12 +164,15 @@ async def main(target_date: datetime.date, dry_run: bool):
 
     print(f"\n[nightly_reflect] Reflecting on {target_date} | dry_run={dry_run}")
 
-    # 1. Load all settled predictions for target_date
+    # 1. Load NA-only settled predictions for target_date
+    # International races are settled but excluded from lesson synthesis
+    # to keep Secretariat's calibration focused on North American racing
     async with _db._AsyncSessionLocal() as db:
         result = await db.execute(
             select(RacePrediction).where(
                 RacePrediction.race_date == target_date,
                 RacePrediction.result_fetched == True,  # noqa: E712
+                (RacePrediction.region == "na") | (RacePrediction.region == None),  # noqa: E711
             )
         )
         predictions = result.scalars().all()

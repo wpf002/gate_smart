@@ -79,30 +79,48 @@ async def main(target_date: datetime.date, dry_run: bool):
 
     await _db.init_db()
 
+    # Ensure region column exists (added after initial table creation)
+    from sqlalchemy import text as _text
+    async with _db._engine.begin() as _conn:
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)"))
+
     ssl_ctx = ssl.create_default_context()
     client = anthropic.AsyncAnthropic(
         api_key=settings.ANTHROPIC_API_KEY,
         http_client=httpx.AsyncClient(verify=ssl_ctx),
     )
 
-    # Fetch today's USA races via the NA meets endpoint (same as the main app)
-    from app.services.racing_api import get_na_racecards_full
+    from app.services.racing_api import get_na_racecards_full, get_racecards
 
     today = datetime.date.today()
     day_param = "today" if target_date == today else "tomorrow" if target_date == today + datetime.timedelta(days=1) else target_date.isoformat()
 
-    print(f"\n[nightly_predict_all] Fetching US racecards for {target_date}…")
+    # Fetch NA races (USA/CAN)
+    print(f"\n[nightly_predict_all] Fetching NA racecards for {target_date}…")
     try:
-        data = await get_na_racecards_full(day_param)
+        na_data = await get_na_racecards_full(day_param)
+        na_races = [(r, "na") for r in na_data.get("racecards", [])]
     except Exception as e:
-        print(f"Failed to fetch racecards: {e}")
-        return
+        print(f"  NA fetch failed: {e}")
+        na_races = []
 
-    races = data.get("racecards", [])
+    # Fetch international races (GB, IRE, AUS, etc.)
+    print(f"[nightly_predict_all] Fetching international racecards for {target_date}…")
+    try:
+        int_day = day_param if day_param in ("today", "tomorrow") else None
+        if int_day:
+            int_data = await get_racecards(date=int_day)
+            int_races = [(r, "int") for r in int_data.get("racecards", [])]
+        else:
+            int_races = []
+    except Exception as e:
+        print(f"  International fetch failed: {e}")
+        int_races = []
 
-    print(f"  Found {len(races)} races.")
+    all_races = na_races + int_races
+    print(f"  Found {len(na_races)} NA + {len(int_races)} international = {len(all_races)} total races.")
 
-    if not races:
+    if not all_races:
         print("No races found — exiting.")
         return
 
@@ -110,10 +128,10 @@ async def main(target_date: datetime.date, dry_run: bool):
     skipped = 0
     start_time = time.time()
 
-    for i, race in enumerate(races):
+    for i, (race, region) in enumerate(all_races):
         race_id = race.get("race_id") or race.get("id", "")
         race_name = race.get("race_name") or race.get("title", "")
-        track_code = (race.get("course_id") or race.get("course", ""))[:10]
+        track_code = (race.get("course_id") or race.get("course", "") or race.get("track_code", ""))[:10]
         race_type = race.get("race_type") or race.get("type", "")
         surface = race.get("surface", "")
 
@@ -121,7 +139,7 @@ async def main(target_date: datetime.date, dry_run: bool):
             skipped += 1
             continue
 
-        print(f"  [{i+1}/{len(races)}] {race_name or race_id}", end=" … ")
+        print(f"  [{i+1}/{len(all_races)}] [{region.upper()}] {race_name or race_id}", end=" … ")
 
         pf = await predict_race(client, race)
         if not pf:
@@ -139,6 +157,7 @@ async def main(target_date: datetime.date, dry_run: bool):
                     "race_name": race_name,
                     "race_type": race_type,
                     "surface": surface,
+                    "region": region,
                     "analysis_mode": "auto_daily",
                     "predicted_first": first,
                     "predicted_second": pf.get("second"),
@@ -153,12 +172,11 @@ async def main(target_date: datetime.date, dry_run: bool):
 
             predicted += 1
 
-        # Rate limit: 1 req/sec
         await asyncio.sleep(1.0)
 
     elapsed = time.time() - start_time
-    cost_est = predicted * 0.001  # rough haiku estimate
-    print(f"\n✅ Done: {predicted} predicted, {skipped} skipped in {elapsed:.0f}s")
+    cost_est = predicted * 0.001
+    print(f"\n✅ Done: {predicted} predicted ({len(na_races)} NA + {len(int_races)} international), {skipped} skipped in {elapsed:.0f}s")
     print(f"   Estimated cost: ~${cost_est:.3f}")
     if dry_run:
         print("   [DRY RUN] No rows written.")
