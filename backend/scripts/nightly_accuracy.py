@@ -208,15 +208,18 @@ async def main(target_date: datetime.date, dry_run: bool):
             preds_list = preds_res.scalars().all()
     else:
         # Build a fake report object for dry-run
+        # (capture locals first — class bodies can't reference same-named outer vars)
+        _wr, _ir, _bc, _wm = win_rate, itm_rate, best_call, worst_miss
+
         class _FakeReport:
             report_date = target_date
             races_analyzed = total
             top_pick_wins = wins
             in_the_money = itm_count
-            win_rate = win_rate
-            itm_rate = itm_rate
-            best_call = best_call
-            worst_miss = worst_miss
+            win_rate = _wr
+            itm_rate = _ir
+            best_call = _bc
+            worst_miss = _wm
             by_track = None
             by_race_type = None
 
