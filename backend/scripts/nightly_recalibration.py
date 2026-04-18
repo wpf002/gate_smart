@@ -21,6 +21,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+async def _ensure_columns(engine) -> None:
+    """Add columns that were introduced after initial table creation."""
+    ddl = [
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS reflection TEXT",
+        "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
+    ]
+    async with engine.begin() as conn:
+        for stmt in ddl:
+            await conn.execute(__import__("sqlalchemy").text(stmt))
+
+
 def _win_rate(wins: int, total: int) -> float:
     return wins / total if total else 0.0
 
@@ -47,6 +58,7 @@ async def main(dry_run: bool):
     from sqlalchemy import select
 
     await _db.init_db()
+    await _ensure_columns(_db._engine)
 
     cutoff = datetime.date.today() - datetime.timedelta(days=30)
 

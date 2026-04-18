@@ -26,7 +26,7 @@ async def _run_script(script_name: str, extra_args: list[str] | None = None) -> 
     """Run a nightly script as a subprocess, streaming its output to logs."""
     script_path = os.path.join(SCRIPTS_DIR, script_name)
     cmd = [sys.executable, script_path] + (extra_args or [])
-    log.info(f"[scheduler] Starting {script_name}")
+    print(f"[scheduler] Starting {script_name}", flush=True)
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -37,12 +37,13 @@ async def _run_script(script_name: str, extra_args: list[str] | None = None) -> 
         output = stdout.decode(errors="replace").strip()
         if output:
             for line in output.splitlines():
-                log.info(f"[{script_name}] {line}")
+                print(f"[{script_name}] {line}", flush=True)
         if proc.returncode == 0:
-            log.info(f"[scheduler] {script_name} completed successfully")
+            print(f"[scheduler] {script_name} completed successfully", flush=True)
         else:
-            log.error(f"[scheduler] {script_name} exited with code {proc.returncode}")
+            print(f"[scheduler] {script_name} FAILED with exit code {proc.returncode}", flush=True)
     except Exception as e:
+        print(f"[scheduler] {script_name} raised an exception: {e}", flush=True)
         log.exception(f"[scheduler] {script_name} raised an exception: {e}")
 
 

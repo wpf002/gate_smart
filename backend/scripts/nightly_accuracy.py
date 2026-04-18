@@ -22,6 +22,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+async def _ensure_columns(engine) -> None:
+    """Add columns that were introduced after initial table creation."""
+    ddl = [
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS reflection TEXT",
+        "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
+    ]
+    async with engine.begin() as conn:
+        for stmt in ddl:
+            await conn.execute(__import__("sqlalchemy").text(stmt))
+
+
 def _norm(name: str) -> str:
     """Normalise a horse name for fuzzy comparison."""
     return (name or "").lower().strip().replace("'", "").replace("-", " ")
@@ -33,6 +44,7 @@ async def main(target_date: datetime.date, dry_run: bool):
     from sqlalchemy import select, update
 
     await _db.init_db()
+    await _ensure_columns(_db._engine)
 
     async with _db._AsyncSessionLocal() as db:
         # 1. Fetch all unsettled predictions for target_date
