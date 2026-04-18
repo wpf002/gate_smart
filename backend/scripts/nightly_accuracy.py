@@ -62,38 +62,41 @@ async def main(target_date: datetime.date, dry_run: bool):
         print("Nothing to settle — exiting.")
         return
 
-    # 2. Fetch results for each race from TheRacingAPI
-    import httpx
-    from app.core.config import settings
+    # 2. Fetch NA results for target_date (NA race IDs use a different endpoint)
+    from app.services.racing_api import get_na_results_full
+
+    date_str = target_date.isoformat()
+    print(f"  Fetching NA results for {date_str}…")
+    try:
+        na_data = await get_na_results_full(date_str)
+        na_results_by_id = {r.get("race_id"): r for r in na_data.get("results", []) if r.get("race_id")}
+        print(f"  Found {len(na_results_by_id)} NA results.")
+    except Exception as e:
+        print(f"  NA results fetch failed: {e}")
+        na_results_by_id = {}
+
+    def _finisher(runners: list, pos: int) -> str | None:
+        for r in runners:
+            p = r.get("position") or r.get("finish_position") or r.get("place")
+            try:
+                if int(str(p).strip()) == pos:
+                    return r.get("horse") or r.get("horse_name", "")
+            except (ValueError, TypeError):
+                pass
+        return None
 
     settled = []
     for pred in predictions:
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                resp = await client.get(
-                    f"https://api.theracingapi.com/v1/results/{pred.race_id}",
-                    auth=(settings.RACING_API_USERNAME, settings.RACING_API_PASSWORD),
-                )
-            if resp.status_code != 200:
-                print(f"  ✗ {pred.race_id}: API {resp.status_code}")
+            race_result = na_results_by_id.get(pred.race_id)
+            if not race_result:
+                print(f"  ✗ {pred.race_id}: no result yet")
                 continue
 
-            data = resp.json()
-            runners = data.get("runners", []) or data.get("results", [])
-
-            def _finisher(pos: int):
-                for r in runners:
-                    p = r.get("position") or r.get("finish_position") or r.get("place")
-                    try:
-                        if int(str(p).strip()) == pos:
-                            return r.get("horse") or r.get("horse_name", "")
-                    except (ValueError, TypeError):
-                        pass
-                return None
-
-            actual_first = _finisher(1)
-            actual_second = _finisher(2)
-            actual_third = _finisher(3)
+            runners = race_result.get("runners", [])
+            actual_first = _finisher(runners, 1)
+            actual_second = _finisher(runners, 2)
+            actual_third = _finisher(runners, 3)
 
             top_correct = bool(
                 actual_first and pred.predicted_first and
@@ -126,7 +129,7 @@ async def main(target_date: datetime.date, dry_run: bool):
             print(f"  ✗ {pred.race_id}: {e}")
 
     if not settled:
-        print("No results fetched — check API credentials.")
+        print("No results available yet — races may not have run.")
         return
 
     # 3. Update DB rows
