@@ -85,32 +85,20 @@ async def main(target_date: datetime.date, dry_run: bool):
         http_client=httpx.AsyncClient(verify=ssl_ctx),
     )
 
-    # Fetch today's US racecards — API only accepts day=today|tomorrow
-    today = datetime.date.today()
-    day_param = "today" if target_date == today else "tomorrow" if target_date == today + datetime.timedelta(days=1) else None
-    if day_param is None:
-        print(f"Cannot fetch racecards for {target_date} — API only supports today/tomorrow.")
-        return
+    # Fetch today's USA races via the NA meets endpoint (same as the main app)
+    from app.services.racing_api import get_na_racecards_full
 
-    print(f"\n[nightly_predict_all] Fetching US racecards for {target_date} (day={day_param})…")
+    today = datetime.date.today()
+    day_param = "today" if target_date == today else "tomorrow" if target_date == today + datetime.timedelta(days=1) else target_date.isoformat()
+
+    print(f"\n[nightly_predict_all] Fetching US racecards for {target_date}…")
     try:
-        async with httpx.AsyncClient(timeout=30.0) as http:
-            resp = await http.get(
-                "https://api.theracingapi.com/v1/racecards/standard",
-                params={"day": day_param},
-                auth=(settings.RACING_API_USERNAME, settings.RACING_API_PASSWORD),
-            )
-        if resp.status_code != 200:
-            print(f"API {resp.status_code}: {resp.text[:200]}")
-            return
-        data = resp.json()
+        data = await get_na_racecards_full(day_param)
     except Exception as e:
         print(f"Failed to fetch racecards: {e}")
         return
 
-    # Flatten races and filter to USA
-    all_races = data.get("racecards", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
-    races = [r for r in all_races if r.get("region", "").upper() in ("USA", "US")]
+    races = data.get("racecards", [])
 
     print(f"  Found {len(races)} races.")
 
