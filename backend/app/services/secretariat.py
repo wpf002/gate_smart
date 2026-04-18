@@ -1119,7 +1119,7 @@ Return JSON exactly:
 
     response = await client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=2000,
+        max_tokens=4096,
         temperature=0.7,
         system=(
             "You are Secretariat, an AI horse racing handicapper. "
