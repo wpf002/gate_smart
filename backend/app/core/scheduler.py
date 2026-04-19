@@ -2,7 +2,7 @@
 Nightly job scheduler — runs automatically when the FastAPI server starts.
 
 Schedule (all UTC, summer EDT = UTC-4):
-  12:00  nightly_predict_all.py    — 8:00 AM ET, pre-race haiku predictions
+  15:00  nightly_predict_all.py    — 11:00 AM ET, pre-race haiku predictions
   03:00  nightly_accuracy.py       — 11:00 PM ET, settle results + email digest
   03:30  nightly_recalibration.py  — 11:30 PM ET, recalibrate prompt weights
   04:00  nightly_reflect.py        — midnight ET, Secretariat reflection layer
@@ -66,7 +66,7 @@ async def job_reflect() -> None:
 def create_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
 
-    scheduler.add_job(job_predict_all,  CronTrigger(hour=12, minute=0),  id="predict_all",  name="Morning predictions (8 AM ET)")
+    scheduler.add_job(job_predict_all,  CronTrigger(hour=15, minute=0),  id="predict_all",  name="Morning predictions (11 AM ET)")
     scheduler.add_job(job_accuracy,     CronTrigger(hour=3,  minute=0),  id="accuracy",     name="Nightly accuracy + email (11 PM ET)")
     scheduler.add_job(job_recalibration,CronTrigger(hour=3,  minute=30), id="recalibration",name="Prompt recalibration (11:30 PM ET)")
     scheduler.add_job(job_reflect,      CronTrigger(hour=4,  minute=0),  id="reflect",      name="Secretariat reflection (midnight ET)")
