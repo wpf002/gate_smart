@@ -31,8 +31,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 load_dotenv()
 
-# Races per batch for per-race reflection calls (keeps cost low)
-BATCH_SIZE = 10
+# Races per batch for per-race reflection calls (larger = fewer API calls)
+BATCH_SIZE = 25
 
 
 async def _ensure_columns(engine) -> None:

@@ -818,7 +818,7 @@ Be honest. A 50 is average. Reserve 80+ for genuinely strong attributes.
 A horse can score 90 on speed and 20 on value — that's fine and useful."""
 
     response = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-haiku-4-5-20251001",
         max_tokens=1000,
         temperature=0.2,
         system=SECRETARIAT_SYSTEM,
@@ -833,10 +833,17 @@ async def score_race(race_data: dict) -> dict:
     Called from the /advisor/scorecard endpoint.
     """
     import asyncio
+    from app.core.cache import cache_get, cache_set
 
     runners = race_data.get("runners", [])
     if not runners:
         return {"race_id": race_data.get("race_id", ""), "scorecards": []}
+
+    race_id = race_data.get("race_id", "")
+    cache_key = f"scorecard:{race_id}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
 
     race_context = {
         "race_id": race_data.get("race_id", ""),
@@ -877,11 +884,14 @@ async def score_race(race_data: dict) -> dict:
 
     scorecards = await asyncio.gather(*[_score_safe(h) for h in runners])
 
-    return {
+    result = {
         "race_id": race_data.get("race_id", ""),
         "course": race_data.get("course", ""),
         "scorecards": list(scorecards)
     }
+    if race_id:
+        await cache_set(cache_key, result, ex=14400)  # 4-hour TTL
+    return result
 
 
 async def debrief_race(
