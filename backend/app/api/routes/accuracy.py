@@ -285,7 +285,8 @@ async def trigger_send_report(
     Manually trigger email send for a given date.
     Requires the requesting user's email to match DAILY_REPORT_EMAIL.
     """
-    if not user or user.email != settings.DAILY_REPORT_EMAIL:
+    admin_key = payload.get("admin_key")
+    if not (admin_key and admin_key == settings.SECRET_KEY) and (not user or user.email != settings.DAILY_REPORT_EMAIL):
         raise HTTPException(status_code=403, detail="Not authorised")
 
     date_str = payload.get("date")
