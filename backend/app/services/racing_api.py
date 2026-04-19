@@ -424,6 +424,7 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
         "going": race.get("track_condition", ""),
         "prize": race.get("purse"),
         "race_class": race.get("race_class", ""),
+        "race_type": race.get("race_type_description") or race.get("race_type") or race.get("race_class", ""),
         "pattern": race.get("grade", ""),
         "region": "usa",
         "runners": runners,

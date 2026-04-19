@@ -18,12 +18,25 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+async def _ensure_columns(engine) -> None:
+    import sqlalchemy
+    ddl = [
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS reflection TEXT",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)",
+        "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
+    ]
+    async with engine.begin() as conn:
+        for stmt in ddl:
+            await conn.execute(sqlalchemy.text(stmt))
+
+
 async def main(target_date: datetime.date, dry_run: bool):
     from app.core import database as _db
     from app.models.accuracy import RacePrediction
     from sqlalchemy import update, select
 
     await _db.init_db()
+    await _ensure_columns(_db._engine)
 
     async with _db._AsyncSessionLocal() as db:
         count_res = await db.execute(
