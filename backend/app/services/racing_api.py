@@ -508,7 +508,14 @@ async def get_na_racecards_full(date: str = None) -> dict:
 
 
 async def get_na_results_full(date: str = None) -> dict:
-    """Fetch all NA meet results for a date, unified into a results list."""
+    """
+    Fetch all NA meet results for a date, unified into a results list.
+
+    The NA results endpoint returns races with a `runners` array containing
+    only the top-3 finishers in finish order (no explicit position field).
+    Runner keys differ entirely from the entries endpoint — this function
+    builds the result dict from scratch rather than reusing _normalize_na_race.
+    """
     meets_data = await get_na_meets(date)
     meets = meets_data.get("meets", [])
 
@@ -521,12 +528,43 @@ async def get_na_results_full(date: str = None) -> dict:
             results_data = await get_na_meet_results(meet_id)
             races = results_data.get("races", [])
             for race in races:
-                normalized = _normalize_na_race(race, meet)
-                # Add result-specific fields from runners
-                for runner in normalized.get("runners", []):
-                    runner["position"] = runner.get("finish_position", "")
-                    runner["sp"] = runner.get("odds", "SP")
-                all_results.append(normalized)
+                # Build race_id using the same formula as _normalize_na_race
+                # so IDs match what was stored at prediction time.
+                race_key = race.get("race_key") or {}
+                race_number = (
+                    race_key.get("race_number", "")
+                    if isinstance(race_key, dict)
+                    else ""
+                )
+                race_id = f"{meet_id}-{race_number}" if race_number else meet_id
+
+                # Results API: runners array is in finish order (index 0 = winner).
+                # No position field exists — derive it from array index.
+                raw_runners = race.get("runners", [])
+                runners = []
+                for idx, r in enumerate(raw_runners):
+                    pos = idx + 1
+                    runners.append({
+                        "horse_name": r.get("horse_name", ""),
+                        "horse": r.get("horse_name", ""),
+                        "position": pos,
+                        "finish_position": pos,
+                        "program_number": str(r.get("program_number", "")),
+                        "number": str(r.get("program_number", "")),
+                        "win_payoff": r.get("win_payoff"),
+                        "place_payoff": r.get("place_payoff"),
+                        "show_payoff": r.get("show_payoff"),
+                        "sp": r.get("win_payoff"),
+                    })
+
+                all_results.append({
+                    "race_id": race_id,
+                    "race_name": race.get("race_name", ""),
+                    "track_name": race.get("track_name") or meet.get("track_name", ""),
+                    "race_type": race.get("race_type_description") or race.get("race_type", ""),
+                    "surface": race.get("surface_description") or race.get("surface", ""),
+                    "runners": runners,
+                })
         except Exception:
             continue
 
