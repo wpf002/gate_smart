@@ -379,6 +379,11 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
 
         scratch_indicator = entry.get("scratch_indicator", "")
         is_scratched = scratch_indicator and scratch_indicator.lower() not in ("", "n", "no")
+        finish_pos = (
+            entry.get("finish_position")
+            or entry.get("official_finish")
+            or entry.get("position")
+        )
         runners.append({
             "horse_id": str(entry.get("registration_number", "")),
             "horse_name": entry.get("horse_name", ""),
@@ -399,6 +404,8 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
             "scratched": is_scratched,
             "status": "scratched" if is_scratched else "",
             "claiming_price": entry.get("claiming_price"),
+            "finish_position": finish_pos,
+            "position": finish_pos,
         })
 
     return {
