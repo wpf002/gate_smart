@@ -85,6 +85,196 @@ async def get_accuracy_history(db: AsyncSession = Depends(get_db)):
     ]
 
 
+@router.post("/resettle")
+async def resettle_date(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Re-fetch race results and re-settle predictions for a given date.
+    Resets result_fetched=False, then re-runs the settlement logic.
+    Protected by admin_key matching SECRET_KEY.
+    """
+    import datetime as dt
+    import sqlalchemy
+
+    if payload.get("admin_key") != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Not authorised")
+
+    date_str = payload.get("date")
+    try:
+        target = dt.date.fromisoformat(date_str) if date_str else dt.date.today() - dt.timedelta(days=1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format — use YYYY-MM-DD")
+
+    # Ensure new columns exist
+    from app.core.database import _engine
+    ddl = [
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS reflection TEXT",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)",
+        "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
+    ]
+    async with _engine.begin() as conn:
+        for stmt in ddl:
+            await conn.execute(sqlalchemy.text(stmt))
+
+    from app.models.accuracy import RacePrediction, DailyAccuracyReport
+    from sqlalchemy import update
+
+    # 1. Reset predictions to unsettled
+    await db.execute(
+        update(RacePrediction)
+        .where(RacePrediction.race_date == target)
+        .values(
+            result_fetched=False,
+            actual_first=None,
+            actual_second=None,
+            actual_third=None,
+            top_pick_correct=False,
+            in_the_money=False,
+            settled_at=None,
+        )
+    )
+    await db.commit()
+
+    # 2. Fetch results from both APIs
+    from app.services.racing_api import get_na_results_full, get_results
+    date_iso = target.isoformat()
+
+    try:
+        na_data = await get_na_results_full(date_iso)
+        na_by_id = {r.get("race_id"): r for r in na_data.get("results", []) if r.get("race_id")}
+    except Exception:
+        na_by_id = {}
+
+    try:
+        int_data = await get_results(date=date_iso)
+        int_by_id = {r.get("race_id"): r for r in int_data.get("results", []) if r.get("race_id")}
+    except Exception:
+        int_by_id = {}
+
+    all_by_id = {**int_by_id, **na_by_id}
+
+    # 3. Load unsettled predictions
+    preds_res = await db.execute(
+        select(RacePrediction).where(
+            RacePrediction.race_date == target,
+            RacePrediction.result_fetched == False,  # noqa: E712
+        )
+    )
+    predictions = preds_res.scalars().all()
+
+    def _norm(name: str) -> str:
+        return (name or "").lower().strip().replace("'", "").replace("-", " ")
+
+    def _finisher(runners: list, pos: int):
+        for r in runners:
+            p = r.get("position") or r.get("finish_position") or r.get("place")
+            try:
+                if int(str(p).strip()) == pos:
+                    return r.get("horse") or r.get("horse_name", "") or None
+            except (ValueError, TypeError):
+                pass
+        return None
+
+    settled = []
+    now = dt.datetime.now(dt.timezone.utc)
+    for pred in predictions:
+        race_result = all_by_id.get(pred.race_id)
+        if not race_result:
+            continue
+        runners = race_result.get("runners", [])
+        actual_first = _finisher(runners, 1)
+        actual_second = _finisher(runners, 2)
+        actual_third = _finisher(runners, 3)
+        top_correct = bool(
+            actual_first and pred.predicted_first and
+            _norm(actual_first) == _norm(pred.predicted_first)
+        )
+        itm = bool(
+            pred.predicted_first and (
+                _norm(pred.predicted_first) == _norm(actual_first or "") or
+                _norm(pred.predicted_first) == _norm(actual_second or "") or
+                _norm(pred.predicted_first) == _norm(actual_third or "")
+            )
+        )
+        await db.execute(
+            update(RacePrediction)
+            .where(RacePrediction.id == pred.id)
+            .values(
+                actual_first=actual_first,
+                actual_second=actual_second,
+                actual_third=actual_third,
+                result_fetched=True,
+                top_pick_correct=top_correct,
+                in_the_money=itm,
+                settled_at=now,
+            )
+        )
+        settled.append({"top_correct": top_correct, "itm": itm})
+
+    await db.commit()
+
+    # 4. Update DailyAccuracyReport
+    total = len(settled)
+    wins = sum(1 for s in settled if s["top_correct"])
+    itm_count = sum(1 for s in settled if s["itm"])
+    win_rate = wins / total if total else 0.0
+    itm_rate = itm_count / total if total else 0.0
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    report_row = {
+        "report_date": target,
+        "total_races": total,
+        "races_analyzed": total,
+        "top_pick_wins": wins,
+        "in_the_money": itm_count,
+        "win_rate": win_rate,
+        "itm_rate": itm_rate,
+    }
+    stmt = pg_insert(DailyAccuracyReport).values(**report_row)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["report_date"],
+        set_={k: v for k, v in report_row.items() if k != "report_date"},
+    )
+    await db.execute(stmt)
+    await db.commit()
+
+    # 5. Re-send corrected email
+    preds_res2 = await db.execute(
+        select(RacePrediction).where(
+            RacePrediction.race_date == target,
+            RacePrediction.result_fetched == True,  # noqa: E712
+        )
+    )
+    preds_list = preds_res2.scalars().all()
+
+    report_res = await db.execute(
+        select(DailyAccuracyReport).where(DailyAccuracyReport.report_date == target)
+    )
+    report_obj = report_res.scalar_one()
+
+    from app.services.secretariat import generate_daily_email_report
+    from app.services.email_service import send_daily_report
+
+    email_content = await generate_daily_email_report(report_obj, preds_list)
+    sent = await send_daily_report(
+        subject=email_content.get("subject", f"Secretariat [Corrected] — {target.isoformat()}"),
+        html_body=email_content.get("html", ""),
+        text_body=email_content.get("text", ""),
+    )
+
+    return {
+        "date": target.isoformat(),
+        "results_found": len(all_by_id),
+        "predictions_reset": len(predictions),
+        "settled": total,
+        "wins": wins,
+        "win_rate": win_rate,
+        "email_sent": sent,
+    }
+
+
 @router.post("/send-report")
 async def trigger_send_report(
     payload: dict,
