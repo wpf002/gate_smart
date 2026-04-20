@@ -70,7 +70,7 @@ function SideNav() {
 
   return (
     <nav className="side-nav">
-      <div className="side-nav-logo">GATE<br />SMART</div>
+      <div className="side-nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>GATE<br />SMART</div>
       {NAV_ITEMS.map(({ path, label }, idx) => {
         const active = location.pathname === path ||
           (path !== '/' && location.pathname.startsWith(path));
