@@ -38,7 +38,7 @@ async def get_daily_accuracy(
     if not report:
         return {
             "status": "pending",
-            "message": "Today's report generates tonight at 11 PM ET",
+            "message": "Today's report generates tomorrow morning at 6 AM ET",
             "date": target.isoformat(),
         }
 

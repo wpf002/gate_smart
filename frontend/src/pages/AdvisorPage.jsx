@@ -175,7 +175,7 @@ export default function AdvisorPage() {
       const detail = err?.response?.data?.detail || '';
       const msg = detail.includes('credit')
         ? 'Secretariat needs Anthropic API credits to respond. Add credits at console.anthropic.com then restart the server.'
-        : `Secretariat is unavailable right now. (${detail || err.message})`;
+        : `Secretariat is unavailable right now${detail || err.message ? ` (${detail || err.message})` : ''}.`;
       addAdvisorMessage({ role: 'error', content: msg });
     },
   });
