@@ -1085,7 +1085,8 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
     misses = [p for p in predictions if not p.top_pick_correct]
     total = len(predictions)
     win_pct = f"{len(hits)/total:.1%}" if total else "0.0%"
-    itm_pct = f"{report.in_the_money/total:.1%}" if total else "0.0%"
+    itm_only = [p for p in predictions if p.in_the_money and not p.top_pick_correct]
+    itm_pct = f"{len(itm_only)/total:.1%}" if total else "0.0%"
 
     # ── Build complete results table in Python (every race, no LLM needed) ──
     def _row_text(p):

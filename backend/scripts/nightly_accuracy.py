@@ -290,8 +290,8 @@ if __name__ == "__main__":
     if args.date:
         target = datetime.date.fromisoformat(args.date)
     else:
-        # Script runs at 3 AM UTC = 11 PM ET. datetime.date.today() returns the UTC date,
-        # which is already the next calendar day relative to ET race day — use yesterday.
+        # Script runs at 10 AM UTC = 6 AM ET. datetime.date.today() returns the UTC date
+        # (same calendar day as race day in ET), so subtract 1 to get yesterday's races.
         target = datetime.date.today() - datetime.timedelta(days=1)
 
     asyncio.run(main(target, dry_run=args.dry_run))
