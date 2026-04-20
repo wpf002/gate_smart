@@ -424,7 +424,15 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
         "going": race.get("track_condition", ""),
         "prize": race.get("purse"),
         "race_class": race.get("race_class", ""),
-        "race_type": race.get("race_type_description") or race.get("race_type") or race.get("race_class", ""),
+        "race_type": (
+            race.get("race_type_description") or
+            race.get("race_type") or
+            race.get("race_class") or
+            race.get("type") or
+            race.get("race_class_description") or
+            race.get("conditions_abbrev") or
+            ""
+        ),
         "pattern": race.get("grade", ""),
         "region": "usa",
         "runners": runners,
@@ -562,7 +570,14 @@ async def get_na_results_full(date: str = None) -> dict:
                     "race_id": race_id,
                     "race_name": race.get("race_name", ""),
                     "track_name": race.get("track_name") or meet.get("track_name", ""),
-                    "race_type": race.get("race_type_description") or race.get("race_type", ""),
+                    "race_type": (
+                        race.get("race_type_description") or
+                        race.get("race_type") or
+                        race.get("race_class") or
+                        race.get("type") or
+                        race.get("race_class_description") or
+                        ""
+                    ),
                     "surface": race.get("surface_description") or race.get("surface", ""),
                     "runners": runners,
                 })

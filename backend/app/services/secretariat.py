@@ -1085,15 +1085,15 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
     misses = [p for p in predictions if not p.top_pick_correct]
     total = len(predictions)
     win_pct = f"{len(hits)/total:.1%}" if total else "0.0%"
-    itm_only = [p for p in predictions if p.in_the_money and not p.top_pick_correct]
-    itm_pct = f"{len(itm_only)/total:.1%}" if total else "0.0%"
+    itm_list = [p for p in predictions if p.in_the_money]
+    itm_pct = f"{len(itm_list)/total:.1%}" if total else "0.0%"
 
     # ── Build complete results table in Python (every race, no LLM needed) ──
     def _row_text(p):
         icon = "✅" if p.top_pick_correct else ("🔶" if p.in_the_money else "❌")
         return (
             f"{icon} {p.race_name or p.race_id} | {p.track_code or '?'} | "
-            f"{p.race_type or '?'} | Picked: {p.predicted_first or '?'} | "
+            f"{p.race_type or getattr(p, 'surface', None) or '?'} | Picked: {p.predicted_first or '?'} | "
             f"Won: {p.actual_first or 'N/A'}"
         )
 
@@ -1105,7 +1105,7 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
             f'<td style="padding:4px 8px">{icon}</td>'
             f'<td style="padding:4px 8px">{p.race_name or p.race_id}</td>'
             f'<td style="padding:4px 8px">{p.track_code or "?"}</td>'
-            f'<td style="padding:4px 8px">{p.race_type or "?"}</td>'
+            f'<td style="padding:4px 8px">{p.race_type or getattr(p, "surface", None) or "?"}</td>'
             f'<td style="padding:4px 8px"><strong>{p.predicted_first or "?"}</strong></td>'
             f'<td style="padding:4px 8px">{p.actual_first or "N/A"}</td>'
             f'</tr>'
@@ -1134,7 +1134,7 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
     for p in predictions:
         for bucket, key in [
             (by_track, p.track_code or "?"),
-            (by_type, p.race_type or "?"),
+            (by_type, p.race_type or getattr(p, "surface", None) or "?"),
             (by_surface, getattr(p, "surface", None) or "?"),
         ]:
             bucket[key]["total"] += 1
@@ -1148,11 +1148,11 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
         )
 
     hit_sample = "; ".join(
-        f"{p.predicted_first} won at {p.track_code or '?'} ({p.race_type or '?'})"
+        f"{p.predicted_first} won at {p.track_code or '?'} ({p.race_type or getattr(p, 'surface', None) or '?'})"
         for p in hits[:15]
     ) or "none"
     miss_sample = "; ".join(
-        f"picked {p.predicted_first}, {p.actual_first or 'N/A'} won at {p.track_code or '?'} ({p.race_type or '?'})"
+        f"picked {p.predicted_first}, {p.actual_first or 'N/A'} won at {p.track_code or '?'} ({p.race_type or getattr(p, 'surface', None) or '?'})"
         for p in misses[:20]
     ) or "none"
 

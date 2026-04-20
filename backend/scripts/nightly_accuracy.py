@@ -134,6 +134,8 @@ async def main(target_date: datetime.date, dry_run: bool):
                 "actual_first": actual_first,
                 "actual_second": actual_second,
                 "actual_third": actual_third,
+                "result_race_type": race_result.get("race_type") or "",
+                "existing_race_type": pred.race_type or "",
             })
             result_icon = "✅" if top_correct else ("🔶" if itm else "❌")
             print(f"  {result_icon} {pred.race_name or pred.race_id}: predicted={pred.predicted_first}, actual={actual_first}")
@@ -150,18 +152,21 @@ async def main(target_date: datetime.date, dry_run: bool):
         async with _db._AsyncSessionLocal() as db:
             now = datetime.datetime.now(datetime.timezone.utc)
             for s in settled:
+                values: dict = {
+                    "actual_first": s["actual_first"],
+                    "actual_second": s["actual_second"],
+                    "actual_third": s["actual_third"],
+                    "result_fetched": True,
+                    "top_pick_correct": s["top_correct"],
+                    "in_the_money": s["itm"],
+                    "settled_at": now,
+                }
+                if s["result_race_type"] and not s["existing_race_type"]:
+                    values["race_type"] = s["result_race_type"]
                 await db.execute(
                     update(RacePrediction)
                     .where(RacePrediction.id == s["id"])
-                    .values(
-                        actual_first=s["actual_first"],
-                        actual_second=s["actual_second"],
-                        actual_third=s["actual_third"],
-                        result_fetched=True,
-                        top_pick_correct=s["top_correct"],
-                        in_the_money=s["itm"],
-                        settled_at=now,
-                    )
+                    .values(**values)
                 )
             await db.commit()
 
@@ -241,7 +246,8 @@ async def main(target_date: datetime.date, dry_run: bool):
                 self.race_id = s["race_id"]
                 self.race_name = s["race_name"]
                 self.track_code = None
-                self.race_type = None
+                self.race_type = s.get("result_race_type") or s.get("existing_race_type") or None
+                self.surface = None
                 self.predicted_first = s["predicted"]
                 self.actual_first = s["actual"]
                 self.top_pick_correct = s["top_correct"]

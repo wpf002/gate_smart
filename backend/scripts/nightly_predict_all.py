@@ -164,10 +164,27 @@ async def main(target_date: datetime.date, dry_run: bool):
                     "predicted_third": pf.get("third"),
                     "predicted_fourth": pf.get("fourth"),
                 }
+                from sqlalchemy import update as _update, or_ as _or_
                 async with _db._AsyncSessionLocal() as db:
                     stmt = pg_insert(RacePrediction).values(**row)
                     stmt = stmt.on_conflict_do_nothing(constraint="uq_race_prediction")
                     await db.execute(stmt)
+                    # Backfill race_type on rows that already exist with an empty value.
+                    # ON CONFLICT DO NOTHING skips new inserts, so this ensures existing
+                    # rows are patched if the API now returns a type it didn't before.
+                    if race_type:
+                        await db.execute(
+                            _update(RacePrediction)
+                            .where(
+                                RacePrediction.race_id == race_id,
+                                RacePrediction.analysis_mode == "auto_daily",
+                                _or_(
+                                    RacePrediction.race_type.is_(None),
+                                    RacePrediction.race_type == "",
+                                ),
+                            )
+                            .values(race_type=race_type)
+                        )
                     await db.commit()
 
             predicted += 1
