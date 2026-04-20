@@ -769,18 +769,20 @@ Return JSON:
     return _parse_json(response.content[0].text)
 
 
-async def score_horse(horse_data: dict, race_context: dict) -> dict:
+async def score_horse(horse_data: dict, race_context: dict, historical_context: str = "") -> dict:
     """
     Score a single horse across 6 dimensions for the Score Card.
     Returns structured JSON with scores 0-100 per dimension.
+    historical_context is the same Equibase/TrackSense block used by the full analysis.
     """
+    historical_block = f"\n\nHistorical Data (speed figures, pace ratings, class history):\n{historical_context}" if historical_context else ""
     prompt = f"""Score this horse across exactly 6 handicapping dimensions.
 
 Horse Data:
 {json.dumps(horse_data, indent=2)}
 
 Race Context:
-{json.dumps(race_context, indent=2)}
+{json.dumps(race_context, indent=2)}{historical_block}
 
 Return a JSON object with EXACTLY this structure, no extra fields:
 {{
@@ -807,13 +809,15 @@ Return a JSON object with EXACTLY this structure, no extra fields:
 }}
 
 Scoring guide:
-- speed: based on speed figures, time comparisons, distance suitability
-- class: based on race class history, level drops/rises, competition quality
-- form: based on recent finishing positions, trajectory, consistency
+- speed: use speed figures and sectional times from historical data if present; otherwise estimate from distance suitability and form
+- class: use class history and race conditions from historical data if present; otherwise estimate from level of competition
+- form: based on recent finishing positions and trajectory — historical data may show more starts than the form string alone
 - pace_fit: based on running style vs expected pace scenario in this race
 - value: based on current odds vs estimated true probability (overlay=high score)
-- trainer_jockey: based on trainer strike rate, jockey record, combo history
+- trainer_jockey: use historical trainer/jockey stats if present; otherwise estimate from name recognition and recent form
 
+If historical data is present, your scores MUST reflect it — a horse with strong speed figures should score 70+ on speed.
+If historical data is absent for a dimension, score conservatively (40-60) rather than guessing high.
 Be honest. A 50 is average. Reserve 80+ for genuinely strong attributes.
 A horse can score 90 on speed and 20 on value — that's fine and useful."""
 
@@ -865,9 +869,15 @@ async def score_race(race_data: dict) -> dict:
         ]
     }
 
+    # Fetch the same historical context the full analysis uses so scores
+    # are grounded in the same Equibase speed figures and TrackSense data.
+    historical_context = await get_hardware_and_historical_context(runners)
+
     async def _score_safe(horse: dict) -> dict:
+        horse_name = horse.get("horse") or horse.get("horse_name", "")
+        ctx = historical_context.get(horse_name, "")
         try:
-            return await score_horse(horse, race_context)
+            return await score_horse(horse, race_context, historical_context=ctx)
         except Exception as e:
             return {
                 "horse_id": horse.get("horse_id", ""),
