@@ -224,7 +224,7 @@ export default function AdvisorPage() {
           <div>
             <AccuracyBadge />
             <div style={{ textAlign: 'center', padding: '24px 0 20px', color: 'var(--text-muted)' }}>
-              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="horse" size={48} /></div>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="robot" size={48} /></div>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent-gold)', marginBottom: 6 }}>
                 Ask Secretariat
               </div>

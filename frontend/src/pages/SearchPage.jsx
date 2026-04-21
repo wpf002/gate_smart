@@ -101,7 +101,7 @@ export default function SearchPage() {
 
         {!submitted && (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-            <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="horse" size={40} /></div>
+            <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="search" size={40} /></div>
             <div style={{ fontSize: 13 }}>
               Search by horse name to find entries, form, trainer, and jockey
             </div>

@@ -431,7 +431,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
       {/* ── West Point TB maiden prompt ───────────────────────────── */}
       {!wpDismissed && (raceType?.toLowerCase().includes('maiden') || analysis?.overall_summary?.toLowerCase().includes('maiden') || analysis?.overall_summary_beginner?.toLowerCase().includes('maiden')) && (
         <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(201,168,76,0.7)', lineHeight: 1.6, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-          <Icon name="horse" size={14} color="rgba(201,168,76,0.7)" style={{ flexShrink: 0, marginTop: 1 }} />
           <span>Interested in horses like these?{' '}
             <button
               onClick={() => {

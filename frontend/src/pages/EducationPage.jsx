@@ -2,13 +2,14 @@ import { useState } from 'react';
 import PageHeader from '../components/common/PageHeader';
 import { PARTNERS } from '../utils/affiliates';
 import { trackEvent } from '../utils/analytics';
+import Icon from '../components/common/Icon';
 
 // ─── Content ──────────────────────────────────────────────────────────────────
 
 const BET_TYPES = [
   {
     name: 'Win',
-    emoji: '🥇',
+    icon: 'trophy',
     difficulty: 'Beginner',
     desc: 'Your horse must finish first. Simple, most common bet.',
     example: '$10 Win on Secretariat at 3/1 → win $30 profit + $10 back = $40 total.',
@@ -16,7 +17,7 @@ const BET_TYPES = [
   },
   {
     name: 'Place',
-    emoji: '🥈',
+    icon: 'star',
     difficulty: 'Beginner',
     desc: 'Your horse must finish 1st or 2nd. Lower payout, safer.',
     example: '$10 Place on Enable at 5/2 → wins if she finishes 1st or 2nd.',
@@ -24,7 +25,7 @@ const BET_TYPES = [
   },
   {
     name: 'Show',
-    emoji: '🥉',
+    icon: 'check',
     difficulty: 'Beginner',
     desc: 'Your horse must finish 1st, 2nd, or 3rd. Lowest payout, safest.',
     example: 'Useful in races with many runners where finishing top-3 is likely.',
@@ -32,7 +33,7 @@ const BET_TYPES = [
   },
   {
     name: 'Across the Board',
-    emoji: '🎪',
+    icon: 'bet',
     difficulty: 'Beginner',
     desc: 'Three bets in one: Win + Place + Show on the same horse. Costs 3× your base stake.',
     example: '$2 Across the Board = $6 total. Horse finishes 2nd → you collect Place and Show. Horse wins → you collect all three.',
@@ -40,7 +41,7 @@ const BET_TYPES = [
   },
   {
     name: 'Exacta',
-    emoji: '🎯',
+    icon: 'target',
     difficulty: 'Intermediate',
     desc: 'Pick the 1st and 2nd place finishers in exact order.',
     example: '$2 Exacta 4-7: Horse 4 wins, Horse 7 runs second. Missed if they finish 7-4.',
@@ -48,7 +49,7 @@ const BET_TYPES = [
   },
   {
     name: 'Quinella',
-    emoji: '🔄',
+    icon: 'refresh',
     difficulty: 'Intermediate',
     desc: 'Pick 1st and 2nd place in any order. Easier than exacta, lower payout.',
     example: '$5 Quinella 4-7: wins whether the finish is 4-7 or 7-4.',
@@ -56,7 +57,7 @@ const BET_TYPES = [
   },
   {
     name: 'Trifecta',
-    emoji: '🏆',
+    icon: 'trophy',
     difficulty: 'Intermediate',
     desc: 'Pick 1st, 2nd, and 3rd in exact order. Big payouts.',
     example: '$1 Trifecta 4-7-2: costs $1, but box 3 horses (6 combos) = $6.',
@@ -64,7 +65,7 @@ const BET_TYPES = [
   },
   {
     name: 'Superfecta',
-    emoji: '💎',
+    icon: 'star-filled',
     difficulty: 'Advanced',
     desc: 'Pick 1st through 4th in exact order. Lottery-level payouts.',
     example: '$0.10 Superfecta box of 4 horses (24 combos) = $2.40 total.',
@@ -72,7 +73,7 @@ const BET_TYPES = [
   },
   {
     name: 'Daily Double',
-    emoji: '📅',
+    icon: 'clock',
     difficulty: 'Intermediate',
     desc: 'Pick the winner of two consecutive races.',
     example: '$2 Daily Double: Pick Race 1 winner AND Race 2 winner.',
@@ -80,7 +81,7 @@ const BET_TYPES = [
   },
   {
     name: 'Pick 3 / Pick 4 / Pick 5 / Pick 6',
-    emoji: '🔢',
+    icon: 'chart',
     difficulty: 'Advanced',
     desc: 'Win consecutive races. The Pick 6 (jackpot) pools can reach millions.',
     example: '$1 Pick 4 with 2×2×1×3 horses = $12 ticket.',
@@ -108,7 +109,7 @@ Quick formula: +odds → profit = (odds/100) × stake. −odds → profit = (100
   },
   {
     title: 'Parimutuel / Tote Odds (How US Tracks Pay)',
-    emoji: '🏦',
+    icon: 'bet',
     body: `Almost all US racetrack wagering is parimutuel — every bet goes into a common pool.
 
 1. All Win bets on a race go into one pool.
@@ -151,7 +152,7 @@ American +250 → decimal = (250÷100) + 1 = 3.50.`,
   },
   {
     title: 'Overlay vs. Underlay (Finding Value)',
-    emoji: '💡',
+    icon: 'lightbulb',
     body: `The core concept of profitable betting:
 
 Overlay: horse's actual winning chance is HIGHER than odds imply. BET IT.
@@ -171,7 +172,7 @@ Bet horses where your estimate beats the implied probability. That's an edge.`,
 const HANDICAPPING = [
   {
     title: 'Speed Figures',
-    icon: '⚡',
+    icon: 'lightning',
     body: `A numerical rating of how fast a horse ran, adjusted for track variant (how fast or slow the track was playing that day). The most common are:
 
 • Beyer Speed Figures (US): scale ~60–120. A 100+ Beyer is top-class.
@@ -182,7 +183,7 @@ Key insight: compare figures run at the same class level. A 95 Beyer at a claimi
   },
   {
     title: 'Pace Analysis',
-    icon: '🏃',
+    icon: 'races',
     body: `Races are won and lost in fractions. Identify:
 
 • Early pace (E): horses that want to lead from the gate
@@ -196,7 +197,7 @@ Look at the half-mile fraction: if it's suicidally fast (under 45 seconds for 4f
   },
   {
     title: 'Class',
-    icon: '🎖️',
+    icon: 'trophy',
     body: `Every race has a class level. From lowest to highest (US):
 
 Maiden → Claiming → Allowance → Stakes → Graded Stakes (G3 → G2 → G1)
@@ -207,7 +208,7 @@ A horse rising sharply in class (maiden winner moving to G1) is taking a big ris
   },
   {
     title: 'Trainer & Jockey Stats',
-    icon: '👨‍🏫',
+    icon: 'profile',
     body: `Trainers have patterns:
 • Win % with first-time starters
 • Win % after layoffs (30–60 days off, 60+ days off)
@@ -223,7 +224,7 @@ Resources like Equibase (US), Timeform (UK), or Racing Post show these stats.`,
   },
   {
     title: 'Track Bias',
-    icon: '🛤️',
+    icon: 'races',
     body: `Track bias = a systematic advantage for horses in certain positions or running styles on a given day.
 
 Common biases:
@@ -237,7 +238,7 @@ How to spot it: watch the first 2–3 races. If every winner comes from the insi
   },
   {
     title: 'Form Cycles & Layoffs',
-    icon: '📈',
+    icon: 'chart',
     body: `Horses run in cycles. Key patterns:
 
 • Horse off a big win: sometimes backs up (had a hard race)
@@ -467,7 +468,9 @@ function BetTypeCard({ bet }) {
           padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
         }}
       >
-        <span style={{ fontSize: 22, lineHeight: 1 }}>{bet.emoji}</span>
+        {bet.icon
+          ? <Icon name={bet.icon} size={22} color="var(--accent-gold)" />
+          : <span style={{ fontSize: 22, lineHeight: 1 }}>{bet.emoji}</span>}
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>{bet.name}</div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{bet.desc}</div>
@@ -489,8 +492,10 @@ function BetTypeCard({ bet }) {
             color: 'var(--text-secondary)',
             lineHeight: 1.6,
             fontFamily: 'var(--font-mono)',
+            display: 'flex', alignItems: 'flex-start', gap: 8,
           }}>
-            📌 {bet.example}
+            <Icon name="info" size={14} color="var(--accent-gold-dim)" style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{bet.example}</span>
           </div>
           <div style={{
             marginTop: 10,
@@ -501,8 +506,10 @@ function BetTypeCard({ bet }) {
             fontSize: 12,
             color: 'var(--text-secondary)',
             lineHeight: 1.5,
+            display: 'flex', alignItems: 'flex-start', gap: 8,
           }}>
-            💡 {bet.tip}
+            <Icon name="lightbulb" size={13} color="var(--accent-blue)" style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{bet.tip}</span>
           </div>
         </div>
       )}
@@ -510,7 +517,7 @@ function BetTypeCard({ bet }) {
   );
 }
 
-function AccordionCard({ title, emoji, body, color }) {
+function AccordionCard({ title, emoji, icon, body, color }) {
   const [open, setOpen] = useState(false);
   return (
     <div style={{
@@ -527,7 +534,11 @@ function AccordionCard({ title, emoji, body, color }) {
           padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
         }}
       >
-        {emoji && <span style={{ fontSize: 20 }}>{emoji}</span>}
+        {icon
+          ? <Icon name={icon} size={20} color="var(--accent-gold)" />
+          : emoji
+            ? <span style={{ fontSize: 20 }}>{emoji}</span>
+            : null}
         <span style={{ flex: 1, fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{title}</span>
         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{open ? '▲' : '▼'}</span>
       </button>
@@ -591,7 +602,7 @@ function OddsTab() {
       }}>
         🧠 <strong style={{ color: 'var(--accent-gold-bright)' }}>The Golden Rule:</strong> Odds represent implied probability. 3/1 (4.00 decimal) implies 25% win chance. If YOU think the horse wins 35% of the time, that's VALUE — bet it. If you think it wins 15%, it's overpriced — skip it.
       </div>
-      {ODDS_CONTENT.map(o => <AccordionCard key={o.title} title={o.title} emoji={o.emoji} body={o.body} />)}
+      {ODDS_CONTENT.map(o => <AccordionCard key={o.title} title={o.title} emoji={o.emoji} icon={o.icon} body={o.body} />)}
       <div style={{ marginTop: 20 }}>
         <SectionLabel>Quick Conversion Reference</SectionLabel>
         <div style={{ overflowX: 'auto' }}>
@@ -643,7 +654,7 @@ function HandicapTab() {
       <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
         Handicapping is the art of evaluating horses to find winners — and more importantly, <em>value</em>. Even beginners can improve immediately by focusing on 2–3 key factors.
       </p>
-      {HANDICAPPING.map(h => <AccordionCard key={h.title} title={h.title} emoji={h.icon} body={h.body} />)}
+      {HANDICAPPING.map(h => <AccordionCard key={h.title} title={h.title} icon={h.icon} body={h.body} />)}
       <div style={{
         marginTop: 20, padding: '14px 16px',
         background: 'rgba(42,122,75,0.08)',
@@ -721,11 +732,11 @@ function FormTab() {
       <div style={{ marginTop: 24 }}>
         <SectionLabel>What to Look For</SectionLabel>
         {[
-          { icon: '✅', label: 'Improving run', desc: 'Form reads ...3-2-1 — horse is getting better. Strong signal.' },
-          { icon: '⚠️', label: 'Class drop', desc: 'Ran in G1, now in Allowance. Trainer looking for easier spot — often wins.' },
-          { icon: '🔴', label: 'Bounce risk', desc: 'Career-best last time. May have peaked. Tread carefully.' },
-          { icon: '✅', label: 'Freshened up', desc: 'Long break but trainer has strong record with returning horses.' },
-          { icon: '⚠️', label: 'Lots of zeros', desc: 'Consistently failing to place. Unless big drop in class, avoid.' },
+          { icon: 'check',   label: 'Improving run', desc: 'Form reads ...3-2-1 — horse is getting better. Strong signal.' },
+          { icon: 'warning', label: 'Class drop', desc: 'Ran in G1, now in Allowance. Trainer looking for easier spot — often wins.' },
+          { icon: 'info',    label: 'Bounce risk', desc: 'Career-best last time. May have peaked. Tread carefully.' },
+          { icon: 'check',   label: 'Freshened up', desc: 'Long break but trainer has strong record with returning horses.' },
+          { icon: 'warning', label: 'Lots of zeros', desc: 'Consistently failing to place. Unless big drop in class, avoid.' },
         ].map(({ icon, label, desc }) => (
           <div key={label} style={{
             display: 'flex', gap: 12, marginBottom: 10,
@@ -733,7 +744,9 @@ function FormTab() {
             borderRadius: 8, padding: '10px 14px',
             border: '1px solid var(--border-subtle)',
           }}>
-            <span style={{ fontSize: 18, flexShrink: 0 }}>{icon}</span>
+            <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center', marginTop: 2 }}>
+              <Icon name={icon} size={16} color={icon === 'check' ? 'var(--accent-green-bright)' : icon === 'warning' ? 'var(--accent-gold)' : 'var(--text-muted)'} />
+            </span>
             <div>
               <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{label}</div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{desc}</div>
@@ -758,7 +771,10 @@ function BankrollTab() {
         lineHeight: 1.6,
         color: 'var(--text-secondary)',
       }}>
-        ⚠️ <strong style={{ color: 'var(--accent-red-bright)' }}>Rule #1:</strong> Only bet what you can afford to lose. Set a dedicated betting bankroll separate from living expenses. Never chase losses.
+        <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <Icon name="warning" size={15} color="var(--accent-red-bright)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span><strong style={{ color: 'var(--accent-red-bright)' }}>Rule #1:</strong> Only bet what you can afford to lose. Set a dedicated betting bankroll separate from living expenses. Never chase losses.</span>
+        </span>
       </div>
       {BANKROLL.map(b => (
         <div key={b.title} style={{
@@ -785,7 +801,10 @@ function BankrollTab() {
         color: 'var(--text-secondary)',
         lineHeight: 1.6,
       }}>
-        💡 <strong style={{ color: 'var(--accent-gold-bright)' }}>Reality check:</strong> Even professional handicappers hit ~30–35% win rate on flat bets. A 50-bet losing streak is statistically possible. Size bets so a bad run doesn't wipe you out.
+        <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <Icon name="lightbulb" size={14} color="var(--accent-gold-bright)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span><strong style={{ color: 'var(--accent-gold-bright)' }}>Reality check:</strong> Even professional handicappers hit ~30–35% win rate on flat bets. A 50-bet losing streak is statistically possible. Size bets so a bad run doesn't wipe you out.</span>
+        </span>
       </div>
     </div>
   );
