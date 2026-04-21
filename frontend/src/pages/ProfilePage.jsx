@@ -173,22 +173,6 @@ export default function ProfilePage() {
           style={{ width: '100%', padding: '10px 14px', fontSize: 14 }}
         />
 
-        {/* Bankroll */}
-        <SectionLabel>Betting Bankroll</SectionLabel>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--text-muted)' }}>$</span>
-          <input
-            type="number"
-            min="0"
-            value={userProfile.bankroll}
-            onChange={(e) => handleProfileChange({ bankroll: parseFloat(e.target.value) || 0 })}
-            style={{ flex: 1, padding: '10px 14px', fontSize: 16, fontFamily: 'var(--font-mono)' }}
-          />
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-          Used by Secretariat to calculate stake recommendations
-        </div>
-
         {/* Risk tolerance */}
         <SectionLabel>Risk Tolerance</SectionLabel>
         <SegmentControl
@@ -250,28 +234,9 @@ export default function ProfilePage() {
             YOUR BETTING PROFILE
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            <div>💰 Bankroll: <strong style={{ color: 'var(--text-primary)' }}>${userProfile.bankroll.toFixed(2)}</strong></div>
             <div>⚡ Risk: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.riskTolerance}</strong></div>
             <div>📚 Level: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.experienceLevel}</strong></div>
           </div>
-        </div>
-
-        {/* Quick nav to pages not in mobile bottom nav */}
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-          <button
-            className="btn btn-secondary"
-            style={{ flex: 1, fontSize: 13 }}
-            onClick={() => navigate('/simulator')}
-          >
-            📈 Simulator
-          </button>
-          <button
-            className="btn btn-secondary"
-            style={{ flex: 1, fontSize: 13 }}
-            onClick={() => navigate('/education')}
-          >
-            📚 Learn
-          </button>
         </div>
 
         <div style={{

@@ -125,7 +125,7 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
                   gap: 14,
                 }}
               >
-                {/* Logo placeholder */}
+                {/* Logo */}
                 <div style={{
                   width: 48,
                   height: 48,
@@ -134,10 +134,14 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 24,
+                  fontSize: 14,
+                  fontWeight: 700,
                   flexShrink: 0,
+                  overflow: 'hidden',
                 }}>
-                  {affiliate.logo}
+                  {affiliate.logoUrl
+                    ? <img src={affiliate.logoUrl} alt={affiliate.name} style={{ width: 32, height: 32, objectFit: 'contain' }} />
+                    : affiliate.logo}
                 </div>
 
                 {/* Info */}

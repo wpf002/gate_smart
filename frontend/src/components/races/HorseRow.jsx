@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store';
-import { trackBetAdded } from '../../utils/analytics';
 import { getHorsePastPerformances } from '../../utils/api';
 import RadarChart from './RadarChart';
 
@@ -184,11 +183,8 @@ export function HorseRowSkeleton() {
  */
 export function HorseRow({ horse, analysis, raceId, scorecards = [], course = '', raceName = '', region = '', isCoupled = false }) {
   const navigate = useNavigate();
-  const addToBetSlip = useAppStore((s) => s.addToBetSlip);
-  const betSlip = useAppStore((s) => s.betSlip);
   const experienceLevel = useAppStore((s) => s.userProfile?.experienceLevel);
   const [expanded, setExpanded] = useState(false);
-  const [added, setAdded] = useState(false);
 
   const isScratched = horse.non_runner || horse.scratched ||
     ['scratched', 'non-runner', 'nr', 'withdrawn'].includes((horse.status || '').toLowerCase());
@@ -206,30 +202,6 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
   const score = analysisData?.contender_score;
   const scoreClass =
     score >= 70 ? 'score-high' : score >= 40 ? 'score-med' : score != null ? 'score-low' : null;
-
-  const isInSlip = betSlip.some((b) => b.horse_id === horse.horse_id);
-
-  const handleAddBet = (e) => {
-    e.stopPropagation();
-    const betType = analysisData?.recommended_bet || 'win';
-    const odds = horse.odds || horse.sp || '?';
-    addToBetSlip({
-      horse_id: horse.horse_id,
-      horse_name: horse.horse_name,
-      race_id: raceId,
-      bet_type: betType,
-      odds,
-      stake: 10,
-      course,
-      race_name: raceName,
-      jockey: horse.jockey || '',
-      trainer: horse.trainer || '',
-      owner: horse.owner || '',
-    });
-    trackBetAdded(betType, horse.horse_id, odds);
-    setAdded(true);
-    setTimeout(() => setAdded(false), 1500);
-  };
 
   const summaryText = experienceLevel === 'beginner'
     ? (analysisData?.summary_beginner || analysisData?.summary)
@@ -344,27 +316,6 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
           {(horse.odds || horse.sp) && (
             <span className="odds-chip">{horse.odds || horse.sp}</span>
-          )}
-          {analysisData && !isInSlip && (
-            <button
-              onClick={handleAddBet}
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                padding: '3px 8px',
-                borderRadius: 6,
-                border: '1px solid var(--accent-gold-dim)',
-                background: added ? 'var(--accent-gold)' : 'transparent',
-                color: added ? '#000' : 'var(--accent-gold)',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-            >
-              {added ? '✓ Added' : '+ Bet'}
-            </button>
-          )}
-          {isInSlip && (
-            <span style={{ fontSize: 11, color: 'var(--accent-green-bright)' }}>✓ In slip</span>
           )}
           {hasExpandedContent && (
             <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>

@@ -109,41 +109,6 @@ describe('HorseRow', () => {
     expect(screen.getByText('Win')).toBeInTheDocument();
   });
 
-  it('shows + Bet button when analysis data is present and horse not in slip', () => {
-    const analysis = {
-      runners: [{ horse_id: 'h1', recommended_bet: 'win', contender_score: 50, summary: null }],
-    };
-    renderRow(baseHorse, analysis);
-    expect(screen.getByText('+ Bet')).toBeInTheDocument();
-  });
-
-  it('does not show + Bet button without analysis data', () => {
-    renderRow();
-    expect(screen.queryByText('+ Bet')).not.toBeInTheDocument();
-  });
-
-  it('adds horse to bet slip when + Bet is clicked', () => {
-    const analysis = {
-      runners: [{ horse_id: 'h1', recommended_bet: 'win', contender_score: 60, summary: null }],
-    };
-    renderRow(baseHorse, analysis);
-    fireEvent.click(screen.getByText('+ Bet'));
-    const { betSlip } = useAppStore.getState();
-    expect(betSlip).toHaveLength(1);
-    expect(betSlip[0].horse_id).toBe('h1');
-  });
-
-  it('shows "In slip" when horse is already in bet slip', () => {
-    useAppStore.setState({
-      betSlip: [{ horse_id: 'h1', bet_type: 'win', stake: 10 }],
-    });
-    const analysis = {
-      runners: [{ horse_id: 'h1', recommended_bet: 'win', contender_score: 60, summary: null }],
-    };
-    renderRow(baseHorse, analysis);
-    expect(screen.getByText(/In slip/)).toBeInTheDocument();
-    expect(screen.queryByText('+ Bet')).not.toBeInTheDocument();
-  });
 
   it('shows analysis summary when present after expanding row', () => {
     const analysis = {

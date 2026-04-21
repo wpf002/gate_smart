@@ -43,18 +43,6 @@ describe('ProfilePage', () => {
     expect(screen.getByText('PROFILE')).toBeInTheDocument();
   });
 
-  it('shows current bankroll value', () => {
-    renderPage();
-    expect(screen.getByDisplayValue('500')).toBeInTheDocument();
-  });
-
-  it('updates bankroll in store when input changes', () => {
-    renderPage();
-    const bankrollInput = screen.getByDisplayValue('500');
-    fireEvent.change(bankrollInput, { target: { value: '1000' } });
-    expect(useAppStore.getState().userProfile.bankroll).toBe(1000);
-  });
-
   it('updates name in store when name input changes', () => {
     renderPage();
     const nameInput = screen.getByPlaceholderText(/Enter your name/);
@@ -98,8 +86,6 @@ describe('ProfilePage', () => {
 
   it('shows profile summary with current values', () => {
     renderPage();
-    expect(screen.getByText(/\$500\.00/)).toBeInTheDocument();
-    // Risk and level shown in summary
     const mediumEls = screen.getAllByText(/medium/i);
     expect(mediumEls.length).toBeGreaterThan(0);
   });

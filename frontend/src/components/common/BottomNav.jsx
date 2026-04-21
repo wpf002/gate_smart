@@ -1,19 +1,16 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAppStore } from '../../store';
 import Icon from './Icon';
 
 const NAV_ITEMS = [
-  { path: '/',        icon: 'home',      label: 'Races'    },
-  { path: '/search',  icon: 'search',    label: 'Search'   },
-  { path: '/betslip', icon: 'picks',     label: 'My Picks' },
-  { path: '/advisor', icon: 'simulator', label: 'Advisor'  },
-  { path: '/profile', icon: 'profile',   label: 'Profile'  },
+  { path: '/',        icon: 'home',      label: 'Races'   },
+  { path: '/search',  icon: 'search',    label: 'Search'  },
+  { path: '/advisor', icon: 'simulator', label: 'Advisor' },
+  { path: '/profile', icon: 'profile',   label: 'Profile' },
 ];
 
 export default function BottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
-  const betSlip = useAppStore((s) => s.betSlip);
 
   return (
     <nav className="bottom-nav" style={{
@@ -52,25 +49,6 @@ export default function BottomNav() {
             <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em' }}>
               {label}
             </span>
-            {path === '/betslip' && betSlip.length > 0 && (
-              <span style={{
-                position: 'absolute',
-                top: 4,
-                right: '18%',
-                background: 'var(--accent-gold)',
-                color: '#000',
-                borderRadius: '50%',
-                width: 16,
-                height: 16,
-                fontSize: 10,
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                {betSlip.length}
-              </span>
-            )}
             {active && (
               <span style={{
                 position: 'absolute',
