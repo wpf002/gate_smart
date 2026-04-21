@@ -398,7 +398,10 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
     if ts_context:
         ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values())
 
-    prompt = f"""Analyze this race. One sentence per field. Short phrases in arrays.
+    cal_context = await get_calibration_context()
+    cal_block = f"{cal_context}\n\n---\n\n" if cal_context else ""
+
+    prompt = f"""{cal_block}Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
@@ -1166,6 +1169,23 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
         for p in misses[:20]
     ) or "none"
 
+    # Load stored lessons so the email reflects what's actually being applied
+    stored_lessons_block = ""
+    try:
+        from app.core.database import _AsyncSessionLocal
+        from app.models.accuracy import SecretariatCalibration
+        if _AsyncSessionLocal:
+            async with _AsyncSessionLocal() as db:
+                cal = await db.get(SecretariatCalibration, 1)
+            if cal and cal.lessons:
+                stored_lessons_block = (
+                    "\nLESSONS CURRENTLY IN MY MEMORY (applied to every analysis):\n"
+                    + "\n".join(f"  - {l}" for l in cal.lessons[:8])
+                    + "\n"
+                )
+    except Exception:
+        pass
+
     analysis_prompt = f"""Date: {today_str}
 Total races: {total} | Wins: {len(hits)} ({win_pct}) | ITM: {report.in_the_money} ({itm_pct})
 
@@ -1175,14 +1195,14 @@ By surface (wins/total): {_fmt_bucket(by_surface)}
 
 Sample correct picks: {hit_sample}
 Sample misses: {miss_sample}
-
+{stored_lessons_block}
 Write three analysis sections for Secretariat's nightly digest. Be specific and honest.
 Return JSON exactly:
 {{
   "subject": "Secretariat – {today_str} | {len(hits)}/{total} ({win_pct}) win rate",
   "what_went_right": "2-4 sentences: which patterns produced correct picks today and why those signals worked. Name specific tracks, race types, or surfaces if there's a pattern.",
   "what_went_wrong": "2-4 sentences: which patterns failed and the likely reason. Be honest about systematic weaknesses, not just bad luck.",
-  "how_im_evolving": "2-4 sentences: specific changes to reasoning or weighting I will apply going forward based on today. Must be concrete, not generic."
+  "how_im_evolving": "2-4 sentences: specific adjustments I will make, grounding them in today's data AND referencing which stored lessons above are being confirmed or revised. Must be concrete, not generic."
 }}"""
 
     response = await client.messages.create(
