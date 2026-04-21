@@ -139,7 +139,7 @@ Converting to decimal: 5/2 = (5÷2) + 1 = 3.50.`,
   },
   {
     title: 'Decimal Odds (Europe / Australia)',
-    emoji: '🌍',
+    icon: 'external',
     body: `Common on international betting exchanges and European books.
 
 Written as 3.50, 2.75, 1.80 — multiply stake × decimal for total return.
@@ -600,7 +600,10 @@ function OddsTab() {
         color: 'var(--text-secondary)',
         lineHeight: 1.6,
       }}>
-        🧠 <strong style={{ color: 'var(--accent-gold-bright)' }}>The Golden Rule:</strong> Odds represent implied probability. 3/1 (4.00 decimal) implies 25% win chance. If YOU think the horse wins 35% of the time, that's VALUE — bet it. If you think it wins 15%, it's overpriced — skip it.
+        <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <Icon name="lightbulb" size={15} color="var(--accent-gold-bright)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span><strong style={{ color: 'var(--accent-gold-bright)' }}>The Golden Rule:</strong> Odds represent implied probability. 3/1 (4.00 decimal) implies 25% win chance. If YOU think the horse wins 35% of the time, that's VALUE — bet it. If you think it wins 15%, it's overpriced — skip it.</span>
+        </span>
       </div>
       {ODDS_CONTENT.map(o => <AccordionCard key={o.title} title={o.title} emoji={o.emoji} icon={o.icon} body={o.body} />)}
       <div style={{ marginTop: 20 }}>
@@ -664,7 +667,10 @@ function HandicapTab() {
         color: 'var(--text-secondary)',
         lineHeight: 1.6,
       }}>
-        🎯 <strong style={{ color: 'var(--accent-green-bright)' }}>Beginner priority order:</strong> Focus first on (1) recent form, (2) class level, (3) distance suitability. Speed figures and pace come later. Don't try to master everything at once.
+        <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <Icon name="target" size={15} color="var(--accent-green-bright)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span><strong style={{ color: 'var(--accent-green-bright)' }}>Beginner priority order:</strong> Focus first on (1) recent form, (2) class level, (3) distance suitability. Speed figures and pace come later. Don't try to master everything at once.</span>
+        </span>
       </div>
     </div>
   );
@@ -915,8 +921,8 @@ export default function EducationPage() {
             borderRadius: 'var(--radius-md)',
             padding: '20px',
           }}>
-            <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 12 }}>
-              🏆 Own a Piece of a Racehorse
+            <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Icon name="trophy" size={18} color="var(--accent-gold)" /> Own a Piece of a Racehorse
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 16 }}>
               Understanding racing is one thing. Owning a share of a thoroughbred is another level entirely.
