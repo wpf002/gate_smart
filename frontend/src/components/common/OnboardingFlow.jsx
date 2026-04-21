@@ -83,7 +83,7 @@ function AuthStep({ onSuccess }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { setAuth } = useAppStore();
+  const { setAuth, resetOnboarding } = useAppStore();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -93,10 +93,12 @@ function AuthStep({ onSuccess }) {
       let result;
       if (mode === 'register') {
         result = await authRegister(email.trim().toLowerCase(), password);
+        resetOnboarding(); // ensure overlay stays mounted when authToken is set
+        setAuth(result.token, result.user);
       } else {
         result = await authLogin(email.trim().toLowerCase(), password);
+        setAuth(result.token, result.user);
       }
-      setAuth(result.token, result.user);
       onSuccess(result.user, mode);
     } catch (err) {
       setError(err?.response?.data?.detail || (mode === 'register' ? 'Registration failed' : 'Sign in failed'));

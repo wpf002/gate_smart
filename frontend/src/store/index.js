@@ -29,6 +29,10 @@ export const useAppStore = create(
         localStorage.setItem('gs_onboarded', 'true');
         set({ onboardingComplete: true });
       },
+      resetOnboarding: () => {
+        localStorage.removeItem('gs_onboarded');
+        set({ onboardingComplete: false });
+      },
 
       // User profile
       userProfile: {
