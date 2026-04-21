@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import ScoreCard from './ScoreCard';
 
-const RANK_BADGES = ['🥇', '🥈', '🥉'];
 
 /**
  * Field scorecard panel — renders all horse scorecards sorted by overall score.
@@ -79,19 +78,15 @@ export default function ScorecardPanel({ raceScorecards, loading, runners = [] }
       </div>
 
       {sorted.map((sc, idx) => {
-        // Look up program number
         const num = numByHorseId[sc.horse_id] || numByName[(sc.horse_name || '').toLowerCase()] || '';
         const numPrefix = num ? `#${num} — ` : '';
-        // Prepend rank badge to name for top 3
-        const rankBadge = RANK_BADGES[idx];
-        const displayCard = rankBadge
-          ? { ...sc, horse_name: `${rankBadge} ${numPrefix}${sc.horse_name}` }
-          : { ...sc, horse_name: `${numPrefix}${sc.horse_name}` };
+        const displayCard = { ...sc, horse_name: `${numPrefix}${sc.horse_name}` };
         const rowId = sc.horse_id || idx;
         return (
           <ScoreCard
             key={rowId}
             scorecard={displayCard}
+            rank={idx < 3 ? idx + 1 : null}
             expanded={expandedId === rowId}
             onToggle={() => setExpandedId(expandedId === rowId ? null : rowId)}
           />

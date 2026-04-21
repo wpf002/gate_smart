@@ -18,7 +18,12 @@ const MODES = [
   { id: 'high',   label: 'High',   desc: 'Overlays and longshots'     },
 ];
 
-const FINISH_MEDALS = { first: '🥇', second: '🥈', third: '🥉', fourth: '🎗️' };
+const FINISH_POSITION = {
+  first:  { label: '1', color: 'var(--accent-gold-bright)',   bg: 'rgba(201,162,39,0.2)',  border: 'rgba(201,162,39,0.5)'  },
+  second: { label: '2', color: 'var(--text-secondary)',        bg: 'rgba(160,160,160,0.15)', border: 'rgba(160,160,160,0.35)' },
+  third:  { label: '3', color: 'var(--accent-gold)',           bg: 'rgba(140,90,30,0.15)',  border: 'rgba(140,90,30,0.35)'  },
+  fourth: { label: '4', color: 'var(--text-muted)',            bg: 'rgba(80,80,80,0.1)',    border: 'rgba(80,80,80,0.25)'   },
+};
 
 // ── AnalysisPanel ─────────────────────────────────────────────────────────────
 function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '', raceType = '' }) {
@@ -217,7 +222,14 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
             if (!p?.horse_name) return null;
             return (
               <div key={pos} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 20, lineHeight: 1, flexShrink: 0 }}>{FINISH_MEDALS[pos]}</span>
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: FINISH_POSITION[pos].bg,
+                  border: `1px solid ${FINISH_POSITION[pos].border}`,
+                  color: FINISH_POSITION[pos].color,
+                  fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700,
+                }}>{FINISH_POSITION[pos].label}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold-bright)' }}>
                     {p.number ? `${p.number} ` : ''}{p.horse_name}
@@ -780,7 +792,11 @@ export default function RaceDetailPage() {
         {raceFinished && raceResults && <ResultsPanel results={raceResults} />}
 
         {/* ── Mode selector ──────────────────────────────────────────── */}
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
+            Risk Tolerance
+          </span>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
           {MODES.map(m => (
             <button key={m.id} onClick={() => handleModeChange(m.id)} style={{
               flexShrink: 0, padding: '6px 12px', borderRadius: 20, border: '1px solid',
@@ -792,6 +808,7 @@ export default function RaceDetailPage() {
               {m.label}
             </button>
           ))}
+          </div>
         </div>
 
         {/* ── Action buttons ─────────────────────────────────────────── */}

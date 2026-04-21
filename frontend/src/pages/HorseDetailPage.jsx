@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getHorse, explainHorse, explainFormString, getHorsePastPerformances } from '../utils/api';
 import PageHeader from '../components/common/PageHeader';
+import Icon from '../components/common/Icon';
 
 function StatRow({ label, value }) {
   if (!value) return null;
@@ -154,7 +155,7 @@ export default function HorseDetailPage() {
             )}
             {formError && !formMutation.isPending && (
               <div style={{ marginTop: 8, fontSize: 12, color: 'var(--accent-red-bright)' }}>
-                ⚠️ {formError}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="warning" size={13} /> {formError}</span>
               </div>
             )}
             {formExplanation && (
@@ -313,7 +314,7 @@ export default function HorseDetailPage() {
             fontSize: 13,
             color: 'var(--accent-red-bright)',
           }}>
-            ⚠️ {explainError}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="warning" size={13} /> {explainError}</span>
           </div>
         )}
 
@@ -409,7 +410,7 @@ export default function HorseDetailPage() {
                 borderLeft: '2px solid var(--accent-blue)',
                 lineHeight: 1.6,
               }}>
-                💡 <strong style={{ color: 'var(--accent-blue-bright)' }}>New to betting?</strong> {explanation.beginner_explanation}
+                <span style={{ display: 'inline-flex', alignItems: 'flex-start', gap: 5 }}><Icon name="lightbulb" size={13} style={{ marginTop: 2, flexShrink: 0 }} /> <span><strong style={{ color: 'var(--accent-blue-bright)' }}>New to betting?</strong> {explanation.beginner_explanation}</span></span>
               </div>
             )}
           </div>

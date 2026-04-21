@@ -6,6 +6,7 @@ import PageHeader from '../components/common/PageHeader';
 import AffiliateDrawer from '../components/common/AffiliateDrawer';
 import { simPlaceBet, getRaceDetail } from '../utils/api';
 import { trackPaperBetPlaced } from '../utils/analytics';
+import Icon from '../components/common/Icon';
 
 // Standalone helper so it can be called in the paper-trade handler
 async function paperTradeBets(betSlip, qc, setTrading, setTradeResult, navigate) {
@@ -336,7 +337,7 @@ export default function BetSlipPage() {
       <div style={{ padding: '16px' }}>
         {dedupedSlip.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🎫</div>
+            <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' }}><Icon name="picks" size={48} /></div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 6 }}>
               No Bets Yet
             </div>
@@ -370,7 +371,7 @@ export default function BetSlipPage() {
                 style={{ fontSize: 14 }}
                 onClick={() => setDrawerOpen(true)}
               >
-                🏦 Bet Online — Open Sportsbook
+                Bet Online — Open Sportsbook
               </button>
             </div>
 
@@ -387,7 +388,7 @@ export default function BetSlipPage() {
                 style={{ fontSize: 14, marginBottom: 8 }}
                 onClick={() => setTellerOpen(true)}
               >
-                🎯 Bet at Counter — Teller Script
+                Bet at Counter — Teller Script
               </button>
               <button
                 className="btn btn-secondary btn-full"
@@ -413,7 +414,7 @@ export default function BetSlipPage() {
               fontSize: 12,
               color: 'var(--text-muted)',
             }}>
-              💡 GateSmart provides betting intelligence only. Always gamble responsibly.
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="lightbulb" size={13} /> GateSmart provides betting intelligence only. Always gamble responsibly.</span>
             </div>
           </>
         )}

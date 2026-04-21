@@ -5,6 +5,7 @@ import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import AffiliateDrawer from '../components/common/AffiliateDrawer';
 import { simGetBets, getRaceDetail } from '../utils/api';
+import Icon from '../components/common/Icon';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -343,7 +344,7 @@ export default function MyPicksPage() {
       <div style={{ padding: '16px' }}>
         {picks.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🏇</div>
+            <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' }}><Icon name="races" size={48} /></div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 6 }}>
               No Picks Yet
             </div>

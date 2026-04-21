@@ -1,3 +1,5 @@
+import Icon from '../common/Icon';
+
 export default function DebriefPanel({ debrief, loading }) {
   if (loading) {
     return (
@@ -116,7 +118,7 @@ export default function DebriefPanel({ debrief, loading }) {
         marginBottom: 12,
       }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
-          💡 KEY TAKEAWAY
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="lightbulb" size={12} color="var(--accent-gold)" /> KEY TAKEAWAY</span>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           {debrief.key_takeaway}
@@ -131,7 +133,7 @@ export default function DebriefPanel({ debrief, loading }) {
         borderLeft: '3px solid var(--accent-blue)',
       }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-blue-bright)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
-          🎓 BEGINNER LESSON
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="learn" size={12} color="var(--accent-blue-bright)" /> BEGINNER LESSON</span>
         </div>
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           {debrief.beginner_lesson}

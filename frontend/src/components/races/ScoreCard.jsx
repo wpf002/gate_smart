@@ -49,7 +49,13 @@ function overallBadgeStyle(score) {
  *   expanded   {boolean}
  *   onToggle   {fn}      called when the header is clicked
  */
-export default function ScoreCard({ scorecard, expanded, onToggle }) {
+const RANK_STYLES = [
+  { bg: 'rgba(201,162,39,0.2)',  border: 'rgba(201,162,39,0.5)',  color: 'var(--accent-gold-bright)' },
+  { bg: 'rgba(160,160,160,0.15)', border: 'rgba(160,160,160,0.35)', color: 'var(--text-secondary)' },
+  { bg: 'rgba(140,90,30,0.15)',  border: 'rgba(140,90,30,0.35)',  color: 'var(--accent-gold)' },
+];
+
+export default function ScoreCard({ scorecard, expanded, onToggle, rank = null }) {
   const [activeDim, setActiveDim] = useState(null);
   const experienceLevel = useAppStore((s) => s.userProfile?.experienceLevel);
   const isPlain = experienceLevel === 'beginner';
@@ -84,6 +90,19 @@ export default function ScoreCard({ scorecard, expanded, onToggle }) {
         onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
         onMouseLeave={e => { if (!expanded) e.currentTarget.style.background = 'var(--bg-card)'; }}
       >
+        {/* Rank badge (top 3 only) */}
+        {rank != null && (() => {
+          const rs = RANK_STYLES[rank - 1];
+          return (
+            <div style={{
+              width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: rs.bg, border: `1px solid ${rs.border}`, color: rs.color,
+              fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
+            }}>{rank}</div>
+          );
+        })()}
+
         {/* Overall badge */}
         <div style={{
           ...overallBadgeStyle(overall),

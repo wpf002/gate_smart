@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '../components/common/PageHeader';
 import { simGetBets, simGetStats, simReset, simSettle, simDeleteBet } from '../utils/api';
+import Icon from '../components/common/Icon';
 
 function BankTab({ stats, onReset, resetting }) {
   const netPnl = stats?.net_pnl ?? 0;
@@ -274,7 +275,7 @@ function BetsTab({ bets, onSettle, settling, settleMsg, onReset, resetting, onDe
   if (!bets || bets.length === 0) {
     return (
       <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' }}><Icon name="clipboard" size={40} /></div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 6 }}>No bets yet</div>
         <div style={{ fontSize: 13 }}>
           Add horses to your bet slip and paper trade them
@@ -350,7 +351,7 @@ function StatsTab({ stats }) {
   if (!stats || stats.total_bets === 0) {
     return (
       <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--text-muted)' }}><Icon name="chart" size={40} /></div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 6 }}>No stats yet</div>
         <div style={{ fontSize: 13 }}>Place some paper bets to see your P&L</div>
       </div>

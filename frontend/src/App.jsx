@@ -1,5 +1,6 @@
 import { Component, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import Icon from './components/common/Icon';
 import BottomNav from './components/common/BottomNav';
 import HomePage from './pages/HomePage';
 import RaceDetailPage from './pages/RaceDetailPage';
@@ -33,7 +34,7 @@ class ErrorBoundary extends Component {
           maxWidth: 400,
           margin: '60px auto',
         }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', color: 'var(--accent-red-bright)' }}><Icon name="warning" size={40} /></div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--accent-gold)', marginBottom: 10 }}>
             Something went wrong
           </div>
@@ -54,11 +55,11 @@ class ErrorBoundary extends Component {
 }
 
 const NAV_ITEMS = [
-  { path: '/',          icon: '🏠', label: 'Races'   },
-  { path: '/search',    icon: '🔍', label: 'Search'  },
-  { path: '/advisor',   icon: '🤖', label: 'Advisor' },
-  { path: '/education', icon: '📚', label: 'Learn'   },
-  { path: '/profile',   icon: '👤', label: 'Profile' },
+  { path: '/',          icon: 'home',    label: 'Races'   },
+  { path: '/search',    icon: 'search',  label: 'Search'  },
+  { path: '/advisor',   icon: 'robot',   label: 'Advisor' },
+  { path: '/education', icon: 'learn',   label: 'Learn'   },
+  { path: '/profile',   icon: 'profile', label: 'Profile' },
 ];
 
 function SideNav() {

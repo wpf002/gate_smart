@@ -1,3 +1,5 @@
+import Icon from '../common/Icon';
+
 export default function ValueAlertBanner({ alerts, loading }) {
   if (loading) {
     return (
@@ -38,8 +40,8 @@ export default function ValueAlertBanner({ alerts, loading }) {
     }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--accent-gold)' }}>
-          ⚡ VALUE ALERTS
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Icon name="lightning" size={14} color="var(--accent-gold)" /> VALUE ALERTS
         </span>
         <span className="badge badge-gold">{alerts.length}</span>
         <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>
