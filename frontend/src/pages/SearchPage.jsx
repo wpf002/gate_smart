@@ -5,6 +5,7 @@ import { searchHorses } from '../utils/api';
 import PageHeader from '../components/common/PageHeader';
 import { getDisplayTime } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
+import Icon from '../components/common/Icon';
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
@@ -75,7 +76,7 @@ export default function SearchPage() {
 
         {!isLoading && submitted && horses.length === 0 && !isError && (
           <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>🔍</div>
+            <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="search" size={40} /></div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>No horses found</div>
             <div style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6, maxWidth: 300, margin: '8px auto 0' }}>
               <strong style={{ color: 'var(--text-secondary)' }}>{submitted}</strong> isn't entered in today's or tomorrow's races.
@@ -100,7 +101,7 @@ export default function SearchPage() {
 
         {!submitted && (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>🐎</div>
+            <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="horse" size={40} /></div>
             <div style={{ fontSize: 13 }}>
               Search by horse name to find entries, form, trainer, and jockey
             </div>

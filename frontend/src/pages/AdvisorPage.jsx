@@ -4,6 +4,7 @@ import { askAdvisor } from '../utils/api';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import AccuracyBadge from '../components/common/AccuracyBadge';
+import Icon from '../components/common/Icon';
 
 const SUGGESTED_QUESTIONS = [
   'Who are the top Kentucky Derby contenders this year?',
@@ -131,12 +132,13 @@ function Message({ msg }) {
           background: isError ? 'rgba(192,57,43,0.15)' : 'rgba(201,162,39,0.15)',
           border: `1px solid ${isError ? 'rgba(192,57,43,0.3)' : 'var(--border-gold)'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 14,
           marginRight: 8,
           flexShrink: 0,
           marginTop: 2,
         }}>
-          {isError ? '⚠️' : '🤖'}
+          {isError
+            ? <Icon name="warning" size={14} color="var(--accent-red-bright)" />
+            : <Icon name="robot" size={14} color="var(--accent-gold)" />}
         </div>
       )}
       <div style={{
@@ -222,7 +224,7 @@ export default function AdvisorPage() {
           <div>
             <AccuracyBadge />
             <div style={{ textAlign: 'center', padding: '24px 0 20px', color: 'var(--text-muted)' }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>🏇</div>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="horse" size={48} /></div>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent-gold)', marginBottom: 6 }}>
                 Ask Secretariat
               </div>
@@ -268,8 +270,7 @@ export default function AdvisorPage() {
               background: 'rgba(201,162,39,0.15)',
               border: '1px solid var(--border-gold)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 14,
-            }}>🤖</div>
+            }}><Icon name="robot" size={14} color="var(--accent-gold)" /></div>
             <div style={{
               padding: '10px 14px',
               borderRadius: '16px 16px 16px 4px',

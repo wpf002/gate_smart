@@ -550,12 +550,12 @@ function AccordionCard({ title, emoji, body, color }) {
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'bets', label: '🎰 Bet Types' },
-  { id: 'odds', label: '📊 Odds' },
-  { id: 'handicap', label: '🔍 Handicapping' },
-  { id: 'form', label: '📋 Reading Form' },
-  { id: 'bankroll', label: '💰 Bankroll' },
-  { id: 'glossary', label: '📚 Glossary' },
+  { id: 'bets',     label: 'Bet Types'     },
+  { id: 'odds',     label: 'Odds'          },
+  { id: 'handicap', label: 'Handicapping'  },
+  { id: 'form',     label: 'Reading Form'  },
+  { id: 'bankroll', label: 'Bankroll'      },
+  { id: 'glossary', label: 'Glossary'      },
 ];
 
 // ─── Tab content ──────────────────────────────────────────────────────────────

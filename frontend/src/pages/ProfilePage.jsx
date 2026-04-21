@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import AccuracyBadge from '../components/common/AccuracyBadge';
+import Icon from '../components/common/Icon';
 import { authUpdateProfile, authLogout } from '../utils/api';
 import { TIMEZONE_OPTIONS } from '../utils/timezone';
 
@@ -234,8 +235,14 @@ export default function ProfilePage() {
             YOUR BETTING PROFILE
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            <div>⚡ Risk: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.riskTolerance}</strong></div>
-            <div>📚 Level: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.experienceLevel}</strong></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="lightning" size={14} color="var(--accent-gold)" />
+              Risk: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.riskTolerance}</strong>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="learn" size={14} color="var(--accent-gold)" />
+              Level: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.experienceLevel}</strong>
+            </div>
           </div>
         </div>
 

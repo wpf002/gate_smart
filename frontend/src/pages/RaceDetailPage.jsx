@@ -10,12 +10,12 @@ import { getDisplayTime, formatDistance, formatPurse, isRaceDefinitelyFinished }
 import { useAppStore } from '../store';
 import AffiliateDrawer from '../components/common/AffiliateDrawer';
 import { PARTNERS } from '../utils/affiliates';
+import Icon from '../components/common/Icon';
 
 const MODES = [
-  { id: 'safe',       label: 'Safe',       desc: 'Minimize risk'  },
-  { id: 'balanced',   label: 'Balanced',   desc: 'Value + safety' },
-  { id: 'aggressive', label: 'Aggressive', desc: 'Max upside'     },
-  { id: 'longshot',   label: 'Longshot',   desc: 'Overlay value'  },
+  { id: 'low',    label: 'Low',    desc: 'Favorites and safe bets'    },
+  { id: 'medium', label: 'Medium', desc: 'Balanced value and safety'  },
+  { id: 'high',   label: 'High',   desc: 'Overlays and longshots'     },
 ];
 
 const FINISH_MEDALS = { first: '🥇', second: '🥈', third: '🥉', fourth: '🎗️' };
@@ -78,17 +78,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
     return (
       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-        <button
-          onClick={handleAddToPicks}
-          style={{
-            fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
-            border: '1px solid rgba(34,197,94,0.4)',
-            background: 'rgba(34,197,94,0.1)',
-            color: 'var(--accent-green-bright)', cursor: 'pointer', whiteSpace: 'nowrap',
-          }}
-        >
-          Simulate Bet
-        </button>
         <button
           onClick={(e) => { e.stopPropagation(); openBetOnline(selection, label); }}
           style={{
@@ -283,7 +272,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
                     <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
                     <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 8 }}>{rec.reasoning}</div>
                     {rec.box_option && viewMode === 'technical' && (
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>📦 {rec.box_option}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>Box: {rec.box_option}</div>
                     )}
                   </div>
                   <div className="bet-rec-buttons">
@@ -356,8 +345,9 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
               </div>
             )}
             {viewMode === 'beginner' && (
-              <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(26,107,168,0.1)', borderRadius: 6, fontSize: 11, color: 'var(--accent-blue-bright)', lineHeight: 1.5 }}>
-                💡 At the window: <em>"$2 Pick 3, [horse #] in this race, [pick for next race], [pick for race after], Race [N]"</em>
+              <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(26,107,168,0.1)', borderRadius: 6, fontSize: 11, color: 'var(--accent-blue-bright)', lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                <Icon name="lightbulb" size={13} color="var(--accent-blue-bright)" />
+                <span>At the window: <em>"$2 Pick 3, [horse #] in this race, [pick for next race], [pick for race after], Race [N]"</em></span>
               </div>
             )}
           </div>
@@ -365,8 +355,9 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
       )}
 
       {analysis.beginner_tip && (
-        <div style={{ marginTop: 4, padding: '8px 12px', background: 'rgba(26,107,168,0.1)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', borderLeft: '2px solid var(--accent-blue)' }}>
-          💡 <strong style={{ color: 'var(--accent-blue-bright)' }}>Beginner tip:</strong> {analysis.beginner_tip}
+        <div style={{ marginTop: 4, padding: '8px 12px', background: 'rgba(26,107,168,0.1)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', borderLeft: '2px solid var(--accent-blue)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <Icon name="lightbulb" size={15} color="var(--accent-blue-bright)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span><strong style={{ color: 'var(--accent-blue-bright)' }}>Beginner tip:</strong> {analysis.beginner_tip}</span>
         </div>
       )}
 
@@ -408,8 +399,8 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
-                📊 Want deeper speed figures?
+              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon name="chart" size={15} /> Want deeper speed figures?
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 10 }}>
                 {PARTNERS.thorograph.description}
@@ -439,22 +430,24 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
       {/* ── West Point TB maiden prompt ───────────────────────────── */}
       {!wpDismissed && (raceType?.toLowerCase().includes('maiden') || analysis?.overall_summary?.toLowerCase().includes('maiden') || analysis?.overall_summary_beginner?.toLowerCase().includes('maiden')) && (
-        <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(201,168,76,0.7)', lineHeight: 1.6 }}>
-          🐎 Interested in horses like these?{' '}
-          <button
-            onClick={() => {
-              trackEvent('partner_click', { partner: 'westpoint' });
-              window.open(PARTNERS.westpoint.url, '_blank', 'noopener,noreferrer');
-              sessionStorage.setItem('gs_wp_dismissed', '1');
-              setWpDismissed(true);
-            }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(201,168,76,0.85)', fontSize: 12, padding: 0, textDecoration: 'underline' }}
-          >
-            West Point Thoroughbreds offers fractional ownership in top-level thoroughbreds. Learn more →
-          </button>
+        <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(201,168,76,0.7)', lineHeight: 1.6, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+          <Icon name="horse" size={14} color="rgba(201,168,76,0.7)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>Interested in horses like these?{' '}
+            <button
+              onClick={() => {
+                trackEvent('partner_click', { partner: 'westpoint' });
+                window.open(PARTNERS.westpoint.url, '_blank', 'noopener,noreferrer');
+                sessionStorage.setItem('gs_wp_dismissed', '1');
+                setWpDismissed(true);
+              }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(201,168,76,0.85)', fontSize: 12, padding: 0, textDecoration: 'underline' }}
+            >
+              West Point Thoroughbreds offers fractional ownership in top-level thoroughbreds. Learn more →
+            </button>
+          </span>
           <button
             onClick={() => { sessionStorage.setItem('gs_wp_dismissed', '1'); setWpDismissed(true); }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: '0 0 0 6px', lineHeight: 1 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: '0 0 0 4px', lineHeight: 1 }}
             aria-label="Dismiss"
           >×</button>
         </div>
@@ -529,7 +522,7 @@ export default function RaceDetailPage() {
   const CACHE_TTL = 5 * 60 * 1000; // 5 minutes — matches server cache
   const validCache = cached && (Date.now() - cached.cachedAt) < CACHE_TTL ? cached : null;
 
-  const [analysisMode, setAnalysisMode] = useState(validCache?.mode || 'balanced');
+  const [analysisMode, setAnalysisMode] = useState(validCache?.mode || userProfile.riskTolerance || 'medium');
   const [analysis, setAnalysis] = useState(validCache?.analysis || null);
   const [analysisStreaming, setAnalysisStreaming] = useState(false);
   const [scorecardData, setScorecardData] = useState(validCache?.scorecardData || null);
@@ -815,8 +808,8 @@ export default function RaceDetailPage() {
             </button>
           )}
           {showDebriefBtn && (
-            <button className="btn btn-secondary btn-full" onClick={runDebrief} disabled={isLoading}>
-              📋 Post-Race Debrief
+            <button className="btn btn-secondary btn-full" onClick={runDebrief} disabled={isLoading} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <Icon name="clipboard" size={15} /> Post-Race Debrief
             </button>
           )}
         </div>
@@ -840,8 +833,8 @@ export default function RaceDetailPage() {
               borderRadius: 'var(--radius-md)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
             }}>
-              <span style={{ fontSize: 12, color: 'var(--accent-gold-bright)' }}>
-                ⚠️ Analysis is {ageMin} min old — odds may have shifted. Re-run for fresh picks.
+              <span style={{ fontSize: 12, color: 'var(--accent-gold-bright)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon name="warning" size={14} /> Analysis is {ageMin} min old — odds may have shifted. Re-run for fresh picks.
               </span>
               <button
                 className="btn btn-ghost"
@@ -856,19 +849,19 @@ export default function RaceDetailPage() {
 
         {/* ── Error banners ──────────────────────────────────────────── */}
         {analyzeError && (
-          <div style={{ padding: '10px 14px', background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--accent-red-bright)', marginBottom: 12 }}>
-            ⚠️ {analyzeError}
+          <div style={{ padding: '10px 14px', background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--accent-red-bright)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="warning" size={15} color="var(--accent-red-bright)" /> {analyzeError}
           </div>
         )}
         {debriefPending && (
           <div style={{ padding: '10px 14px', background: 'rgba(201,162,39,0.08)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--accent-gold-bright)', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <span>⏳ Results processing — try again in a few minutes</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="clock" size={15} /> Results processing — try again in a few minutes</span>
             <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }} onClick={runDebrief}>Try Again</button>
           </div>
         )}
         {debriefError && (
-          <div style={{ padding: '10px 14px', background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--accent-red-bright)', marginBottom: 12 }}>
-            ⚠️ {debriefError}
+          <div style={{ padding: '10px 14px', background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--accent-red-bright)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="warning" size={15} color="var(--accent-red-bright)" /> {debriefError}
           </div>
         )}
 

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getRacesToday, getRacesByDate, getDailyAccuracy } from '../utils/api';
 import { RaceCard, RaceCardSkeleton } from '../components/races/RaceCard';
 import PageHeader from '../components/common/PageHeader';
+import Icon from '../components/common/Icon';
 
 const DATE_TABS = [
   { key: 'today', label: 'Today' },
@@ -95,7 +96,7 @@ function SecretariatReportCard() {
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>
         Races called: <strong>{data.races_analyzed}</strong>
-        {data.best_call && <span> · 🎯 {data.best_call}</span>}
+        {data.best_call && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}> · <Icon name="target" size={12} /> {data.best_call}</span>}
       </div>
       <button
         onClick={() => navigate('/accuracy')}
@@ -206,8 +207,8 @@ export default function HomePage() {
         <div style={{ position: 'relative' }}>
           <span style={{
             position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-            fontSize: 14, pointerEvents: 'none', color: 'var(--text-muted)',
-          }}>🔍</span>
+            pointerEvents: 'none', color: 'var(--text-muted)', display: 'flex', alignItems: 'center',
+          }}><Icon name="search" size={14} /></span>
           <input
             type="search"
             placeholder="Filter tracks…"
@@ -255,7 +256,7 @@ export default function HomePage() {
           </div>
         ) : tracks.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🏇</div>
+            <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="horse" size={48} /></div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 22 }}>No races scheduled</div>
             <div style={{ fontSize: 13, marginTop: 6 }}>Check back later or try another day</div>
           </div>

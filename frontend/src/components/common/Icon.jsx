@@ -50,6 +50,49 @@ const PATHS = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 10.5v5a6 6 0 0012 0v-5" />
     </>
   ),
+  robot: (
+    <>
+      <rect x="3" y="8" width="18" height="13" rx="3" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8V5M9 5h6" />
+      <circle cx="8.5" cy="14" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="15.5" cy="14" r="1.5" fill="currentColor" stroke="none" />
+      <path strokeLinecap="round" d="M9 18h6" />
+    </>
+  ),
+  lightbulb: (
+    <>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 18h6M12 2a7 7 0 016 7c0 2.8-1.6 5.1-4 6.4V17H10v-1.6C7.6 14.1 6 11.8 6 9a7 7 0 016-7z" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path strokeLinecap="round" d="M12 7v5l3 3" />
+    </>
+  ),
+  target: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  lightning: (
+    <path strokeLinecap="round" strokeLinejoin="round" d="M13 2L4.5 13.5H12L11 22l8.5-11.5H12L13 2z" />
+  ),
+  chart: (
+    <>
+      <polyline strokeLinecap="round" strokeLinejoin="round" points="3 17 9 11 13 15 21 7" />
+      <path strokeLinecap="round" d="M21 7v5M21 7h-5" />
+    </>
+  ),
+  clipboard: (
+    <>
+      <rect x="5" y="4" width="14" height="17" rx="2" />
+      <path strokeLinecap="round" d="M9 4V3h6v1" />
+      <path strokeLinecap="round" d="M9 12h6M9 16h4" />
+    </>
+  ),
   'chevron-right': (
     <polyline points="9 18 15 12 9 6" strokeLinecap="round" strokeLinejoin="round" />
   ),
