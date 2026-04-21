@@ -2,10 +2,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from './Icon';
 
 const NAV_ITEMS = [
-  { path: '/',        icon: 'home',      label: 'Races'   },
-  { path: '/search',  icon: 'search',    label: 'Search'  },
-  { path: '/advisor', icon: 'simulator', label: 'Advisor' },
-  { path: '/profile', icon: 'profile',   label: 'Profile' },
+  { path: '/',          icon: 'home',      label: 'Races'   },
+  { path: '/search',    icon: 'search',    label: 'Search'  },
+  { path: '/advisor',   icon: 'simulator', label: 'Advisor' },
+  { path: '/education', icon: 'learn',     label: 'Learn'   },
+  { path: '/profile',   icon: 'profile',   label: 'Profile' },
 ];
 
 export default function BottomNav() {

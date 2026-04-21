@@ -54,10 +54,11 @@ class ErrorBoundary extends Component {
 }
 
 const NAV_ITEMS = [
-  { path: '/',        icon: '🏠', label: 'Races'   },
-  { path: '/search',  icon: '🔍', label: 'Search'  },
-  { path: '/advisor', icon: '🤖', label: 'Advisor' },
-  { path: '/profile', icon: '👤', label: 'Profile' },
+  { path: '/',          icon: '🏠', label: 'Races'   },
+  { path: '/search',    icon: '🔍', label: 'Search'  },
+  { path: '/advisor',   icon: '🤖', label: 'Advisor' },
+  { path: '/education', icon: '📚', label: 'Learn'   },
+  { path: '/profile',   icon: '👤', label: 'Profile' },
 ];
 
 function SideNav() {

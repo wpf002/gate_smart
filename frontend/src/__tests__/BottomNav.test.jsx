@@ -27,11 +27,12 @@ beforeEach(() => {
 });
 
 describe('BottomNav', () => {
-  it('renders all 4 nav items', () => {
+  it('renders all 5 nav items', () => {
     renderNav();
     expect(screen.getByText('Races')).toBeInTheDocument();
     expect(screen.getByText('Search')).toBeInTheDocument();
     expect(screen.getByText('Advisor')).toBeInTheDocument();
+    expect(screen.getByText('Learn')).toBeInTheDocument();
     expect(screen.getByText('Profile')).toBeInTheDocument();
   });
 
