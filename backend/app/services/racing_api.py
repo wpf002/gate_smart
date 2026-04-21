@@ -132,29 +132,7 @@ async def get_racecards(date: str = None, region: str = None) -> dict:
 
 
 async def get_race(race_id: str) -> dict:
-    """Find a race by ID in the cached racecard list."""
-    for day in (None, "tomorrow"):
-        cache_key = f"racecards:all:{'today' if day is None else day}"
-        cached = await cache_get(cache_key)
-        if cached:
-            for r in cached.get("racecards", []):
-                if r.get("race_id") == race_id:
-                    return _normalize_race(r)
-
-    # Cache miss — fetch today's standard cards
-    data = await get_racecards()
-    for r in data.get("racecards", []):
-        if r.get("race_id") == race_id:
-            return r
-
-    # Try tomorrow's standard cards
-    data = await get_racecards(date="tomorrow")
-    for r in data.get("racecards", []):
-        if r.get("race_id") == race_id:
-            return r
-
-    # NA race — ID format is "{MEET_ID}-{race_number}", e.g. "IND_1775520000000-1"
-    # meet_id is everything before the final "-"
+    """Find a NA race by ID. Format: '{MEET_ID}-{race_number}', e.g. 'IND_1775520000000-1'."""
     if "-" in race_id:
         meet_id = race_id.rsplit("-", 1)[0]
         try:

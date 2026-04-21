@@ -4,13 +4,13 @@ Accuracy API — daily report retrieval, history, and manual email trigger.
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_optional_user
+from app.core.auth import get_current_user, get_optional_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.accuracy import DailyAccuracyReport
+from app.models.accuracy import DailyAccuracyReport, RacePrediction
 from app.models.user import User
 
 router = APIRouter()
@@ -329,3 +329,109 @@ async def trigger_send_report(
         await db.commit()
 
     return {"sent": sent, "date": target.isoformat()}
+
+
+@router.get("/my-stats")
+async def get_my_stats(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Return accuracy stats for the authenticated user's own predictions."""
+    result = await db.execute(
+        select(RacePrediction).where(
+            RacePrediction.user_id == user.id,
+            RacePrediction.result_fetched == True,  # noqa: E712
+        )
+    )
+    preds = result.scalars().all()
+
+    if not preds:
+        return {
+            "total_predictions": 0,
+            "top_pick_wins": 0,
+            "win_rate": 0.0,
+            "itm_rate": 0.0,
+            "by_track": {},
+            "by_race_type": {},
+            "last_7_days_win_rate": None,
+        }
+
+    total = len(preds)
+    wins = sum(1 for p in preds if p.top_pick_correct)
+    itm_count = sum(1 for p in preds if p.in_the_money)
+
+    by_track: dict = {}
+    by_race_type: dict = {}
+    for p in preds:
+        tc = (p.track_code or "Unknown").upper()
+        by_track.setdefault(tc, {"total": 0, "wins": 0})
+        by_track[tc]["total"] += 1
+        if p.top_pick_correct:
+            by_track[tc]["wins"] += 1
+
+        rt = p.race_type or "Unknown"
+        by_race_type.setdefault(rt, {"total": 0, "wins": 0})
+        by_race_type[rt]["total"] += 1
+        if p.top_pick_correct:
+            by_race_type[rt]["wins"] += 1
+
+    cutoff = datetime.date.today() - datetime.timedelta(days=7)
+    last7 = [p for p in preds if p.race_date and p.race_date >= cutoff]
+    l7_wins = sum(1 for p in last7 if p.top_pick_correct)
+    l7_rate = l7_wins / len(last7) if last7 else None
+
+    return {
+        "total_predictions": total,
+        "top_pick_wins": wins,
+        "win_rate": wins / total if total else 0.0,
+        "itm_rate": itm_count / total if total else 0.0,
+        "by_track": by_track,
+        "by_race_type": by_race_type,
+        "last_7_days_win_rate": l7_rate,
+    }
+
+
+@router.get("/my-predictions")
+async def get_my_predictions(
+    date: str = None,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Return the authenticated user's prediction list with settled results."""
+    query = select(RacePrediction).where(
+        RacePrediction.user_id == user.id,
+    )
+    if date:
+        try:
+            target = datetime.date.fromisoformat(date)
+            query = query.where(RacePrediction.race_date == target)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format — use YYYY-MM-DD")
+
+    query = query.order_by(desc(RacePrediction.created_at)).limit(limit)
+    result = await db.execute(query)
+    preds = result.scalars().all()
+
+    return [
+        {
+            "race_id": p.race_id,
+            "race_date": p.race_date.isoformat() if p.race_date else None,
+            "race_name": p.race_name,
+            "track_code": p.track_code,
+            "race_type": p.race_type,
+            "analysis_mode": p.analysis_mode,
+            "predicted_first": p.predicted_first,
+            "predicted_second": p.predicted_second,
+            "predicted_third": p.predicted_third,
+            "actual_first": p.actual_first,
+            "actual_second": p.actual_second,
+            "actual_third": p.actual_third,
+            "top_pick_correct": p.top_pick_correct,
+            "in_the_money": p.in_the_money,
+            "result_fetched": p.result_fetched,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "settled_at": p.settled_at.isoformat() if p.settled_at else None,
+        }
+        for p in preds
+    ]

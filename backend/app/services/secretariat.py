@@ -512,7 +512,7 @@ Return this JSON exactly:
     return result
 
 
-async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None):
+async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, user_id: int = None):
     """
     Async generator for streaming race analysis.
     Yields ("chunk", str) during generation, then ("result", dict) when done.
@@ -650,6 +650,7 @@ Return this JSON exactly:
             surface=race_data.get("surface", ""),
             mode=mode,
             predicted_finish=predicted_finish,
+            user_id=user_id,
         ))
 
 
@@ -1036,6 +1037,7 @@ async def _store_prediction(
     surface: str,
     mode: str,
     predicted_finish: dict,
+    user_id: int = None,
 ) -> None:
     """
     Silently insert a RacePrediction row after analysis completes.
@@ -1063,6 +1065,7 @@ async def _store_prediction(
             "race_type": race_type,
             "surface": surface,
             "analysis_mode": mode,
+            "user_id": user_id,
             "predicted_first": first.get("horse_name"),
             "predicted_second": second.get("horse_name"),
             "predicted_third": third.get("horse_name"),
@@ -1070,9 +1073,10 @@ async def _store_prediction(
             "predicted_first_num": first.get("number"),
         }
 
+        constraint = "uq_prediction_race_mode_user" if user_id is not None else "uq_race_prediction"
         async with _AsyncSessionLocal() as db:
             stmt = pg_insert(RacePrediction).values(**row)
-            stmt = stmt.on_conflict_do_nothing(constraint="uq_race_prediction")
+            stmt = stmt.on_conflict_do_nothing(constraint=constraint)
             await db.execute(stmt)
             await db.commit()
     except Exception:

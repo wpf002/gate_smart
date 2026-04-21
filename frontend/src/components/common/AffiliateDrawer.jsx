@@ -73,7 +73,7 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
         }}>
           <div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent-gold)' }}>
-              PLACE YOUR BETS
+              PLACE YOUR BET
             </div>
             {recommendedHorse ? (
               <div style={{ fontSize: 12, color: 'var(--accent-gold-bright)', marginTop: 2 }}>
@@ -82,7 +82,7 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
               </div>
             ) : (
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                Open your sportsbook and place this bet:
+                Choose your advance deposit wagering platform:
               </div>
             )}
           </div>
@@ -188,7 +188,7 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
           textAlign: 'center',
         }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-            🔞 18+ only. Gambling involves risk. If you're struggling, visit{' '}
+            18+ only. Gambling involves risk. If you need help, visit{' '}
             <a
               href="https://www.ncpgambling.org"
               target="_blank"
@@ -196,17 +196,8 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
               style={{ color: 'var(--accent-blue-bright)' }}
             >
               ncpgambling.org
-            </a>{' '}
-            (US) or{' '}
-            <a
-              href="https://www.begambleaware.org"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: 'var(--accent-blue-bright)' }}
-            >
-              BeGambleAware.org
-            </a>{' '}
-            (UK/AU).
+            </a>
+            .
           </div>
         </div>
       </div>

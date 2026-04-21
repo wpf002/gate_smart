@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, Float, Integer, String, Text,
+    Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text,
     UniqueConstraint, Index,
 )
 from sqlalchemy.dialects.postgresql import JSON
@@ -16,17 +16,24 @@ from app.core.database import Base
 
 
 class RacePrediction(Base):
-    """One row per race × analysis_mode — Secretariat's pre-race top-4 call."""
+    """One row per race × analysis_mode × user_id — Secretariat's pre-race top-4 call.
+    user_id=NULL means the nightly global auto-prediction.
+    """
     __tablename__ = "race_predictions"
     __table_args__ = (
         UniqueConstraint("race_id", "analysis_mode", name="uq_race_prediction"),
+        UniqueConstraint("race_id", "analysis_mode", "user_id", name="uq_prediction_race_mode_user"),
         Index("ix_race_predictions_race_date", "race_date"),
         Index("ix_race_predictions_race_id", "race_id"),
+        Index("ix_race_predictions_user_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     race_id: Mapped[str] = mapped_column(String(100), nullable=False)
     race_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True
+    )
     track_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     race_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     race_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

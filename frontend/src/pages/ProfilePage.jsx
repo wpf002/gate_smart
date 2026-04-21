@@ -284,7 +284,7 @@ export default function ProfilePage() {
           color: 'var(--text-muted)',
           lineHeight: 1.5,
         }}>
-          GateSmart is an educational tool. Always gamble responsibly. Never bet more than you can afford to lose. If gambling is affecting your life, visit <strong>BeGambleAware.org</strong>.
+          GateSmart is an AI-powered analysis tool for serious horseplayers, tracks, and ADWs. For responsible gambling support, visit <strong>ncpgambling.org</strong>.
         </div>
       </div>
     </div>

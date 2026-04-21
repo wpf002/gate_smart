@@ -219,7 +219,7 @@ function IOSInstallBanner() {
       gap: 10,
     }}>
       <span>
-        📱 Add GateSmart to your home screen for the best experience. Tap Share → Add to Home Screen
+        Add GateSmart to your home screen — works on any device. Tap Share → Add to Home Screen
       </span>
       <button
         onClick={() => {

@@ -174,6 +174,16 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
 
     cache_key = f"ai_analysis:{req.race_id}:{req.mode}"
 
+    # Extract optional user_id from JWT for per-user prediction tracking
+    _user_id = None
+    try:
+        _auth_header = request.headers.get("Authorization", "")
+        if _auth_header.startswith("Bearer "):
+            from app.core.auth import decode_token
+            _user_id = decode_token(_auth_header[7:])
+    except Exception:
+        pass
+
     async def generate():
         try:
             cached = await cache_get(cache_key)
@@ -191,7 +201,7 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
 
             result = None
             async for event_type, data in secretariat.stream_analyze_race(
-                race_data, mode=req.mode, bankroll=req.bankroll
+                race_data, mode=req.mode, bankroll=req.bankroll, user_id=_user_id
             ):
                 if event_type == "chunk":
                     yield f"data: {json.dumps({'t': data})}\n\n"

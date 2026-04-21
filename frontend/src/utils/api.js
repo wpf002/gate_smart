@@ -121,6 +121,12 @@ export const getDailyAccuracy = (date) =>
 export const getAccuracyHistory = () =>
   api.get('/accuracy/history').then((r) => r.data);
 
+export const getMyAccuracyStats = () =>
+  api.get('/accuracy/my-stats').then((r) => r.data);
+
+export const getMyPredictions = (date = null, limit = 20) =>
+  api.get('/accuracy/my-predictions', { params: { ...(date ? { date } : {}), limit } }).then((r) => r.data);
+
 // ── Race Debrief ──────────────────────────────────────────────────────────────
 export const getRaceDebrief = (raceId) =>
   api.post('/advisor/debrief', { race_id: raceId }).then((r) => r.data);
@@ -173,6 +179,8 @@ export const authLogin = (email, password) =>
 
 export const authMe = () =>
   api.get('/auth/me').then((r) => r.data);
+
+export const getMe = authMe;
 
 export const authUpdateProfile = (updates) =>
   api.put('/auth/profile', updates).then((r) => r.data);

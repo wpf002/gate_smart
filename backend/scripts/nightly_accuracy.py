@@ -27,6 +27,7 @@ async def _ensure_columns(engine) -> None:
     ddl = [
         "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS reflection TEXT",
         "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)",
         "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
     ]
     async with engine.begin() as conn:
@@ -63,30 +64,19 @@ async def main(target_date: datetime.date, dry_run: bool):
         print("Nothing to settle — exiting.")
         return
 
-    # 2. Fetch results from both NA and international endpoints
-    from app.services.racing_api import get_na_results_full, get_results
+    # 2. Fetch NA results
+    from app.services.racing_api import get_na_results_full
 
     date_str = target_date.isoformat()
 
     print(f"  Fetching NA results for {date_str}…")
     try:
         na_data = await get_na_results_full(date_str)
-        na_results_by_id = {r.get("race_id"): r for r in na_data.get("results", []) if r.get("race_id")}
-        print(f"  Found {len(na_results_by_id)} NA results.")
+        all_results_by_id = {r.get("race_id"): r for r in na_data.get("results", []) if r.get("race_id")}
+        print(f"  Found {len(all_results_by_id)} NA results.")
     except Exception as e:
         print(f"  NA results fetch failed: {e}")
-        na_results_by_id = {}
-
-    print(f"  Fetching international results for {date_str}…")
-    try:
-        int_data = await get_results(date=date_str)
-        int_results_by_id = {r.get("race_id"): r for r in int_data.get("results", []) if r.get("race_id")}
-        print(f"  Found {len(int_results_by_id)} international results.")
-    except Exception as e:
-        print(f"  International results fetch failed: {e}")
-        int_results_by_id = {}
-
-    all_results_by_id = {**int_results_by_id, **na_results_by_id}  # NA takes precedence on collision
+        all_results_by_id = {}
 
     def _finisher(runners: list, pos: int) -> str | None:
         for r in runners:

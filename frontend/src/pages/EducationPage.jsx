@@ -92,7 +92,7 @@ const ODDS_CONTENT = [
   {
     title: 'American (Moneyline) Odds',
     emoji: '🇺🇸',
-    body: `The standard at US racetracks and online books like DraftKings, FanDuel Racing, and TVG.
+    body: `The standard at US racetracks and ADW platforms like TwinSpires, TVG, NYRA Bets, and AmWager.
 
 Positive (+) odds show profit on a $100 bet:
 +250 → stake $100, profit $250 ($350 total back)
@@ -420,7 +420,7 @@ const GLOSSARY = [
   { term: 'Ante-post betting', def: 'Betting weeks or months before the race (e.g. Kentucky Derby futures). No refund if horse is withdrawn. Higher odds, but risk of non-runner.' },
   { term: 'Equibase', def: 'The official data provider for US thoroughbred racing. Past performances, workouts, speed figures, and stats all sourced from Equibase (equibase.com).' },
   { term: 'Daily Racing Form (DRF)', def: 'The bible of US horse racing — provides comprehensive past performances, Beyer figures, trainer/jockey stats, and handicapping tools (drf.com).' },
-  { term: 'TVG / FanDuel Racing', def: 'Major US advance deposit wagering (ADW) platforms where you can bet US and international racing online. Also ESPN BET and DraftKings Racing.' },
+  { term: 'ADW (Advance Deposit Wagering)', def: 'Online platforms where you can bet North American racing from your account. Major ADWs include TwinSpires, NYRA Bets, TVG, and AmWager.' },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────

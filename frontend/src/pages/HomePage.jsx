@@ -10,12 +10,6 @@ const DATE_TABS = [
   { key: 'tomorrow', label: 'Tomorrow' },
 ];
 
-const REGION_TABS = [
-  { key: 'USA,CAN', label: 'USA' },
-  { key: 'GB,IRE', label: 'UK & IRE' },
-  { key: null, label: 'All' },
-];
-
 function TrackSection({ course, races, isTomorrow }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
@@ -115,36 +109,20 @@ function SecretariatReportCard() {
 
 export default function HomePage() {
   const [selectedDay, setSelectedDay] = useState('today');
-  const [selectedRegion, setSelectedRegion] = useState('USA,CAN');
   const [trackSearch, setTrackSearch] = useState('');
 
-  const isAll = selectedRegion === null;
-
-  // Standard (UK/IRE/etc.) fetch — always runs
   const { data, isLoading, isFetching, isError, refetch } = useQuery({
-    queryKey: ['races', selectedDay, selectedRegion],
+    queryKey: ['races', selectedDay],
     queryFn: () =>
       selectedDay === 'today'
-        ? getRacesToday(isAll ? null : selectedRegion)
-        : getRacesByDate('tomorrow', isAll ? null : selectedRegion),
+        ? getRacesToday('usa')
+        : getRacesByDate('tomorrow', 'usa'),
   });
 
-  // NA fetch — only runs when "All" is selected
-  const { data: naData, isFetching: naFetching, refetch: naRefetch } = useQuery({
-    queryKey: ['races', selectedDay, 'USA,CAN'],
-    queryFn: () =>
-      selectedDay === 'today'
-        ? getRacesToday('USA,CAN')
-        : getRacesByDate('tomorrow', 'USA,CAN'),
-    enabled: isAll,
-  });
+  const isRefreshing = isFetching;
+  const handleRefetch = () => { refetch(); };
 
-  const isRefreshing = isFetching || (isAll && naFetching);
-  const handleRefetch = () => { refetch(); if (isAll) naRefetch(); };
-
-  const races = isAll
-    ? [...(data?.racecards ?? []), ...(naData?.racecards ?? [])]
-    : (data?.racecards ?? []);
+  const races = data?.racecards ?? [];
 
   // Normalize course names — strip exotic wager suffixes the NA API appends
   // e.g. "Keeneland Turf Pick 3" → "Keeneland"
@@ -216,30 +194,6 @@ export default function HomePage() {
               fontWeight: 600,
               cursor: 'pointer',
               transition: 'color 0.15s',
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Region tabs */}
-      <div style={{ display: 'flex', gap: 6, padding: '10px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-        {REGION_TABS.map(({ key, label }) => (
-          <button
-            key={String(key)}
-            onClick={() => setSelectedRegion(key)}
-            style={{
-              padding: '5px 14px',
-              borderRadius: 20,
-              border: '1px solid',
-              borderColor: selectedRegion === key ? 'var(--accent-gold)' : 'var(--border-subtle)',
-              background: selectedRegion === key ? 'rgba(201,162,39,0.12)' : 'transparent',
-              color: selectedRegion === key ? 'var(--accent-gold-bright)' : 'var(--text-muted)',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
             }}
           >
             {label}

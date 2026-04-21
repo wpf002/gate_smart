@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { getDailyAccuracy, getAccuracyHistory } from '../utils/api';
+import { getDailyAccuracy, getAccuracyHistory, getMyAccuracyStats } from '../utils/api';
+import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 
 function WinRateDot({ rate }) {
@@ -19,8 +20,29 @@ function WinRateDot({ rate }) {
   );
 }
 
+function StatBlock({ label, value, color }) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: color || 'var(--text-primary)' }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ children }) {
+  return (
+    <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--accent-gold)', letterSpacing: '0.08em', marginBottom: 12 }}>
+      {children}
+    </div>
+  );
+}
+
 export default function AccuracyPage() {
   const navigate = useNavigate();
+  const { authToken, authUser } = useAppStore();
+  const isLoggedIn = !!(authToken && authUser);
 
   const { data: today, isLoading: todayLoading } = useQuery({
     queryKey: ['accuracy-daily'],
@@ -32,6 +54,14 @@ export default function AccuracyPage() {
     queryKey: ['accuracy-history'],
     queryFn: getAccuracyHistory,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: myStats } = useQuery({
+    queryKey: ['my-accuracy-stats'],
+    queryFn: getMyAccuracyStats,
+    staleTime: 5 * 60 * 1000,
+    enabled: isLoggedIn,
+    retry: false,
   });
 
   const todayPending = !today || today.status === 'pending';
@@ -49,7 +79,63 @@ export default function AccuracyPage() {
 
       <div style={{ padding: '16px' }}>
 
-        {/* ── Today's stats ───────────────────────────────────────── */}
+        {/* ── User's own picks (logged-in only) ───────────────────── */}
+        {isLoggedIn && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(34,197,94,0.08) 0%, var(--bg-elevated) 100%)',
+            border: '1px solid rgba(34,197,94,0.25)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 20,
+            marginBottom: 20,
+          }}>
+            <SectionHeader>YOUR PICKS</SectionHeader>
+            {!myStats ? (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                No settled picks yet — analyze a race to start tracking your accuracy.
+              </div>
+            ) : myStats.total_predictions === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                No settled picks yet — analyze a race to start tracking your accuracy.
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
+                  <StatBlock label="Races called" value={myStats.total_predictions} />
+                  <StatBlock
+                    label="Win rate"
+                    value={`${((myStats.win_rate || 0) * 100).toFixed(0)}%`}
+                    color={(myStats.win_rate || 0) >= 0.5 ? 'var(--accent-green-bright)' : 'var(--accent-gold)'}
+                  />
+                  <StatBlock label="ITM rate" value={`${((myStats.itm_rate || 0) * 100).toFixed(0)}%`} />
+                  {myStats.last_7_days_win_rate != null && (
+                    <StatBlock
+                      label="Last 7 days"
+                      value={`${(myStats.last_7_days_win_rate * 100).toFixed(0)}%`}
+                      color="var(--accent-gold)"
+                    />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Guest sign-in prompt ─────────────────────────────────── */}
+        {!isLoggedIn && (
+          <div style={{
+            padding: '14px 16px',
+            background: 'rgba(26,107,168,0.08)',
+            border: '1px solid rgba(26,107,168,0.2)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 20,
+            fontSize: 13,
+            color: 'var(--text-secondary)',
+          }}>
+            Sign in to track your own picks and see your personal accuracy stats.
+          </div>
+        )}
+
+        {/* ── Secretariat overall (global auto-daily) ──────────────── */}
         <div style={{
           background: 'linear-gradient(135deg, rgba(201,162,39,0.1) 0%, var(--bg-elevated) 100%)',
           border: '1px solid var(--border-gold)',
@@ -57,44 +143,33 @@ export default function AccuracyPage() {
           padding: 20,
           marginBottom: 20,
         }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)', marginBottom: 12 }}>
-            TODAY
-          </div>
+          <SectionHeader>SECRETARIAT OVERALL</SectionHeader>
 
           {todayLoading ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
           ) : todayPending ? (
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              ⏳ {today?.message || "Today's report generates tomorrow morning at 6 AM ET"}
+              {today?.message || "Today's report generates tomorrow morning at 6 AM ET"}
             </div>
           ) : (
             <>
               <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Races called</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700 }}>{today.races_analyzed}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Win rate</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: (today.win_rate || 0) >= 0.5 ? 'var(--accent-green-bright)' : 'var(--accent-gold)' }}>
-                    {((today.win_rate || 0) * 100).toFixed(0)}%
-                  </div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>ITM rate</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700 }}>
-                    {((today.itm_rate || 0) * 100).toFixed(0)}%
-                  </div>
-                </div>
+                <StatBlock label="Races called" value={today.races_analyzed} />
+                <StatBlock
+                  label="Win rate"
+                  value={`${((today.win_rate || 0) * 100).toFixed(0)}%`}
+                  color={(today.win_rate || 0) >= 0.5 ? 'var(--accent-green-bright)' : 'var(--accent-gold)'}
+                />
+                <StatBlock label="ITM rate" value={`${((today.itm_rate || 0) * 100).toFixed(0)}%`} />
               </div>
               {today.best_call && (
                 <div style={{ fontSize: 12, color: 'var(--accent-green-bright)', marginBottom: 4 }}>
-                  🎯 Best: {today.best_call}
+                  Best: {today.best_call}
                 </div>
               )}
               {today.worst_miss && (
                 <div style={{ fontSize: 12, color: 'var(--accent-red-bright)' }}>
-                  ❌ Miss: {today.worst_miss}
+                  Miss: {today.worst_miss}
                 </div>
               )}
             </>
@@ -117,7 +192,7 @@ export default function AccuracyPage() {
                 </div>
               ))}
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>
-                🟢 &gt;50% &nbsp; 🟡 35–50% &nbsp; 🔴 &lt;35%
+                &gt;50% &nbsp; 35–50% &nbsp; &lt;35%
               </div>
             </div>
           </div>
@@ -130,7 +205,6 @@ export default function AccuracyPage() {
               History (Last 30 Days)
             </div>
             <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
-              {/* Header */}
               <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 70px 70px', padding: '8px 12px', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-subtle)' }}>
                 <span>Date</span>
                 <span>Best Call</span>

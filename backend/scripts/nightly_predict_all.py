@@ -90,7 +90,7 @@ async def main(target_date: datetime.date, dry_run: bool):
         http_client=httpx.AsyncClient(verify=ssl_ctx),
     )
 
-    from app.services.racing_api import get_na_racecards_full, get_racecards
+    from app.services.racing_api import get_na_racecards_full
 
     today = datetime.date.today()
     day_param = "today" if target_date == today else "tomorrow" if target_date == today + datetime.timedelta(days=1) else target_date.isoformat()
@@ -104,21 +104,8 @@ async def main(target_date: datetime.date, dry_run: bool):
         print(f"  NA fetch failed: {e}")
         na_races = []
 
-    # Fetch international races (GB, IRE, AUS, etc.)
-    print(f"[nightly_predict_all] Fetching international racecards for {target_date}…")
-    try:
-        int_day = day_param if day_param in ("today", "tomorrow") else None
-        if int_day:
-            int_data = await get_racecards(date=int_day)
-            int_races = [(r, "int") for r in int_data.get("racecards", [])]
-        else:
-            int_races = []
-    except Exception as e:
-        print(f"  International fetch failed: {e}")
-        int_races = []
-
-    all_races = na_races + int_races
-    print(f"  Found {len(na_races)} NA + {len(int_races)} international = {len(all_races)} total races.")
+    all_races = na_races
+    print(f"  Found {len(na_races)} NA races.")
 
     if not all_races:
         print("No races found — exiting.")
@@ -193,7 +180,7 @@ async def main(target_date: datetime.date, dry_run: bool):
 
     elapsed = time.time() - start_time
     cost_est = predicted * 0.001
-    print(f"\n✅ Done: {predicted} predicted ({len(na_races)} NA + {len(int_races)} international), {skipped} skipped in {elapsed:.0f}s")
+    print(f"\n✅ Done: {predicted} predicted ({len(na_races)} NA), {skipped} skipped in {elapsed:.0f}s")
     print(f"   Estimated cost: ~${cost_est:.3f}")
     if dry_run:
         print("   [DRY RUN] No rows written.")
