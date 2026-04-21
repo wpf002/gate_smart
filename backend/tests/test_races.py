@@ -1,5 +1,6 @@
 """
 Tests for GET /api/races/* — racing_api service is mocked throughout.
+Routes now use NA-only functions (get_na_racecards_full, get_na_results_full).
 """
 import pytest
 import pytest_asyncio
@@ -7,9 +8,9 @@ from fastapi import HTTPException
 from unittest.mock import AsyncMock, patch
 from httpx import ASGITransport, AsyncClient
 
-FAKE_RACECARDS = {"racecards": [{"race_id": "r1", "course": "Cheltenham"}]}
-FAKE_RACE = {"race_id": "r1", "course": "Cheltenham", "runners": []}
-FAKE_RESULTS = {"results": [{"race_id": "r1", "winner": "Arkle"}]}
+FAKE_NA_RACECARDS = {"racecards": [{"race_id": "IND_1775520000000-1", "course": "Indianapolis"}]}
+FAKE_RACE = {"race_id": "IND_1775520000000-1", "course": "Indianapolis", "runners": []}
+FAKE_NA_RESULTS = {"results": [{"race_id": "IND_1775520000000-1", "runners": []}]}
 
 
 @pytest_asyncio.fixture
@@ -25,32 +26,24 @@ async def client():
 
 @pytest.mark.asyncio
 async def test_races_today_returns_api_data(client):
-    with patch("app.api.routes.races.racing_api.get_racecards",
-               new=AsyncMock(return_value=FAKE_RACECARDS)):
-        r = await client.get("/api/races/today?region=gb")
+    with patch("app.api.routes.races.racing_api.get_na_racecards_full",
+               new=AsyncMock(return_value=FAKE_NA_RACECARDS)):
+        r = await client.get("/api/races/today")
     assert r.status_code == 200
-    assert r.json() == FAKE_RACECARDS
+    assert r.json() == FAKE_NA_RACECARDS
 
 
 @pytest.mark.asyncio
-async def test_races_today_passes_region(client):
-    mock = AsyncMock(return_value=FAKE_RACECARDS)
-    with patch("app.api.routes.races.racing_api.get_racecards", new=mock):
-        await client.get("/api/races/today?region=ire")
-    mock.assert_called_once_with(region="ire")
-
-
-@pytest.mark.asyncio
-async def test_races_today_defaults_region_to_none(client):
-    mock = AsyncMock(return_value=FAKE_RACECARDS)
-    with patch("app.api.routes.races.racing_api.get_racecards", new=mock):
+async def test_races_today_calls_na_function(client):
+    mock = AsyncMock(return_value=FAKE_NA_RACECARDS)
+    with patch("app.api.routes.races.racing_api.get_na_racecards_full", new=mock):
         await client.get("/api/races/today")
-    mock.assert_called_once_with(region=None)
+    mock.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_races_today_propagates_502(client):
-    with patch("app.api.routes.races.racing_api.get_racecards",
+    with patch("app.api.routes.races.racing_api.get_na_racecards_full",
                new=AsyncMock(side_effect=HTTPException(502, "Racing API error: 401"))):
         r = await client.get("/api/races/today")
     assert r.status_code == 502
@@ -58,7 +51,7 @@ async def test_races_today_propagates_502(client):
 
 @pytest.mark.asyncio
 async def test_races_today_wraps_unexpected_errors(client):
-    with patch("app.api.routes.races.racing_api.get_racecards",
+    with patch("app.api.routes.races.racing_api.get_na_racecards_full",
                new=AsyncMock(side_effect=RuntimeError("connection reset"))):
         r = await client.get("/api/races/today")
     assert r.status_code == 502
@@ -71,11 +64,11 @@ async def test_races_today_wraps_unexpected_errors(client):
 
 @pytest.mark.asyncio
 async def test_races_by_date(client):
-    mock = AsyncMock(return_value=FAKE_RACECARDS)
-    with patch("app.api.routes.races.racing_api.get_racecards", new=mock):
-        r = await client.get("/api/races/date/2026-04-05?region=gb")
+    mock = AsyncMock(return_value=FAKE_NA_RACECARDS)
+    with patch("app.api.routes.races.racing_api.get_na_racecards_full", new=mock):
+        r = await client.get("/api/races/date/2026-04-05")
     assert r.status_code == 200
-    mock.assert_called_once_with(date="2026-04-05", region="gb")
+    mock.assert_called_once_with(date="2026-04-05")
 
 
 # ---------------------------------------------------------------------------
@@ -84,12 +77,12 @@ async def test_races_by_date(client):
 
 @pytest.mark.asyncio
 async def test_results_today(client):
-    mock = AsyncMock(return_value=FAKE_RESULTS)
-    with patch("app.api.routes.races.racing_api.get_results", new=mock):
-        r = await client.get("/api/races/results/today?region=gb")
+    mock = AsyncMock(return_value=FAKE_NA_RESULTS)
+    with patch("app.api.routes.races.racing_api.get_na_results_full", new=mock):
+        r = await client.get("/api/races/results/today")
     assert r.status_code == 200
-    assert r.json() == FAKE_RESULTS
-    mock.assert_called_once_with(region="gb")
+    assert r.json() == FAKE_NA_RESULTS
+    mock.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -98,11 +91,11 @@ async def test_results_today(client):
 
 @pytest.mark.asyncio
 async def test_results_by_date(client):
-    mock = AsyncMock(return_value=FAKE_RESULTS)
-    with patch("app.api.routes.races.racing_api.get_results", new=mock):
-        r = await client.get("/api/races/results/2026-04-05?region=ire")
+    mock = AsyncMock(return_value=FAKE_NA_RESULTS)
+    with patch("app.api.routes.races.racing_api.get_na_results_full", new=mock):
+        r = await client.get("/api/races/results/2026-04-05")
     assert r.status_code == 200
-    mock.assert_called_once_with(date="2026-04-05", region="ire")
+    mock.assert_called_once_with(date="2026-04-05")
 
 
 # ---------------------------------------------------------------------------
@@ -113,17 +106,17 @@ async def test_results_by_date(client):
 async def test_race_detail(client):
     mock = AsyncMock(return_value=FAKE_RACE)
     with patch("app.api.routes.races.racing_api.get_race", new=mock):
-        r = await client.get("/api/races/race-123")
+        r = await client.get("/api/races/IND_1775520000000-1")
     assert r.status_code == 200
     assert r.json() == FAKE_RACE
-    mock.assert_called_once_with("race-123")
+    mock.assert_called_once_with("IND_1775520000000-1")
 
 
 @pytest.mark.asyncio
 async def test_race_detail_propagates_502(client):
     with patch("app.api.routes.races.racing_api.get_race",
                new=AsyncMock(side_effect=HTTPException(502, "Racing API error: 404"))):
-        r = await client.get("/api/races/unknown-race")
+        r = await client.get("/api/races/unknown-meet-99")
     assert r.status_code == 502
 
 
@@ -134,9 +127,9 @@ async def test_race_detail_propagates_502(client):
 @pytest.mark.asyncio
 async def test_results_today_not_captured_by_race_id_wildcard(client):
     """GET /races/results/today must hit results_today(), not race_detail()."""
-    results_mock = AsyncMock(return_value=FAKE_RESULTS)
+    results_mock = AsyncMock(return_value=FAKE_NA_RESULTS)
     race_mock = AsyncMock(return_value=FAKE_RACE)
-    with patch("app.api.routes.races.racing_api.get_results", new=results_mock), \
+    with patch("app.api.routes.races.racing_api.get_na_results_full", new=results_mock), \
          patch("app.api.routes.races.racing_api.get_race", new=race_mock):
         await client.get("/api/races/results/today")
     results_mock.assert_called_once()

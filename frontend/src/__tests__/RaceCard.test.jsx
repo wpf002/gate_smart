@@ -37,6 +37,7 @@ const baseRace = {
   going: 'Good',
   runners: [{}, {}, {}, {}, {}],
   prize: '£200,000',
+  region: 'GB',
 };
 
 const pastRace = {

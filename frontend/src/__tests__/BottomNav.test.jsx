@@ -34,8 +34,8 @@ describe('BottomNav', () => {
     expect(screen.getByText('Races')).toBeInTheDocument();
     expect(screen.getByText('Search')).toBeInTheDocument();
     expect(screen.getByText('Advisor')).toBeInTheDocument();
-    expect(screen.getByText('Bet Slip')).toBeInTheDocument();
-    expect(screen.getByText('Learn')).toBeInTheDocument();
+    expect(screen.getByText('My Picks')).toBeInTheDocument();
+    expect(screen.getByText('Profile')).toBeInTheDocument();
   });
 
   it('navigates to / when Races is clicked', () => {
@@ -56,16 +56,16 @@ describe('BottomNav', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/advisor');
   });
 
-  it('navigates to /betslip when Bet Slip is clicked', () => {
+  it('navigates to /betslip when My Picks is clicked', () => {
     renderNav();
-    fireEvent.click(screen.getByText('Bet Slip'));
+    fireEvent.click(screen.getByText('My Picks'));
     expect(mockNavigate).toHaveBeenCalledWith('/betslip');
   });
 
-  it('navigates to /education when Learn is clicked', () => {
+  it('navigates to /profile when Profile is clicked', () => {
     renderNav();
-    fireEvent.click(screen.getByText('Learn'));
-    expect(mockNavigate).toHaveBeenCalledWith('/education');
+    fireEvent.click(screen.getByText('Profile'));
+    expect(mockNavigate).toHaveBeenCalledWith('/profile');
   });
 
   it('does not show badge when bet slip is empty', () => {

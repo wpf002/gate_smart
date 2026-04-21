@@ -106,7 +106,7 @@ describe('HorseRow', () => {
       runners: [{ horse_id: 'h1', recommended_bet: 'win', contender_score: 80, summary: null }],
     };
     renderRow(baseHorse, analysis);
-    expect(screen.getByText('win')).toBeInTheDocument();
+    expect(screen.getByText('Win')).toBeInTheDocument();
   });
 
   it('shows + Bet button when analysis data is present and horse not in slip', () => {

@@ -106,6 +106,6 @@ describe('ProfilePage', () => {
 
   it('shows responsible gambling message', () => {
     renderPage();
-    expect(screen.getByText(/BeGambleAware/)).toBeInTheDocument();
+    expect(screen.getByText(/ncpgambling/)).toBeInTheDocument();
   });
 });

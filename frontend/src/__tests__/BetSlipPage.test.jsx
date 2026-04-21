@@ -97,24 +97,24 @@ describe('BetSlipPage — with bets', () => {
     expect(useAppStore.getState().betSlip).toHaveLength(1);
   });
 
-  it('calculates correct payout for 5/2 at £10 stake', () => {
+  it('calculates correct payout for 5/2 at $10 stake', () => {
     // 5/2 decimal = 3.5, payout = 10 * 3.5 = 35.00, profit = 25.00
     renderPage();
-    expect(screen.getByText('£35.00')).toBeInTheDocument();
-    expect(screen.getByText('+£25.00 profit')).toBeInTheDocument();
+    expect(screen.getByText('$35.00')).toBeInTheDocument();
+    expect(screen.getByText('+$25.00 profit')).toBeInTheDocument();
   });
 
-  it('calculates correct payout for 2/1 at £20 stake', () => {
+  it('calculates correct payout for 2/1 at $20 stake', () => {
     // 2/1 decimal = 3.0, payout = 20 * 3.0 = 60.00, profit = 40.00
     renderPage();
-    expect(screen.getByText('£60.00')).toBeInTheDocument();
-    expect(screen.getByText('+£40.00 profit')).toBeInTheDocument();
+    expect(screen.getByText('$60.00')).toBeInTheDocument();
+    expect(screen.getByText('+$40.00 profit')).toBeInTheDocument();
   });
 
   it('shows correct total stake', () => {
     renderPage();
-    // £10 + £20 = £30.00, appears in footer and Place button
-    const thirtyElements = screen.getAllByText(/£30\.00/);
+    // $10 + $20 = $30.00, appears in footer and Place button
+    const thirtyElements = screen.getAllByText(/\$30\.00/);
     expect(thirtyElements.length).toBeGreaterThan(0);
   });
 
