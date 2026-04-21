@@ -54,26 +54,21 @@ class ErrorBoundary extends Component {
 }
 
 const NAV_ITEMS = [
-  { path: '/', icon: '🏠', label: 'Races' },
-  { path: '/search', icon: '🔍', label: 'Search' },
-  { path: '/betslip', icon: '🏇', label: 'My Picks' },
+  { path: '/',        icon: '🏠', label: 'Races'   },
+  { path: '/search',  icon: '🔍', label: 'Search'  },
   { path: '/advisor', icon: '🤖', label: 'Advisor' },
-  { path: '/education', icon: '📚', label: 'Learn' },
   { path: '/profile', icon: '👤', label: 'Profile' },
 ];
 
 function SideNav() {
   const navigate = useNavigate();
   const location = useLocation();
-  const betSlip = useAppStore((s) => s.betSlip);
-
   return (
     <nav className="side-nav">
       <div className="side-nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>GATE<br />SMART</div>
       {NAV_ITEMS.map(({ path, label }, idx) => {
         const active = location.pathname === path ||
           (path !== '/' && location.pathname.startsWith(path));
-        const isMyPicks = path === '/betslip';
         return (
           <div key={path}>
             {idx > 0 && (
@@ -86,7 +81,6 @@ function SideNav() {
             <button
               onClick={() => navigate(path)}
               className={`side-nav-item${active ? ' active' : ''}`}
-              style={{ justifyContent: 'space-between' }}
             >
               <span style={{
                 fontSize: 12,
@@ -95,23 +89,6 @@ function SideNav() {
                 textTransform: 'uppercase',
                 color: active ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
               }}>{label}</span>
-              {isMyPicks && betSlip.length > 0 && (
-                <span style={{
-                  background: 'var(--accent-gold)',
-                  color: '#000',
-                  borderRadius: '50%',
-                  width: 18,
-                  height: 18,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}>
-                  {betSlip.length}
-                </span>
-              )}
             </button>
           </div>
         );

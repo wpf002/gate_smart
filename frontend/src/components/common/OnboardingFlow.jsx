@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAppStore } from '../../store';
 import { authLogin, authRegister } from '../../utils/api';
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 3;
 
 const EXPERIENCE_OPTIONS = [
   { value: 'beginner',     label: 'Complete Beginner',    desc: "I'm new to horse racing" },
@@ -11,17 +11,10 @@ const EXPERIENCE_OPTIONS = [
 ];
 
 const RISK_OPTIONS = [
-  { value: 'low',    label: 'Play It Safe',    desc: 'Favourites and low-risk bets' },
+  { value: 'low',    label: 'Play It Safe',    desc: 'Favorites and low-risk bets' },
   { value: 'medium', label: 'Balanced',         desc: 'Mix of value and safety' },
   { value: 'high',   label: 'Go For Value',    desc: 'Overlays and longshots' },
 ];
-
-const REGION_OPTIONS = [
-  { value: 'usa', icon: '🇺🇸', label: 'USA' },
-  { value: 'can', icon: '🇨🇦', label: 'Canada' },
-];
-
-const BANKROLL_CHIPS = [50, 100, 200, 500, 1000];
 
 function ProgressDots({ step }) {
   return (
@@ -104,7 +97,7 @@ function AuthStep({ onSuccess }) {
         result = await authLogin(email.trim().toLowerCase(), password);
       }
       setAuth(result.token, result.user);
-      onSuccess(result.user);
+      onSuccess(result.user, mode);
     } catch (err) {
       setError(err?.response?.data?.detail || (mode === 'register' ? 'Registration failed' : 'Sign in failed'));
     } finally {
@@ -214,30 +207,25 @@ export default function OnboardingFlow() {
 
   const [step, setStep] = useState(0);
   const [experience, setExperience] = useState('beginner');
-  const [bankroll, setBankroll] = useState(500);
   const [risk, setRisk] = useState('medium');
-  const [regions, setRegions] = useState(['usa']);
 
   const advance = () => setStep((s) => s + 1);
   const back = () => setStep((s) => s - 1);
 
   const save = () => {
-    const primaryRegion = regions[0] || 'usa';
-    setUserProfile({ bankroll, riskTolerance: risk, experienceLevel: experience, region: primaryRegion });
+    setUserProfile({ bankroll: 500, riskTolerance: risk, experienceLevel: experience, region: 'usa' });
     completeOnboarding();
   };
 
   const skip = () => completeOnboarding();
 
-  // Auth step handlers
-  const handleAuthSuccess = (user) => {
-    // If user already has a profile on server, skip to the end
-    if (user?.experience_level && user.experience_level !== 'beginner') {
+  const handleAuthSuccess = (user, mode) => {
+    if (mode === 'login' && user?.experience_level && user.experience_level !== 'beginner') {
       setUserProfile({
         bankroll: user.bankroll || 500,
         riskTolerance: user.risk_tolerance || 'medium',
         experienceLevel: user.experience_level || 'beginner',
-        region: user.region || 'usa',
+        region: 'usa',
       });
       completeOnboarding();
     } else {
@@ -252,13 +240,7 @@ export default function OnboardingFlow() {
 
   const selectRisk = (val) => {
     setRisk(val);
-    setTimeout(advance, 400);
-  };
-
-  const toggleRegion = (val) => {
-    setRegions((prev) =>
-      prev.includes(val) ? prev.filter((r) => r !== val) : [...prev, val]
-    );
+    setTimeout(save, 400);
   };
 
   return (
@@ -316,68 +298,15 @@ export default function OnboardingFlow() {
           </StepWrapper>
         )}
 
-        {/* ── Step 2: Bankroll ───────────────────────────────────────── */}
+        {/* ── Step 2: Risk ───────────────────────────────────────────── */}
         {step === 2 && (
-          <StepWrapper>
-            <button onClick={back} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 4 }}>← Back</button>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--accent-gold)', marginBottom: 6 }}>
-              Set Your Paper Trading Bank
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              This is simulated money — nothing real. You can change it anytime.
-            </div>
-
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 48, color: 'var(--accent-gold-bright)', lineHeight: 1 }}>
-                ${bankroll}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 20 }}>
-              {BANKROLL_CHIPS.map((amt) => (
-                <button
-                  key={amt}
-                  onClick={() => setBankroll(amt)}
-                  style={{
-                    padding: '6px 14px',
-                    borderRadius: 20,
-                    border: `1px solid ${bankroll === amt ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-                    background: bankroll === amt ? 'rgba(201,162,39,0.12)' : 'transparent',
-                    color: bankroll === amt ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ${amt}
-                </button>
-              ))}
-            </div>
-
-            <input
-              type="range"
-              min={50}
-              max={2000}
-              step={50}
-              value={bankroll}
-              onChange={(e) => setBankroll(Number(e.target.value))}
-              style={{ width: '100%', marginBottom: 24, accentColor: 'var(--accent-gold)' }}
-            />
-
-            <button className="btn btn-primary btn-full" onClick={advance}>Next</button>
-          </StepWrapper>
-        )}
-
-        {/* ── Step 3: Risk ───────────────────────────────────────────── */}
-        {step === 3 && (
           <StepWrapper>
             <button onClick={back} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 4 }}>← Back</button>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--accent-gold)', marginBottom: 6 }}>
               How do you like to bet?
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              This shapes how Secretariat tailors recommendations to you.
+              This shapes how GateSmart tailors recommendations to you.
             </div>
             {RISK_OPTIONS.map((opt) => (
               <OptionCard
@@ -387,36 +316,6 @@ export default function OnboardingFlow() {
                 onClick={() => selectRisk(opt.value)}
               />
             ))}
-          </StepWrapper>
-        )}
-
-        {/* ── Step 4: Region ─────────────────────────────────────────── */}
-        {step === 4 && (
-          <StepWrapper>
-            <button onClick={back} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 4 }}>← Back</button>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--accent-gold)', marginBottom: 6 }}>
-              Where do you follow racing?
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              Select all that apply.
-            </div>
-            {REGION_OPTIONS.map((opt) => (
-              <OptionCard
-                key={opt.value}
-                icon={opt.icon}
-                label={opt.label}
-                selected={regions.includes(opt.value)}
-                onClick={() => toggleRegion(opt.value)}
-                multiSelect
-              />
-            ))}
-            <button
-              className="btn btn-primary btn-full"
-              style={{ marginTop: 8 }}
-              onClick={save}
-            >
-              Let's Go
-            </button>
           </StepWrapper>
         )}
 
