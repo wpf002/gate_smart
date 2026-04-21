@@ -84,7 +84,7 @@ function StepWrapper({ children, style }) {
   );
 }
 
-function AuthStep({ onSuccess, onGuest }) {
+function AuthStep({ onSuccess }) {
   const [mode, setMode] = useState(null); // null | 'register' | 'login'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -144,17 +144,6 @@ function AuthStep({ onSuccess, onGuest }) {
           </button>
         </div>
 
-        <div style={{ textAlign: 'center' }}>
-          <button
-            onClick={onGuest}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13 }}
-          >
-            Continue as guest →
-          </button>
-          <div style={{ fontSize: 11, color: 'var(--border-medium)', marginTop: 4 }}>
-            Guest sessions don't save your picks or performance history
-          </div>
-        </div>
       </StepWrapper>
     );
   }
@@ -256,8 +245,6 @@ export default function OnboardingFlow() {
     }
   };
 
-  const handleGuest = () => advance();
-
   const selectExperience = (val) => {
     setExperience(val);
     setTimeout(advance, 400);
@@ -306,7 +293,7 @@ export default function OnboardingFlow() {
 
         {/* ── Step 0: Auth ─────────────────────────────────────────── */}
         {step === 0 && (
-          <AuthStep onSuccess={handleAuthSuccess} onGuest={handleGuest} />
+          <AuthStep onSuccess={handleAuthSuccess} />
         )}
 
         {/* ── Step 1: Experience ─────────────────────────────────────── */}

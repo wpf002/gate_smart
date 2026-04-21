@@ -155,6 +155,7 @@ function BetSlipToast() {
 
 function AppShell() {
   const onboardingComplete = useAppStore((s) => s.onboardingComplete);
+  const authToken = useAppStore((s) => s.authToken);
   const location = useLocation();
 
   useEffect(() => {
@@ -169,7 +170,7 @@ function AppShell() {
 
   return (
     <div className="app-shell">
-      {!onboardingComplete && <OnboardingFlow />}
+      {(!onboardingComplete || !authToken) && <OnboardingFlow />}
       <SideNav />
       <BetSlipToast />
       <div className="page-content">
