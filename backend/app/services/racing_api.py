@@ -225,11 +225,13 @@ async def get_horse_results(horse_id: str, limit: int = 10) -> dict:
 
 async def get_na_meets(date: str = None) -> dict:
     """Get all North America race meets for a given date (requires NA add-on)."""
-    from datetime import date as date_cls, timedelta
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    eastern = ZoneInfo("America/New_York")
     if not date or date == "today":
-        race_date = date_cls.today().isoformat()
+        race_date = datetime.now(eastern).date().isoformat()
     elif date == "tomorrow":
-        race_date = (date_cls.today() + timedelta(days=1)).isoformat()
+        race_date = (datetime.now(eastern).date() + timedelta(days=1)).isoformat()
     else:
         race_date = date
     return await _get(
@@ -428,25 +430,32 @@ async def get_na_racecards_full(date: str = None) -> dict:
     scheduled post time falls on the requested date (UTC calendar day).
     """
     from datetime import date as date_cls, timedelta, datetime, timezone as tz
+    from zoneinfo import ZoneInfo
+    eastern = ZoneInfo("America/New_York")
 
     meets_data = await get_na_meets(date)
     meets = meets_data.get("meets", [])
 
-    # Build UTC millisecond window for the target date
+    # Determine the target date in US Eastern Time — all NA races are US-based.
+    # Using UTC here causes the "today" window to roll over at 8 PM ET in summer,
+    # making evening races disappear and tomorrow's card appear prematurely.
     if not date or date == "today":
-        target_date = date_cls.today()
+        target_date = datetime.now(eastern).date()
     elif date == "tomorrow":
-        target_date = date_cls.today() + timedelta(days=1)
+        target_date = datetime.now(eastern).date() + timedelta(days=1)
     else:
         try:
             target_date = date_cls.fromisoformat(date)
         except Exception:
-            target_date = date_cls.today()
+            target_date = datetime.now(eastern).date()
 
-    # Start of target day UTC (inclusive) through start of the day after (exclusive)
-    day_start_ms = int(datetime(target_date.year, target_date.month, target_date.day,
-                                tzinfo=tz.utc).timestamp() * 1000)
-    day_end_ms = day_start_ms + 86_400_000  # +24 hours
+    # Build millisecond window covering the full ET calendar day.
+    # ET midnight to ET midnight ensures evening races (post midnight UTC) are included.
+    et_day_start = datetime(target_date.year, target_date.month, target_date.day,
+                            tzinfo=eastern)
+    et_day_end = et_day_start + timedelta(days=1)
+    day_start_ms = int(et_day_start.timestamp() * 1000)
+    day_end_ms = int(et_day_end.timestamp() * 1000)
 
     import re as _re
     _WAGER_POOL = _re.compile(
