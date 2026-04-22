@@ -192,8 +192,15 @@ export function RaceCard({ race, isTomorrow = false }) {
         ].filter(Boolean);
 
         // Advanced: append race class/type details
+        const fmtClass = (cls) => {
+          if (!cls) return null;
+          // Title-case all words, then fix parenthetical amounts
+          return cls
+            .replace(/\b\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .replace(/\(\$?([\d,]+)\)/g, (_, n) => ` ($${parseInt(n.replace(/,/g, ''), 10).toLocaleString()})`);
+        };
         const advancedItems = isAdvanced ? [
-          race.race_class || race.race_type || race.type || null,
+          fmtClass(race.race_class || race.race_type || race.type) || null,
           race.claiming_price ? `Clm $${Number(race.claiming_price).toLocaleString()}` : null,
         ].filter(Boolean) : [];
 

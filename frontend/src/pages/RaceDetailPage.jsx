@@ -915,10 +915,9 @@ export default function RaceDetailPage() {
         {race && !isLoading && (() => {
           const fmtClass = (cls) => {
             if (!cls) return null;
-            return cls.replace(/CLAIMING\s*\(\s*\$?([\d,]+)\s*\)/i, (_, n) => {
-              const num = parseInt(n.replace(/,/g, ''), 10);
-              return `Claiming ($${num.toLocaleString()})`;
-            });
+            return cls
+              .replace(/\b\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+              .replace(/\(\$?([\d,]+)\)/g, (_, n) => ` ($${parseInt(n.replace(/,/g, ''), 10).toLocaleString()})`);
           };
           const items = [
             (race.distance || race.distance_f) ? formatDistance(race.distance, race.distance_f, race.region) : null,
