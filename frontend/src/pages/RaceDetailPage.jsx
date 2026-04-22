@@ -179,10 +179,10 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           <button
             onClick={() => toggleTeller('win-main')}
             style={{
-              flex: 1, fontSize: 12, fontWeight: 700, padding: '8px 12px', borderRadius: 6,
+              fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 6,
               border: '1px solid var(--accent-gold)',
               background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-              cursor: 'pointer',
+              cursor: 'pointer', whiteSpace: 'nowrap',
             }}
           >
             {isOpen ? 'Hide Script ▲' : 'Bet at Counter ▼'}
@@ -191,10 +191,10 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
             <button
               onClick={() => openBetOnline(topPick.horse_name, 'Win')}
               style={{
-                flex: 1, fontSize: 12, fontWeight: 700, padding: '8px 12px', borderRadius: 6,
+                fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 6,
                 border: '1px solid var(--accent-gold)',
                 background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                cursor: 'pointer',
+                cursor: 'pointer', whiteSpace: 'nowrap',
               }}
             >
               Bet Online →
@@ -229,13 +229,13 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
   // Vulnerable favorite
   const VulnerableFavSection = () => analysis.vulnerable_favorite ? (
-    <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: 13 }}>
-      <strong style={{ color: 'var(--accent-red-bright)' }}>
-        {effectiveViewMode === 'beginner' ? 'The favorite looks beatable:' : 'Vulnerable Favorite:'}
-      </strong>{' '}
-      <span style={{ color: 'var(--text-primary)' }}>{analysis.vulnerable_favorite}</span>
+    <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-red-bright)', marginBottom: 4 }}>
+        {effectiveViewMode === 'beginner' ? 'The favorite looks beatable' : 'Vulnerable Favorite'}
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>{analysis.vulnerable_favorite}</div>
       {effectiveViewMode === 'beginner' && (
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.5 }}>
           The horse most people are betting on may not win today — consider looking at other runners.
         </div>
       )}
@@ -244,15 +244,19 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
   // Longshot alert
   const LongshotSection = () => analysis.longshot_alert?.horse_name ? (
-    <div style={{ background: 'rgba(42,122,75,0.1)', border: '1px solid rgba(42,122,75,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 13 }}>
-      <strong style={{ color: 'var(--accent-green-bright)' }}>
-        {effectiveViewMode === 'beginner' ? 'Surprise Pick:' : 'Longshot Alert:'}
-      </strong>{' '}
-      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-gold)' }}>{analysis.longshot_alert.odds}</span>{' '}
-      <strong>{analysis.longshot_alert.number ? `${analysis.longshot_alert.number} ` : ''}{analysis.longshot_alert.horse_name}</strong>{' '}
-      <span style={{ color: 'var(--text-primary)' }}>— {analysis.longshot_alert.reason}</span>
+    <div style={{ background: 'rgba(42,122,75,0.1)', border: '1px solid rgba(42,122,75,0.25)', borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-green-bright)' }}>
+          {effectiveViewMode === 'beginner' ? 'Surprise Pick' : 'Longshot Alert'}
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-gold)' }}>{analysis.longshot_alert.odds}</span>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>
+          {analysis.longshot_alert.number ? `#${analysis.longshot_alert.number} ` : ''}{analysis.longshot_alert.horse_name}
+        </span>
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>{analysis.longshot_alert.reason}</div>
       {effectiveViewMode === 'beginner' && (
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.5 }}>
           A "longshot" is a horse with high odds — not many people are betting on it, but if it wins, the payout is much bigger than the favorite.
         </div>
       )}
@@ -350,10 +354,10 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
                 <button
                   onClick={() => toggleTeller(`bet-${type}`)}
                   style={{
-                    flex: 1, fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
+                    fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 6,
                     border: '1px solid var(--accent-gold)',
                     background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                    cursor: 'pointer',
+                    cursor: 'pointer', whiteSpace: 'nowrap',
                   }}
                 >
                   {isOpen ? 'Hide Script ▲' : 'Bet at Counter ▼'}
@@ -361,10 +365,10 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
                 <button
                   onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
                   style={{
-                    flex: 1, fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
+                    fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 6,
                     border: '1px solid var(--accent-gold)',
                     background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                    cursor: 'pointer',
+                    cursor: 'pointer', whiteSpace: 'nowrap',
                   }}
                 >
                   Bet Online →

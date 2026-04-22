@@ -45,7 +45,7 @@ export default function PageHeader({ title, subtitle, showBack = false, right = 
           {title}
         </div>
         {subtitle && (
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1 }}>
+          <div style={{ fontSize: 13, color: 'var(--text-primary)', marginTop: 1, letterSpacing: '0.03em' }}>
             {subtitle}
           </div>
         )}

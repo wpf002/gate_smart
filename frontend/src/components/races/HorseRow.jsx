@@ -291,6 +291,14 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             {isBeginner && isTopPick && !isScratched && (
               <span style={{ fontSize: 14, flexShrink: 0 }} title="Secretariat's top pick">⭐</span>
             )}
+            {/* Horse profile link — always visible */}
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate(`/horse/${horse.horse_id}`); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, flexShrink: 0 }}
+              title="View horse profile"
+            >
+              🔍
+            </button>
             {isScratched && (
               <span className="badge badge-muted" style={{ flexShrink: 0, fontSize: 10 }}>Scratched</span>
             )}
@@ -360,13 +368,6 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
           )}
         </div>
       </div>
-
-      {/* ── Advanced: form always visible outside expand ─────────────── */}
-      {isAdvanced && !isScratched && (
-        <div style={{ padding: '0 12px 12px' }}>
-          <RecentForm horse={horse} region={region} maxRuns={3} />
-        </div>
-      )}
 
       {/* ── Expanded section ─────────────────────────────────────────── */}
       {expanded && (
@@ -448,8 +449,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             )}
           </div>
 
-          {/* Form in expanded section for beginner + intermediate; advanced shows it above */}
-          {!isAdvanced && <RecentForm horse={horse} region={region} />}
+          <RecentForm horse={horse} region={region} maxRuns={isAdvanced ? 3 : 5} />
 
           {/* View horse profile link */}
           <button

@@ -206,7 +206,7 @@ export default function AdvisorPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <PageHeader
         title="SECRETARIAT"
-        subtitle="Your AI racing advisor"
+        subtitle="YOUR AI RACING ADVISOR"
         right={
           advisorMessages.length > 0 ? (
             <button

@@ -21,6 +21,36 @@ function StatRow({ label, value }) {
   );
 }
 
+function decodeComment(raw) {
+  if (!raw) return '';
+  return raw
+    .replace(/\b(\d+)[pw]\b/g, (_, n) => `${n}-wide`)
+    .replace(/\b1\/4\b/g, 'at ¼mi')
+    .replace(/\b1\/2\b/g, 'at ½mi')
+    .replace(/\b3\/8\b/g, 'at ⅜mi')
+    .replace(/\bstr\b/gi, 'stretch')
+    .replace(/\bins\b/gi, 'inside')
+    .replace(/\bouts?\b/gi, 'outside')
+    .replace(/\bbmp(d)?\b/gi, 'bumped')
+    .replace(/\bstdy\b/gi, 'steadied')
+    .replace(/\bwknd\b/gi, 'weakened')
+    .replace(/\bfalt\b/gi, 'faltered')
+    .replace(/\bsvrd\b/gi, 'swerved')
+    .replace(/\bbid\b/gi, 'bid for lead')
+    .replace(/\btrkd\b/gi, 'tracked')
+    .replace(/\bbtw\b/gi, 'between horses')
+    .replace(/\b3w\b/gi, '3-wide')
+    .replace(/\b4w\b/gi, '4-wide')
+    .replace(/\bclrd\b/gi, 'cleared')
+    .replace(/\bhsld\b/gi, 'hand ridden')
+    .replace(/\bdrv(g|n)?\b/gi, 'driving')
+    .replace(/\blg(d)?\b/gi, 'lugged')
+    .replace(/\bchsd\b/gi, 'chased')
+    .replace(/\bprssd\b/gi, 'pressed')
+    .replace(/\bwided?\b/gi, 'wide')
+    .replace(/,(\S)/g, ', $1');
+}
+
 export default function HorseDetailPage() {
   const { horseId } = useParams();
   const navigate = useNavigate();
@@ -283,7 +313,7 @@ export default function HorseDetailPage() {
                         <td style={{ padding: '5px 6px', textAlign: 'center', color: 'var(--text-secondary)' }}>{pp.pace_figure_1 || '—'}</td>
                         <td style={{ padding: '5px 6px', textAlign: 'center', color: 'var(--text-secondary)' }}>{pp.pace_figure_2 || '—'}</td>
                         <td style={{ padding: '5px 6px', textAlign: 'center', color: 'var(--text-secondary)' }}>{pp.class_rating || '—'}</td>
-                        <td style={{ padding: '5px 6px', color: 'var(--text-muted)', fontSize: 11, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pp.short_comment}</td>
+                        <td style={{ padding: '5px 6px', color: 'var(--text-secondary)', fontSize: 11, maxWidth: 160, lineHeight: 1.4 }}>{decodeComment(pp.short_comment)}</td>
                       </tr>
                     );
                   })}

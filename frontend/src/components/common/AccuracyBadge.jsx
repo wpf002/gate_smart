@@ -14,8 +14,6 @@ function TrackAccuracyBadge({ trackCode, trackName, compact }) {
   if (isLoading) return null;
 
   const noData = !data || data.itm_rate == null;
-  if (noData) return null;
-
   const displayName = trackName || data?.track_code || trackCode;
 
   if (compact) {
@@ -31,6 +29,17 @@ function TrackAccuracyBadge({ trackCode, trackName, compact }) {
       }}>
         📊 {itm}% ITM at {displayName}
       </span>
+    );
+  }
+
+  if (noData) {
+    return (
+      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          SECRETARIAT AT {(displayName || '').toUpperCase()}
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· No predictions recorded yet</span>
+      </div>
     );
   }
 

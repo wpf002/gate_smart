@@ -174,8 +174,10 @@ const PATHS = {
   ),
   horse: (
     <>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 19l2-5 4-2 2-4 3-1 1-3h2l-1 4-2 1-1 3-3 2-1 5H5z" />
-      <circle cx="16" cy="5" r="1.5" fill="currentColor" stroke="none" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 20c1.5-3.5 4-6 7-7.5 1.5-.8 3-1.5 4-3.5 1-1.8 2.5-4 5.5-4" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.5 5c.8 1.5.3 3.5-1 5" />
+      <path strokeLinecap="round" d="M8 19l.5-4M11 17.5l.5-4" />
+      <circle cx="21" cy="4.5" r="1" fill="currentColor" stroke="none" />
     </>
   ),
 };

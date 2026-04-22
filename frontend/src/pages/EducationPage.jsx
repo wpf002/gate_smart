@@ -668,8 +668,8 @@ function HandicapTab() {
         lineHeight: 1.6,
       }}>
         <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          <Icon name="target" size={15} color="var(--accent-green-bright)" style={{ flexShrink: 0, marginTop: 1 }} />
-          <span><strong style={{ color: 'var(--accent-green-bright)' }}>Beginner priority order:</strong> Focus first on (1) recent form, (2) class level, (3) distance suitability. Speed figures and pace come later. Don't try to master everything at once.</span>
+          <Icon name="target" size={15} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span><strong style={{ color: 'var(--accent-gold)' }}>Beginner priority order:</strong> Focus first on (1) recent form, (2) class level, (3) distance suitability. Speed figures and pace come later. Don't try to master everything at once.</span>
         </span>
       </div>
     </div>

@@ -158,7 +158,7 @@ export default function HomePage() {
     <div>
       <PageHeader
         title="GATESMART"
-        subtitle="AI-powered racing intelligence"
+        subtitle="AI-POWERED RACING INTELLIGENCE"
         right={
           <button
             onClick={handleRefetch}
