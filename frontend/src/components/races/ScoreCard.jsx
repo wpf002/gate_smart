@@ -90,19 +90,6 @@ export default function ScoreCard({ scorecard, expanded, onToggle, rank = null }
         onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
         onMouseLeave={e => { if (!expanded) e.currentTarget.style.background = 'var(--bg-card)'; }}
       >
-        {/* Rank badge (top 3 only) */}
-        {rank != null && (() => {
-          const rs = RANK_STYLES[rank - 1];
-          return (
-            <div style={{
-              width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: rs.bg, border: `1px solid ${rs.border}`, color: rs.color,
-              fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
-            }}>{rank}</div>
-          );
-        })()}
-
         {/* Overall badge */}
         <div style={{
           ...overallBadgeStyle(overall),
@@ -118,6 +105,19 @@ export default function ScoreCard({ scorecard, expanded, onToggle, rank = null }
         }}>
           {overall}
         </div>
+
+        {/* Rank badge (top 3 only) */}
+        {rank != null && (() => {
+          const rs = RANK_STYLES[rank - 1];
+          return (
+            <div style={{
+              width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: rs.bg, border: `1px solid ${rs.border}`, color: rs.color,
+              fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
+            }}>{rank}</div>
+          );
+        })()}
 
         {/* Name + verdict */}
         <div style={{ flex: 1, minWidth: 0 }}>
