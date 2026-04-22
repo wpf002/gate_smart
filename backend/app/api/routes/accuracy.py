@@ -331,6 +331,55 @@ async def trigger_send_report(
     return {"sent": sent, "date": target.isoformat()}
 
 
+@router.get("/track-stats/{track_code}")
+async def get_track_stats(
+    track_code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return Secretariat's accuracy at a specific track over the last 30 days."""
+    import datetime as dt
+
+    cutoff = dt.date.today() - dt.timedelta(days=30)
+
+    result = await db.execute(
+        select(RacePrediction).where(
+            func.upper(RacePrediction.track_code) == track_code.upper(),
+            RacePrediction.race_date >= cutoff,
+            RacePrediction.result_fetched == True,  # noqa: E712
+        )
+    )
+    preds = result.scalars().all()
+
+    total = len(preds)
+    wins = sum(1 for p in preds if p.top_pick_correct)
+    itm = sum(1 for p in preds if p.in_the_money)
+
+    if total < 10:
+        return {
+            "track_code": track_code.upper(),
+            "track_name": track_code.upper(),
+            "period_days": 30,
+            "total_predictions": total,
+            "top_pick_wins": wins,
+            "in_the_money": itm,
+            "win_rate": None,
+            "itm_rate": None,
+            "sample_size_note": "Building track history...",
+        }
+
+    return {
+        "track_code": track_code.upper(),
+        "track_name": track_code.upper(),
+        "period_days": 30,
+        "total_predictions": total,
+        "top_pick_wins": wins,
+        "in_the_money": itm,
+        "win_rate": round(wins / total, 3),
+        "itm_rate": round(itm / total, 3),
+        "sample_size_note": f"Based on {total} races",
+    }
+
+
 @router.get("/my-stats")
 async def get_my_stats(
     db: AsyncSession = Depends(get_db),

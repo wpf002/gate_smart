@@ -15,6 +15,7 @@ import sys
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +64,14 @@ async def job_reflect() -> None:
     await _run_script("nightly_reflect.py")
 
 
+async def job_race_alerts() -> None:
+    try:
+        from app.services.race_alerts import check_and_send_race_alerts
+        await check_and_send_race_alerts()
+    except Exception as e:
+        log.warning(f"[scheduler] race_alerts failed: {e}")
+
+
 def create_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
 
@@ -70,5 +79,6 @@ def create_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(job_accuracy,     CronTrigger(hour=10, minute=0),  id="accuracy",     name="Morning accuracy + email (6 AM ET)")
     scheduler.add_job(job_recalibration,CronTrigger(hour=3,  minute=30), id="recalibration",name="Prompt recalibration (11:30 PM ET)")
     scheduler.add_job(job_reflect,      CronTrigger(hour=4,  minute=0),  id="reflect",      name="Secretariat reflection (midnight ET)")
+    scheduler.add_job(job_race_alerts,  IntervalTrigger(minutes=5),      id="race_alerts",  name="Race alerts (every 5 min)")
 
     return scheduler

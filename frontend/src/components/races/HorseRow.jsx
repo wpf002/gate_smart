@@ -28,8 +28,7 @@ const FORM_CHAR_COLOR = {
 };
 
 function FormChips({ formString }) {
-  // Split on separators, keep each meaningful run character
-  const tokens = (formString || '').split('').filter(c => c !== '/' );
+  const tokens = (formString || '').split('').filter(c => c !== '/');
   if (tokens.every(c => c === '-')) return null;
   return (
     <div style={{ marginTop: 10 }}>
@@ -65,7 +64,7 @@ function FormChips({ formString }) {
 }
 
 // ── US Equibase past performances ─────────────────────────────────────────────
-function EquibasePP({ horse }) {
+function EquibasePP({ horse, maxRuns = 5 }) {
   const [perf, setPerf] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -91,7 +90,7 @@ function EquibasePP({ horse }) {
     );
   }
 
-  const runs = perf?.past_performances?.slice(0, 5) ?? [];
+  const runs = perf?.past_performances?.slice(0, maxRuns) ?? [];
   if (error || runs.length === 0) return null;
 
   return (
@@ -145,9 +144,9 @@ function EquibasePP({ horse }) {
 }
 
 // ── Region-aware form display ──────────────────────────────────────────────────
-function RecentForm({ horse, region }) {
+function RecentForm({ horse, region, maxRuns }) {
   const isNA = ['USA', 'CAN'].includes((region || '').toUpperCase());
-  if (isNA) return <EquibasePP horse={horse} />;
+  if (isNA) return <EquibasePP horse={horse} maxRuns={maxRuns} />;
   if (horse.form) return <FormChips formString={horse.form} />;
   return null;
 }
@@ -185,6 +184,8 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
   const navigate = useNavigate();
   const experienceLevel = useAppStore((s) => s.userProfile?.experienceLevel);
   const [expanded, setExpanded] = useState(false);
+  const isBeginner = experienceLevel === 'beginner';
+  const isAdvanced = experienceLevel === 'advanced';
 
   const isScratched = horse.non_runner || horse.scratched ||
     ['scratched', 'non-runner', 'nr', 'withdrawn'].includes((horse.status || '').toLowerCase());
@@ -203,10 +204,26 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
   const scoreClass =
     score >= 70 ? 'score-high' : score >= 40 ? 'score-med' : score != null ? 'score-low' : null;
 
-  const summaryText = experienceLevel === 'beginner'
+  // Top pick for beginner gold star indicator
+  const isTopPick = analysis?.runners?.length > 0 &&
+    score != null &&
+    score === Math.max(...analysis.runners.map(r => r.contender_score || 0));
+
+  const summaryText = isBeginner
     ? (analysisData?.summary_beginner || analysisData?.summary)
     : analysisData?.summary;
-  const hasExpandedContent = !!(summaryText || scorecard);
+
+  // Beginner rows are always expandable to reveal hidden details
+  const hasExpandedContent = isBeginner ? true : !!(summaryText || scorecard);
+
+  const LABELS = {
+    'use-in-exotics': 'Use in Exotics',
+    'each-way': 'Each Way',
+    'avoid': 'Avoid',
+    'win': 'Win',
+    'place': 'Place',
+    'show': 'Show',
+  };
 
   return (
     <div
@@ -270,6 +287,10 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             }}>
               {horse.horse_name}
             </div>
+            {/* Beginner: gold star for top pick */}
+            {isBeginner && isTopPick && !isScratched && (
+              <span style={{ fontSize: 14, flexShrink: 0 }} title="Secretariat's top pick">⭐</span>
+            )}
             {isScratched && (
               <span className="badge badge-muted" style={{ flexShrink: 0, fontSize: 10 }}>Scratched</span>
             )}
@@ -277,33 +298,42 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
               <span className="badge badge-gold" style={{ flexShrink: 0, fontSize: 9 }}>ENTRY</span>
             )}
           </div>
-          <div style={{
-            fontSize: 11,
-            color: 'var(--text-secondary)',
-            marginTop: 2,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}>
-            {[horse.jockey, horse.trainer].filter(Boolean).join(' · ')}
-          </div>
-          {horse.claiming_price && (
+
+          {/* Beginner hides trainer/jockey (revealed on expand) */}
+          {!isBeginner && (
+            <div style={{
+              fontSize: 11,
+              color: 'var(--text-secondary)',
+              marginTop: 2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {[horse.jockey, horse.trainer].filter(Boolean).join(' · ')}
+            </div>
+          )}
+
+          {/* Advanced shows weight + days since last run if available */}
+          {isAdvanced && (horse.weight || horse.lbs || horse.days_since_last_run) && (
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+              {[
+                (horse.weight || horse.lbs) ? `${horse.weight || horse.lbs}lbs` : null,
+                horse.days_since_last_run ? `${horse.days_since_last_run}d since last run` : null,
+              ].filter(Boolean).join(' · ')}
+            </div>
+          )}
+
+          {horse.claiming_price && !isBeginner && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
               Claim: ${Number(horse.claiming_price).toLocaleString()}
             </div>
           )}
-          {analysisData?.recommended_bet && (
+
+          {/* Beginner hides recommended_bet (revealed on expand) */}
+          {!isBeginner && analysisData?.recommended_bet && (
             <div style={{ marginTop: 4 }}>
               {(() => {
                 const raw = analysisData.recommended_bet;
-                const LABELS = {
-                  'use-in-exotics': 'Use in Exotics',
-                  'each-way': 'Each Way',
-                  'avoid': 'Avoid',
-                  'win': 'Win',
-                  'place': 'Place',
-                  'show': 'Show',
-                };
                 const label = LABELS[raw] || raw;
                 const color = raw === 'avoid' ? 'red' : raw === 'win' ? 'green' : 'gold';
                 return <span className={`badge badge-${color}`}>{label}</span>;
@@ -312,18 +342,31 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
           )}
         </div>
 
-        {/* Odds + actions */}
+        {/* Odds + expand indicator */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
           {(horse.odds || horse.sp) && (
             <span className="odds-chip">{horse.odds || horse.sp}</span>
           )}
           {hasExpandedContent && (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-              {expanded ? '▲' : '▼'}
-            </span>
+            isBeginner ? (
+              <span style={{ fontSize: 10, color: 'var(--accent-gold)', fontWeight: 600 }}>
+                {expanded ? 'Hide ▲' : 'Details ▼'}
+              </span>
+            ) : (
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                {expanded ? '▲' : '▼'}
+              </span>
+            )
           )}
         </div>
       </div>
+
+      {/* ── Advanced: form always visible outside expand ─────────────── */}
+      {isAdvanced && !isScratched && (
+        <div style={{ padding: '0 12px 12px' }}>
+          <RecentForm horse={horse} region={region} maxRuns={3} />
+        </div>
+      )}
 
       {/* ── Expanded section ─────────────────────────────────────────── */}
       {expanded && (
@@ -334,11 +377,33 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
           maxWidth: '100%',
           overflow: 'hidden',
         }}>
-          {/* Analysis text + radar: side-by-side on wider screens, radar below text on narrow */}
+          {/* Beginner: reveal hidden header details */}
+          {isBeginner && (horse.jockey || horse.trainer || analysisData?.recommended_bet) && (
+            <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--border-subtle)' }}>
+              {(horse.jockey || horse.trainer) && (
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                  {[horse.jockey, horse.trainer].filter(Boolean).join(' · ')}
+                </div>
+              )}
+              {horse.claiming_price && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                  Claim: ${Number(horse.claiming_price).toLocaleString()}
+                </div>
+              )}
+              {analysisData?.recommended_bet && (() => {
+                const raw = analysisData.recommended_bet;
+                const label = LABELS[raw] || raw;
+                const color = raw === 'avoid' ? 'red' : raw === 'win' ? 'green' : 'gold';
+                return <span className={`badge badge-${color}`}>{label}</span>;
+              })()}
+            </div>
+          )}
+
+          {/* Analysis text + radar: side-by-side on wider screens */}
           <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
             {summaryText && (
               <div style={{ flex: 1, minWidth: 0 }}>
-                {experienceLevel !== 'beginner' && analysisData.strengths?.length > 0 && (
+                {!isBeginner && analysisData?.strengths?.length > 0 && (
                   <div style={{ marginBottom: 6 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-green-bright)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
                       Strengths
@@ -350,7 +415,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
                     ))}
                   </div>
                 )}
-                {experienceLevel !== 'beginner' && analysisData.weaknesses?.length > 0 && (
+                {!isBeginner && analysisData?.weaknesses?.length > 0 && (
                   <div style={{ marginBottom: 6 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-red-bright)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
                       Concerns
@@ -383,7 +448,8 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             )}
           </div>
 
-          <RecentForm horse={horse} region={region} />
+          {/* Form in expanded section for beginner + intermediate; advanced shows it above */}
+          {!isAdvanced && <RecentForm horse={horse} region={region} />}
 
           {/* View horse profile link */}
           <button

@@ -26,6 +26,7 @@ class AnalyzeRequest(msgspec.Struct):
     race_id: str
     mode: str = "balanced"
     bankroll: Optional[float] = None
+    experience_level: Optional[str] = None
 
 
 class RecommendRequest(msgspec.Struct):
@@ -201,7 +202,8 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
 
             result = None
             async for event_type, data in secretariat.stream_analyze_race(
-                race_data, mode=req.mode, bankroll=req.bankroll, user_id=_user_id
+                race_data, mode=req.mode, bankroll=req.bankroll, user_id=_user_id,
+                experience_level=req.experience_level,
             ):
                 if event_type == "chunk":
                     yield f"data: {json.dumps({'t': data})}\n\n"

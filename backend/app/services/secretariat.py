@@ -386,7 +386,34 @@ def _slim_race_for_prompt(race_data: dict) -> dict:
     return slim
 
 
-async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None) -> dict:
+def _experience_level_block(experience_level: str | None) -> str:
+    if experience_level == "beginner":
+        return (
+            "\nUSER EXPERIENCE LEVEL: beginner. "
+            "Lead with your top pick clearly identified. "
+            "Keep overall_summary under 2 sentences. "
+            "Write overall_summary_beginner as the primary output — "
+            "speak directly to someone at their first race. No jargon.\n"
+        )
+    if experience_level == "advanced":
+        return (
+            "\nUSER EXPERIENCE LEVEL: advanced. "
+            "Lead with speed figures, class analysis, and pace scenario. "
+            "Use proper handicapping terminology. "
+            "The technical summary is primary. "
+            "Be specific about Beyer trajectory, class relief/rise, trainer patterns, and pace shape. "
+            "Do not over-explain basics.\n"
+        )
+    if experience_level == "intermediate":
+        return (
+            "\nUSER EXPERIENCE LEVEL: intermediate. "
+            "Balance technical and accessible language. "
+            "Include speed figures and pace but explain their significance.\n"
+        )
+    return ""
+
+
+async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, experience_level: str = None) -> dict:
     """
     Full race analysis — Secretariat's core function.
     Returns structured analysis of all runners and recommended bets.
@@ -401,7 +428,8 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
     cal_context = await get_calibration_context()
     cal_block = f"{cal_context}\n\n---\n\n" if cal_context else ""
 
-    prompt = f"""{cal_block}Analyze this race. One sentence per field. Short phrases in arrays.
+    exp_block = _experience_level_block(experience_level)
+    prompt = f"""{cal_block}{exp_block}Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
@@ -512,7 +540,7 @@ Return this JSON exactly:
     return result
 
 
-async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, user_id: int = None):
+async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, user_id: int = None, experience_level: str = None):
     """
     Async generator for streaming race analysis.
     Yields ("chunk", str) during generation, then ("result", dict) when done.
@@ -525,11 +553,13 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
     cal_context = await get_calibration_context()
     cal_block = f"{cal_context}\n\n---\n\n" if cal_context else ""
 
+    exp_block = _experience_level_block(experience_level)
     prompt = (
         f"RACE ID: {race_data.get('race_id', 'unknown')} | "
         f"MODE: {mode} | "
         "ANALYZE THE FOLLOWING RACE:\n\n"
         f"{cal_block}"
+        f"{exp_block}"
         f"""Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:

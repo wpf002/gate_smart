@@ -1,15 +1,88 @@
 import { useQuery } from '@tanstack/react-query';
-import { getSecretariatAccuracy } from '../../utils/api';
+import { getSecretariatAccuracy, getTrackStats } from '../../utils/api';
 
-export default function AccuracyBadge() {
+// ── Track-specific badge ──────────────────────────────────────────────────────
+function TrackAccuracyBadge({ trackCode, trackName, compact }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['track-stats', trackCode],
+    queryFn: () => getTrackStats(trackCode),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    enabled: !!trackCode,
+  });
+
+  if (isLoading) return null;
+
+  const noData = !data || data.itm_rate == null;
+  const displayName = trackName || data?.track_code || trackCode;
+
+  if (compact) {
+    if (noData) return null;
+    const itm = Math.round((data.itm_rate || 0) * 100);
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        padding: '3px 8px', borderRadius: 12,
+        background: 'rgba(201,162,39,0.1)',
+        border: '1px solid rgba(201,162,39,0.3)',
+        fontSize: 11, color: 'var(--accent-gold)',
+      }}>
+        📊 {itm}% ITM at {displayName}
+      </span>
+    );
+  }
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, rgba(201,162,39,0.08) 0%, var(--bg-secondary) 100%)',
+      border: '1px solid var(--border-gold)',
+      borderRadius: 'var(--radius-md)',
+      padding: '12px 14px',
+      marginBottom: 12,
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-display)', fontSize: 11,
+        color: 'var(--accent-gold)', letterSpacing: '0.08em',
+        marginBottom: 4,
+      }}>
+        SECRETARIAT AT {(displayName || '').toUpperCase()}
+      </div>
+
+      {noData ? (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          Secretariat is building track history here
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--accent-gold)' }}>
+            {Math.round((data.itm_rate || 0) * 100)}% ITM
+          </span>
+          <span style={{ fontSize: 14, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+            · {Math.round((data.win_rate || 0) * 100)}% Win
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            · {data.total_predictions} races
+          </span>
+        </div>
+      )}
+      {data?.sample_size_note && (
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
+          {data.sample_size_note}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Global accuracy badge (no trackCode — used on ProfilePage) ────────────────
+function GlobalAccuracyBadge() {
   const { data } = useQuery({
     queryKey: ['secretariat-accuracy'],
     queryFn: getSecretariatAccuracy,
-    refetchInterval: 10 * 60 * 1000, // 10 minutes
+    refetchInterval: 10 * 60 * 1000,
     staleTime: 5 * 60 * 1000,
   });
 
-  // Only show after meaningful sample size
   if (!data || data.total_predictions < 10 || data.win_rate_percent == null) {
     return null;
   }
@@ -34,32 +107,19 @@ export default function AccuracyBadge() {
       borderRadius: 'var(--radius-md)',
       marginBottom: 16,
     }}>
-      {/* S avatar */}
       <div style={{
-        width: 28,
-        height: 28,
-        borderRadius: '50%',
+        width: 28, height: 28, borderRadius: '50%',
         background: 'var(--accent-gold)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'var(--font-display)',
-        fontSize: 16,
-        color: '#000',
-        flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'var(--font-display)', fontSize: 16, color: '#000', flexShrink: 0,
       }}>
         S
       </div>
-
-      {/* Stats */}
       <div style={{ flex: 1 }}>
         <div style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 11,
-          color: 'var(--accent-gold)',
-          letterSpacing: '0.06em',
-          display: 'block',
-          lineHeight: 1.2,
+          fontFamily: 'var(--font-display)', fontSize: 11,
+          color: 'var(--accent-gold)', letterSpacing: '0.06em',
+          display: 'block', lineHeight: 1.2,
         }}>
           SECRETARIAT
         </div>
@@ -70,17 +130,17 @@ export default function AccuracyBadge() {
           {total_predictions} races called
         </div>
       </div>
-
-      {/* Trend indicator */}
-      <div style={{
-        fontSize: 20,
-        color: trend.color,
-        fontWeight: 700,
-        lineHeight: 1,
-        flexShrink: 0,
-      }}>
+      <div style={{ fontSize: 20, color: trend.color, fontWeight: 700, lineHeight: 1, flexShrink: 0 }}>
         {trend.icon}
       </div>
     </div>
   );
+}
+
+// ── Default export: routes to the right badge based on props ─────────────────
+export default function AccuracyBadge({ trackCode, trackName, compact = false } = {}) {
+  if (trackCode) {
+    return <TrackAccuracyBadge trackCode={trackCode} trackName={trackName} compact={compact} />;
+  }
+  return <GlobalAccuracyBadge />;
 }

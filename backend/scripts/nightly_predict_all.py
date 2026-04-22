@@ -79,10 +79,12 @@ async def main(target_date: datetime.date, dry_run: bool):
 
     await _db.init_db()
 
-    # Ensure region column exists (added after initial table creation)
+    # Ensure new columns exist (added after initial table creation)
     from sqlalchemy import text as _text
     async with _db._engine.begin() as _conn:
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS alert_sent BOOLEAN DEFAULT FALSE"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS post_time_et VARCHAR(10)"))
 
     ssl_ctx = ssl.create_default_context()
     client = anthropic.AsyncAnthropic(
@@ -137,6 +139,25 @@ async def main(target_date: datetime.date, dry_run: bool):
             print(f"pick={first}")
 
             if not dry_run:
+                # Extract HH:MM post time from off_dt (ISO) or time string
+                post_time_et = None
+                off_dt = race.get("off_dt") or race.get("off_time")
+                if off_dt:
+                    try:
+                        import re as _re
+                        m = _re.search(r'T(\d{2}:\d{2})', str(off_dt))
+                        if m:
+                            # Convert UTC hour to ET (subtract 4 for EDT)
+                            h, mn = map(int, m.group(1).split(":"))
+                            h_et = (h - 4) % 24
+                            post_time_et = f"{h_et:02d}:{mn:02d}"
+                    except Exception:
+                        pass
+                if not post_time_et:
+                    raw_time = race.get("time") or race.get("post_time") or ""
+                    if raw_time:
+                        post_time_et = str(raw_time)[:5]
+
                 row = {
                     "race_id": race_id,
                     "race_date": target_date,
@@ -150,6 +171,7 @@ async def main(target_date: datetime.date, dry_run: bool):
                     "predicted_second": pf.get("second"),
                     "predicted_third": pf.get("third"),
                     "predicted_fourth": pf.get("fourth"),
+                    "post_time_et": post_time_et,
                 }
                 from sqlalchemy import update as _update, or_ as _or_
                 async with _db._AsyncSessionLocal() as db:

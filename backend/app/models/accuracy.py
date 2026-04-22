@@ -61,6 +61,9 @@ class RacePrediction(Base):
     # Post-race reflection — populated by nightly_reflect.py
     reflection: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    alert_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+    post_time_et: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -110,9 +110,12 @@ export function RaceCardSkeleton() {
 export function RaceCard({ race, isTomorrow = false }) {
   const navigate = useNavigate();
   const timezone = useAppStore((s) => s.userProfile?.timezone);
+  const experienceLevel = useAppStore((s) => s.userProfile?.experienceLevel);
   const past = !isTomorrow && isRacePast(race);
   const { time: displayTime, label: timeLabel, usTime, usLabel } = getDisplayTime(race, timezone);
   const runnersCount = race.runners?.length ?? race.no_of_runners;
+  const isBeginner = experienceLevel === 'beginner';
+  const isAdvanced = experienceLevel === 'advanced';
 
   return (
     <div
@@ -170,7 +173,7 @@ export function RaceCard({ race, isTomorrow = false }) {
       <div style={{
         fontSize: 13,
         color: 'var(--text-secondary)',
-        marginBottom: 10,
+        marginBottom: isBeginner ? 0 : 10,
         overflow: 'hidden',
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
@@ -178,8 +181,8 @@ export function RaceCard({ race, isTomorrow = false }) {
         {race.title || race.race_name}
       </div>
 
-      {/* Meta row */}
-      {(() => {
+      {/* Meta row — hidden for beginner; standard for intermediate; extended for advanced */}
+      {!isBeginner && (() => {
         const sep = <span aria-hidden="true" style={{ color: 'var(--accent-gold-dim)', fontWeight: 300, fontSize: 13, userSelect: 'none' }}>|</span>;
         const items = [
           (race.distance || race.distance_f) ? formatDistance(race.distance, race.distance_f, race.region) : null,
@@ -187,22 +190,53 @@ export function RaceCard({ race, isTomorrow = false }) {
           runnersCount ? `${runnersCount} runners` : null,
           formatPurse(race) || null,
         ].filter(Boolean);
+
+        // Advanced: append race class/type details
+        const advancedItems = isAdvanced ? [
+          race.race_class || race.race_type || race.type || null,
+          race.claiming_price ? `Clm $${Number(race.claiming_price).toLocaleString()}` : null,
+        ].filter(Boolean) : [];
+
         return (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {items.map((item, i) => (
-              <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {i > 0 && sep}
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{item}</span>
-              </span>
-            ))}
-            {!past && (
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>
-                Analyze →
-              </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {items.map((item, i) => (
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {i > 0 && sep}
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{item}</span>
+                </span>
+              ))}
+              {!past && (
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>
+                  Analyze →
+                </span>
+              )}
+            </div>
+            {isAdvanced && advancedItems.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                {advancedItems.map((item, i) => (
+                  <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {i > 0 && sep}
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item}</span>
+                  </span>
+                ))}
+                {race.conditions && (
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+                    {race.conditions}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         );
       })()}
+
+      {/* Beginner CTA */}
+      {isBeginner && !past && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>
+          Tap to analyze →
+        </div>
+      )}
     </div>
   );
 }

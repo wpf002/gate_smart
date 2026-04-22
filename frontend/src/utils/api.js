@@ -124,6 +124,9 @@ export const getAccuracyHistory = () =>
 export const getMyAccuracyStats = () =>
   api.get('/accuracy/my-stats').then((r) => r.data);
 
+export const getTrackStats = (trackCode) =>
+  api.get(`/accuracy/track-stats/${encodeURIComponent(trackCode)}`).then((r) => r.data);
+
 export const getMyPredictions = (date = null, limit = 20) =>
   api.get('/accuracy/my-predictions', { params: { ...(date ? { date } : {}), limit } }).then((r) => r.data);
 
