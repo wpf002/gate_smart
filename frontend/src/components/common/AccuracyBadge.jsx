@@ -38,7 +38,7 @@ function TrackAccuracyBadge({ trackCode, trackName, compact }) {
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0 }}>
           SECRETARIAT AT {(displayName || '').toUpperCase()}
         </span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· First picks here build the record</span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· No predictions recorded here yet — stats appear after races are analyzed and results posted</span>
       </div>
     );
   }

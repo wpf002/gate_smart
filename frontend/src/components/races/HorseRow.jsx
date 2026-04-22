@@ -20,17 +20,73 @@ function PosBadge({ pos, fieldSize }) {
   );
 }
 
-function decodeComment(raw) {
+// Converts Equibase short_comment abbreviations into readable English sentences.
+// e.g. "3-4-wide turn, wknd" → "3 to 4 wide on the turn, then weakened"
+function readableComment(raw) {
   if (!raw) return '';
-  return raw
-    .replace(/\b(\d+)[pw]\b/g, (_, n) => `${n}-wide`)
-    .replace(/\b1\/4\b/g, 'at ¼mi').replace(/\b1\/2\b/g, 'at ½mi').replace(/\b3\/8\b/g, 'at ⅜mi')
-    .replace(/\bstr\b/gi, 'stretch').replace(/\bins\b/gi, 'inside').replace(/\bouts?\b/gi, 'outside')
-    .replace(/\bbmp(d)?\b/gi, 'bumped').replace(/\bstdy\b/gi, 'steadied').replace(/\bwknd\b/gi, 'weakened')
-    .replace(/\bfalt\b/gi, 'faltered').replace(/\bsvrd\b/gi, 'swerved').replace(/\bbid\b/gi, 'bid for lead')
-    .replace(/\btrkd\b/gi, 'tracked').replace(/\bbtw\b/gi, 'between').replace(/\bclrd\b/gi, 'cleared')
-    .replace(/\bdrv(g|n)?\b/gi, 'driving').replace(/\bchsd\b/gi, 'chased').replace(/\bprssd\b/gi, 'pressed')
-    .replace(/,(\S)/g, ', $1');
+
+  const LOC = {
+    '1/4': 'at the quarter pole', '1/2': 'at the half', '3/8': 'at the three-eighths',
+    'str': 'in the stretch', 'turn': 'on the turn', 'gate': 'at the start',
+  };
+
+  const ACT = {
+    'wknd': 'weakened', 'bmpd': 'bumped', 'bmp': 'bumped', 'stdy': 'steadied',
+    'falt': 'faltered', 'svrd': 'swerved', 'drvg': 'driving', 'drvn': 'driven out',
+    'drv': 'driven', 'chsd': 'chased the leader', 'prssd': 'pressed the pace',
+    'trkd': 'tracked the leader', 'bid': 'bid for the lead', 'btw': 'between rivals',
+    'clrd': 'cleared rivals', 'lugi': 'drifted in', 'lugo': 'drifted out', 'lug': 'drifted',
+    'ins': 'inside', 'outs': 'outside', 'out': 'outside', 'rail': 'on the rail',
+    'slw': 'slow start', 'brkslw': 'broke slowly', 'brk': 'broke well',
+    'str': 'in the stretch', 'turn': 'on the turn',
+    'hung': 'hung', 'borei': 'bore in', 'boreo': 'bore out',
+    'evenly': 'ran evenly', 'clear': 'drew clear', 'game': 'ran gamely',
+    'rallied': 'rallied', 'tired': 'tired', 'tiring': 'tiring late',
+    'handily': 'won handily', 'ridden': 'ridden out', 'eased': 'eased',
+    'fell': 'fell', 'refused': 'refused', 'unseated': 'unseated rider',
+  };
+
+  const decodePart = (part) => {
+    part = part.trim();
+    if (!part) return null;
+
+    // "3-4-wide turn" → "3 to 4 wide on the turn"
+    let m = part.match(/^(\d+)-(\d+)-?wides?\s*(turn|str|stretch|1\/4|1\/2|3\/8|gate)?/i);
+    if (m) {
+      const where = m[3] ? (' ' + (LOC[m[3].toLowerCase()] || 'on the ' + m[3].toLowerCase())) : '';
+      return `${m[1]} to ${m[2]} wide${where}`;
+    }
+
+    // "4-wide str" or "4w str" or "4p str" → "4 wide in the stretch"
+    m = part.match(/^(\d+)-?(?:wide|[pw])\s*(turn|str|stretch|1\/4|1\/2|3\/8|gate)?/i);
+    if (m) {
+      const where = m[2] ? (' ' + (LOC[m[2].toLowerCase()] || 'on the ' + m[2].toLowerCase())) : '';
+      return `${m[1]} wide${where}`;
+    }
+
+    // "3p1/2" or "3p str" → "3 wide at the half"
+    m = part.match(/^(\d+)[pw](1\/4|1\/2|3\/8|str|turn|gate)/i);
+    if (m) return `${m[1]} wide ${LOC[m[2].toLowerCase()] || m[2]}`;
+
+    // Just "3p" or "4w"
+    m = part.match(/^(\d+)[pw]$/i);
+    if (m) return `${m[1]} wide`;
+
+    const key = part.toLowerCase().replace(/\s+/g, '').replace(/[.-]/g, '');
+    if (ACT[key]) return ACT[key];
+    const key2 = part.toLowerCase().trim();
+    if (ACT[key2]) return ACT[key2];
+
+    // Unknown: capitalize and return as-is
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  };
+
+  const parts = raw.split(/,\s*/);
+  const decoded = parts.map(decodePart).filter(Boolean);
+  if (decoded.length === 0) return '';
+
+  const sentence = decoded.join(', then ');
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
 // ── UK/IRE form string chips ───────────────────────────────────────────────────
@@ -112,46 +168,42 @@ function EquibasePP({ horse, maxRuns = 5 }) {
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
         Recent Form
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {runs.map((r, i) => (
-          <div key={i} style={{
-            display: 'grid',
-            gridTemplateColumns: '62px 36px 1fr auto',
-            gap: 6,
-            alignItems: 'center',
-            fontSize: 11,
-            padding: '4px 8px',
-            borderRadius: 4,
-            background: 'var(--bg-card)',
-          }}>
-            <div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>{r.pp_race_date?.slice(5)}</div>
-              <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{r.pp_track_code}</div>
-            </div>
-            <PosBadge pos={r.official_finish} fieldSize={r.field_size > 0 ? r.field_size : null} />
-            <div style={{ minWidth: 0, overflow: 'hidden' }}>
-              <span style={{ color: 'var(--text-muted)' }}>
-                {[r.pp_distance, r.pp_track_condition].filter(Boolean).join(' · ')}
-              </span>
-              {r.short_comment && (
-                <>
-                  <span style={{ color: 'var(--border-medium)', margin: '0 4px' }}>|</span>
-                  <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: 130 }}>
-                    {decodeComment(r.short_comment)}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {runs.map((r, i) => {
+          const comment = readableComment(r.short_comment);
+          return (
+            <div key={i} style={{
+              padding: '5px 8px',
+              borderRadius: 4,
+              background: 'var(--bg-card)',
+              fontSize: 11,
+            }}>
+              {/* Top row: date · track · finish · distance · speed fig */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', marginBottom: comment ? 3 : 0 }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: 10, flexShrink: 0 }}>{r.pp_race_date?.slice(5)}</span>
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 600, flexShrink: 0 }}>{r.pp_track_code}</span>
+                <PosBadge pos={r.official_finish} fieldSize={r.field_size > 0 ? r.field_size : null} />
+                <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {[r.pp_distance, r.pp_track_condition].filter(Boolean).join(' · ')}
+                </span>
+                {r.speed_figure > 0 && (
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12, flexShrink: 0, marginLeft: 'auto',
+                    color: r.speed_figure >= 90 ? 'var(--accent-gold-bright)' : r.speed_figure >= 75 ? 'var(--accent-green-bright)' : 'var(--text-muted)',
+                  }}>
+                    {r.speed_figure}
                   </span>
-                </>
+                )}
+              </div>
+              {/* Comment — full width, wrapping, plain English */}
+              {comment && (
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: 1.45 }}>
+                  {comment}
+                </div>
               )}
             </div>
-            {r.speed_figure > 0 && (
-              <span style={{
-                fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12,
-                color: r.speed_figure >= 90 ? 'var(--accent-gold-bright)' : r.speed_figure >= 75 ? 'var(--accent-green-bright)' : 'var(--text-muted)',
-              }}>
-                {r.speed_figure}
-              </span>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
