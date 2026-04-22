@@ -751,7 +751,7 @@ function FormTab() {
             border: '1px solid var(--border-subtle)',
           }}>
             <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center', marginTop: 2 }}>
-              <Icon name={icon} size={16} color={icon === 'check' ? 'var(--accent-green-bright)' : icon === 'warning' ? 'var(--accent-gold)' : 'var(--text-muted)'} />
+              <Icon name={icon} size={16} color="var(--accent-gold)" />
             </span>
             <div>
               <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{label}</div>
@@ -768,8 +768,8 @@ function BankrollTab() {
   return (
     <div>
       <div style={{
-        background: 'rgba(192,57,43,0.08)',
-        border: '1px solid rgba(192,57,43,0.2)',
+        background: 'rgba(201,162,39,0.06)',
+        border: '1px solid var(--border-gold)',
         borderRadius: 'var(--radius-md)',
         padding: '12px 16px',
         marginBottom: 20,
@@ -778,22 +778,21 @@ function BankrollTab() {
         color: 'var(--text-secondary)',
       }}>
         <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          <Icon name="warning" size={15} color="var(--accent-red-bright)" style={{ flexShrink: 0, marginTop: 1 }} />
-          <span><strong style={{ color: 'var(--accent-red-bright)' }}>Rule #1:</strong> Only bet what you can afford to lose. Set a dedicated betting bankroll separate from living expenses. Never chase losses.</span>
+          <Icon name="lightbulb" size={15} color="var(--accent-gold-bright)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>Only bet what you can afford to lose. Set a dedicated betting bankroll separate from living expenses. Never chase losses.</span>
         </span>
       </div>
       {BANKROLL.map(b => (
         <div key={b.title} style={{
           background: 'var(--bg-card)',
           border: '1px solid var(--border-subtle)',
-          borderLeft: `3px solid ${b.color}`,
+          borderLeft: '3px solid var(--accent-gold)',
           borderRadius: 'var(--radius-md)',
           padding: '16px',
           marginBottom: 12,
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ marginBottom: 6 }}>
             <div style={{ fontWeight: 700, fontSize: 15 }}>{b.title}</div>
-            <span style={{ fontSize: 11, color: b.color, fontWeight: 600 }}>{b.rec}</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{b.body}</p>
         </div>

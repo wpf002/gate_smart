@@ -106,22 +106,22 @@ export default function ScoreCard({ scorecard, expanded, onToggle, rank = null }
           {overall}
         </div>
 
-        {/* Rank badge (top 3 only) */}
-        {rank != null && (() => {
-          const rs = RANK_STYLES[rank - 1];
-          return (
-            <div style={{
-              width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: rs.bg, border: `1px solid ${rs.border}`, color: rs.color,
-              fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
-            }}>{rank}</div>
-          );
-        })()}
-
-        {/* Name + verdict */}
+        {/* Name + rank badge inline + verdict */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{horse_name}</div>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {horse_name}
+            {rank != null && (() => {
+              const rs = RANK_STYLES[rank - 1];
+              return (
+                <div style={{
+                  width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: rs.bg, border: `1px solid ${rs.border}`, color: rs.color,
+                  fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 700,
+                }}>{rank}</div>
+              );
+            })()}
+          </div>
           <div style={{
             fontSize: 12,
             color: 'var(--text-muted)',

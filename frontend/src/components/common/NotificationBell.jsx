@@ -19,7 +19,7 @@ function getPlayerId() {
   });
 }
 
-export default function NotificationBell({ raceId, raceName }) {
+export default function NotificationBell({ raceId, raceName, onSubscribe }) {
   const [subscribed, setSubscribed] = useState(
     () => localStorage.getItem(`sub:${raceId}`) === 'true'
   );
@@ -41,10 +41,12 @@ export default function NotificationBell({ raceId, raceName }) {
         await subscribeToRaceAlerts(raceId, sessionId, playerId || sessionId);
         localStorage.setItem(`sub:${raceId}`, 'true');
         setSubscribed(true);
+        onSubscribe?.(true);
       } else {
         await unsubscribeFromRaceAlerts(raceId);
         localStorage.removeItem(`sub:${raceId}`);
         setSubscribed(false);
+        onSubscribe?.(false);
       }
     } catch {
       // ignore

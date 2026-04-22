@@ -114,13 +114,13 @@ export default function ProfilePage() {
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '12px 14px',
-            background: 'rgba(34,197,94,0.08)',
-            border: '1px solid rgba(34,197,94,0.25)',
+            background: 'rgba(201,162,39,0.08)',
+            border: '1px solid var(--border-gold)',
             borderRadius: 'var(--radius-md)',
             marginBottom: 4,
           }}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-green-bright)' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-gold)' }}>
                 Signed in
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
@@ -213,81 +213,32 @@ export default function ProfilePage() {
         />
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
           {{
-            beginner:     'Secretariat will use plain-English explanations, avoid jargon, and highlight the Beginner Tip first.',
-            intermediate: 'Secretariat will balance plain-English and technical handicapping factors.',
-            advanced:     'Secretariat will lead with technical analysis — Beyer figures, class drops, pace scenarios, and form cycles.',
+            beginner:     'Plain English, top pick highlighted, details hidden until you tap.',
+            intermediate: 'Pace analysis, bet recommendations, full race data.',
+            advanced:     'Full technical view — all data visible, nothing simplified.',
           }[userProfile.experienceLevel]}
         </div>
 
-        {/* Experience level transparency */}
-        <div style={{
-          marginTop: 12,
-          background: 'var(--bg-elevated)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)',
-          overflow: 'hidden',
-        }}>
-          <div style={{ padding: '10px 14px 6px', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            What changes at each level
-          </div>
+        {/* Compact level comparison */}
+        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
           {[
-            {
-              key: 'beginner',
-              label: 'Beginner',
-              bullets: [
-                'Race cards show time + track only — no jargon',
-                'Horse rows highlight the top pick with a gold star',
-                'Trainer, speed figures hidden until you tap "Details"',
-                'Analysis panel leads with the top pick hero card',
-                'Secretariat speaks in plain English, avoids technical terms',
-                'Teller script shown prominently at the top',
-              ],
-            },
-            {
-              key: 'intermediate',
-              label: 'Intermediate',
-              bullets: [
-                'Race cards show distance, surface, field size, purse',
-                'Horse rows show jockey, trainer and bet recommendation upfront',
-                'Analysis panel shows pace, vulnerable fav, and longshot sections',
-                'Secretariat balances plain English with handicapping insight',
-              ],
-            },
-            {
-              key: 'advanced',
-              label: 'Advanced',
-              bullets: [
-                'Race cards show race class, claiming price, and conditions',
-                'Horse rows show form + speed figures inline — nothing hidden',
-                'Analysis panel leads with pace scenario and technical summary',
-                'Secretariat leads with Beyer figures, class drops, and pace shape',
-                'Teller script appears at the bottom (you already know the drill)',
-              ],
-            },
-          ].map(({ key, label, bullets }) => {
+            { key: 'beginner',     label: 'Beginner',     note: 'Simple layout, plain English, key pick highlighted' },
+            { key: 'intermediate', label: 'Intermediate', note: 'Pace, bet recs, full race data shown' },
+            { key: 'advanced',     label: 'Advanced',     note: 'All data visible, Beyer focus, technical layout' },
+          ].map(({ key, label, note }) => {
             const isActive = userProfile.experienceLevel === key;
             return (
               <div key={key} style={{
-                padding: '8px 14px',
-                borderTop: '1px solid var(--border-subtle)',
-                background: isActive ? 'rgba(201,162,39,0.06)' : 'transparent',
+                padding: '8px 10px',
+                background: isActive ? 'rgba(201,162,39,0.08)' : 'var(--bg-elevated)',
+                border: `1px solid ${isActive ? 'var(--border-gold)' : 'var(--border-subtle)'}`,
+                borderRadius: 8,
               }}>
-                <div style={{
-                  fontSize: 11, fontWeight: 700,
-                  color: isActive ? 'var(--accent-gold)' : 'var(--text-muted)',
-                  marginBottom: 4, textTransform: 'capitalize',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                }}>
-                  {label}
-                  {isActive && <span style={{ fontSize: 9, background: 'var(--accent-gold)', color: '#000', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>ACTIVE</span>}
+                <div style={{ fontSize: 11, fontWeight: 700, color: isActive ? 'var(--accent-gold)' : 'var(--text-muted)', marginBottom: 4, textTransform: 'capitalize' }}>
+                  {label} {isActive && <span style={{ fontSize: 8, background: 'var(--accent-gold)', color: '#000', borderRadius: 3, padding: '1px 4px' }}>ON</span>}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {bullets.map((b, i) => (
-                    <div key={i} style={{ fontSize: 11, color: isActive ? 'var(--text-secondary)' : 'var(--text-muted)', display: 'flex', gap: 6 }}>
-                      <span style={{ color: isActive ? 'var(--accent-gold-dim)' : 'var(--border-medium)', flexShrink: 0 }}>·</span>
-                      {b}
-                    </div>
-                  ))}
+                <div style={{ fontSize: 10, color: isActive ? 'var(--text-secondary)' : 'var(--text-muted)', lineHeight: 1.4 }}>
+                  {note}
                 </div>
               </div>
             );
@@ -324,9 +275,9 @@ export default function ProfilePage() {
         <div style={{
           marginTop: 16,
           padding: '10px 14px',
-          background: 'rgba(26,107,168,0.08)',
+          background: 'rgba(201,162,39,0.06)',
+          border: '1px solid var(--border-gold)',
           borderRadius: 'var(--radius-md)',
-          borderLeft: '2px solid var(--accent-blue)',
           fontSize: 12,
           color: 'var(--text-muted)',
           lineHeight: 1.5,

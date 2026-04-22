@@ -28,7 +28,7 @@ export default function SearchPage() {
 
   return (
     <div>
-      <PageHeader title="SEARCH" subtitle="Find horses in today's & tomorrow's races" />
+      <PageHeader title="SEARCH" subtitle="Find horses by name" />
 
       <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -48,9 +48,6 @@ export default function SearchPage() {
             Search
           </button>
         </div>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
-          Searches runners listed in today's and tomorrow's races
-        </p>
       </div>
 
       <div style={{ padding: '12px 16px' }}>

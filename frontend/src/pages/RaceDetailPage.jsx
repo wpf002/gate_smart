@@ -38,13 +38,13 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
   const [techExpanded, setTechExpanded] = useState(false);
   const [plainExpanded, setPlainExpanded] = useState(false);
   const [viewMode, setViewMode] = useState(null); // null = auto from experienceLevel
-  const [copied, setCopied] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerHorse, setDrawerHorse] = useState('');
   const [drawerBetType, setDrawerBetType] = useState('');
   const [tgDismissed, setTgDismissed] = useState(!!sessionStorage.getItem('gs_tg_dismissed'));
   const [wpDismissed, setWpDismissed] = useState(!!sessionStorage.getItem('gs_wp_dismissed'));
-  const [tellerBet, setTellerBet] = useState(null);
+  const [tellerOpenMap, setTellerOpenMap] = useState({});
+  const toggleTeller = (type) => setTellerOpenMap(m => ({ ...m, [type]: !m[type] }));
   const { addToBetSlip } = useAppStore();
   const experienceLevel = useAppStore(s => s.userProfile?.experienceLevel || 'beginner');
 
@@ -63,13 +63,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     setDrawerHorse(selection || '');
     setDrawerBetType(betTypeLabel || '');
     setDrawerOpen(true);
-  };
-
-  const copyTellerScript = (script, key) => {
-    navigator.clipboard?.writeText(script).catch(() => {});
-    setCopied(key);
-    setTimeout(() => setCopied(null), 2000);
-    trackEvent('teller_script_copied', { race_id: raceId });
   };
 
   // ── Loading skeleton ──────────────────────────────────────────────────────
@@ -102,7 +95,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
-          SECRETARIAT — {modeLabel.replace(/^[^ ]+ /, '').toUpperCase()}
+          SECRETARIAT
         </span>
         <span className={`badge badge-${analysis.confidence === 'high' ? 'green' : analysis.confidence === 'low' ? 'red' : 'gold'}`}>
           {analysis.confidence} confidence
@@ -173,60 +166,53 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     </div>
   );
 
-  // Prominent teller script section (PART 3)
-  const TellerScriptSection = ({ small = false }) => {
-    if (!winTellerScript) return null;
-    const scriptText = winTellerScript.replace(/^Say to teller:\s*/i, '').trim();
+  // Teller script section — "Bet at Counter" toggle button for top pick (used in BEGINNER)
+  const TellerScriptSection = () => {
+    if (!winTellerScript && !topPick) return null;
+    const scriptText = winTellerScript?.replace(/^Say to teller:\s*/i, '').trim()
+      || (topPick ? `$2 to win on ${topPick.horse_name}` : null);
+    if (!scriptText) return null;
+    const isOpen = !!tellerOpenMap['win-main'];
     return (
       <div style={{ marginBottom: 12 }}>
-        <div style={{
-          fontSize: small ? 10 : 11, fontWeight: 700,
-          color: 'var(--accent-gold)', textTransform: 'uppercase',
-          letterSpacing: '0.08em', marginBottom: 6,
-        }}>
-          What to Say at the Window
-        </div>
-        <div style={{
-          background: 'rgba(201,168,76,0.1)',
-          border: '1px solid #C9A84C',
-          borderRadius: 8,
-          padding: small ? '8px 12px' : '10px 14px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: small ? 13 : 15,
-          color: 'var(--text-primary)',
-          lineHeight: 1.6,
-          marginBottom: 8,
-          whiteSpace: 'pre-wrap',
-        }}>
-          {scriptText}
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
           <button
-            onClick={() => copyTellerScript(scriptText, 'teller-win')}
+            onClick={() => toggleTeller('win-main')}
             style={{
-              fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 4,
-              border: '1px solid var(--accent-gold-dim)',
-              background: copied === 'teller-win' ? 'var(--accent-gold)' : 'rgba(201,162,39,0.1)',
-              color: copied === 'teller-win' ? '#000' : 'var(--accent-gold)',
+              flex: 1, fontSize: 12, fontWeight: 700, padding: '8px 12px', borderRadius: 6,
+              border: '1px solid var(--accent-gold)',
+              background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
               cursor: 'pointer',
             }}
           >
-            {copied === 'teller-win' ? 'Copied!' : 'Copy Script'}
+            {isOpen ? 'Hide Script ▲' : 'Bet at Counter ▼'}
           </button>
           {topPick && (
             <button
               onClick={() => openBetOnline(topPick.horse_name, 'Win')}
               style={{
-                fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 4,
-                border: '1px solid var(--border-subtle)',
-                background: 'transparent',
-                color: 'var(--text-secondary)', cursor: 'pointer',
+                flex: 1, fontSize: 12, fontWeight: 700, padding: '8px 12px', borderRadius: 6,
+                border: '1px solid var(--accent-gold)',
+                background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
+                cursor: 'pointer',
               }}
             >
-              Bet Online
+              Bet Online →
             </button>
           )}
         </div>
+        {isOpen && (
+          <div style={{
+            marginTop: 8,
+            background: 'rgba(201,168,76,0.1)', border: '1px solid #C9A84C',
+            borderRadius: 8, padding: '10px 14px',
+            fontFamily: 'var(--font-mono)', fontSize: 14,
+            color: 'var(--text-primary)', lineHeight: 1.6,
+            whiteSpace: 'pre-wrap',
+          }}>
+            {scriptText}
+          </div>
+        )}
       </div>
     );
   };
@@ -243,7 +229,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
   // Vulnerable favorite
   const VulnerableFavSection = () => analysis.vulnerable_favorite ? (
-    <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 13 }}>
+    <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: 13 }}>
       <strong style={{ color: 'var(--accent-red-bright)' }}>
         {effectiveViewMode === 'beginner' ? 'The favorite looks beatable:' : 'Vulnerable Favorite:'}
       </strong>{' '}
@@ -313,7 +299,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     </div>
   ) : null;
 
-  // Bet recommendations with inline teller script (PART 3 restructure)
   const BET_LABELS = {
     win:        'Win — pick the winner',
     place:      'Place — finish in the top 2',
@@ -324,6 +309,15 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     superfecta: 'Superfecta',
   };
   const SIMPLE_BETS = ['win', 'place', 'show'];
+
+  const getFallbackScript = (type, selection) => {
+    switch (type) {
+      case 'win':   return `$2 to win on ${selection}`;
+      case 'place': return `$2 to place on ${selection}`;
+      case 'show':  return `$2 to show on ${selection}`;
+      default:      return `$2 ${type} — ${selection}`;
+    }
+  };
 
   const BetRecsSection = () => {
     if (!analysis.bet_recommendations) return null;
@@ -336,9 +330,9 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           Bet Recommendations
         </div>
         {entries.map(([type, rec]) => {
-          const betTellerScript = analysis.teller_script?.[type];
-          const betScriptText = betTellerScript?.replace(/^Say to teller:\s*/i, '').trim();
-          const copyKey = `bet-${type}`;
+          const raw = analysis.teller_script?.[type];
+          const scriptText = raw?.replace(/^Say to teller:\s*/i, '').trim() || getFallbackScript(type, rec.selection);
+          const isOpen = !!tellerOpenMap[`bet-${type}`];
           return (
             <div key={type} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid var(--border-subtle)' }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', marginBottom: 2 }}>
@@ -352,57 +346,40 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
               {rec.box_option && effectiveViewMode === 'technical' && (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>Box: {rec.box_option}</div>
               )}
-              {/* Teller script inline — PART 3 */}
-              {betScriptText && (
-                <div style={{ marginTop: 6, marginBottom: 6 }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-                    What to Say at the Window
-                  </div>
-                  <div style={{
-                    background: 'rgba(201,168,76,0.1)', border: '1px solid #C9A84C',
-                    borderRadius: 6, padding: '6px 10px',
-                    fontFamily: 'var(--font-mono)', fontSize: 12,
-                    color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: 6,
-                  }}>
-                    {betScriptText}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button
-                      onClick={() => { copyTellerScript(betScriptText, copyKey); trackEvent('teller_script_copied', { race_id: raceId, bet_type: type }); }}
-                      style={{
-                        fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
-                        border: '1px solid var(--accent-gold-dim)',
-                        background: copied === copyKey ? 'var(--accent-gold)' : 'rgba(201,162,39,0.1)',
-                        color: copied === copyKey ? '#000' : 'var(--accent-gold)', cursor: 'pointer',
-                      }}
-                    >
-                      {copied === copyKey ? 'Copied!' : 'Copy Script'}
-                    </button>
-                    <button
-                      onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
-                      style={{
-                        fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
-                        border: '1px solid var(--border-subtle)',
-                        background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer',
-                      }}
-                    >
-                      Bet Online
-                    </button>
-                  </div>
-                </div>
-              )}
-              {!betScriptText && (
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
-                    style={{
-                      fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
-                      border: '1px solid var(--accent-gold-dim)',
-                      background: 'rgba(201,162,39,0.1)', color: 'var(--accent-gold)', cursor: 'pointer',
-                    }}
-                  >
-                    Bet Online
-                  </button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={() => toggleTeller(`bet-${type}`)}
+                  style={{
+                    flex: 1, fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
+                    border: '1px solid var(--accent-gold)',
+                    background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isOpen ? 'Hide Script ▲' : 'Bet at Counter ▼'}
+                </button>
+                <button
+                  onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
+                  style={{
+                    flex: 1, fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
+                    border: '1px solid var(--accent-gold)',
+                    background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Bet Online →
+                </button>
+              </div>
+              {isOpen && (
+                <div style={{
+                  marginTop: 8,
+                  background: 'rgba(201,168,76,0.1)', border: '1px solid #C9A84C',
+                  borderRadius: 6, padding: '8px 12px',
+                  fontFamily: 'var(--font-mono)', fontSize: 13,
+                  color: 'var(--text-primary)', lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap',
+                }}>
+                  {scriptText}
                 </div>
               )}
             </div>
@@ -447,12 +424,12 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
             : 'Sequence bets — use the primary leg single or wheel to the backup for coverage. Stack with other legs from adjacent races.'}
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 80, flexShrink: 0 }}>Primary leg</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 80, flexShrink: 0 }}>Top selection</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-gold-bright)' }}>{analysis.top_contenders[0]}</span>
         </div>
         {analysis.top_contenders[1] && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 80, flexShrink: 0 }}>Backup leg</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 80, flexShrink: 0 }}>Second pick</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{analysis.top_contenders[1]}</span>
           </div>
         )}
@@ -565,26 +542,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
         <PredictedFinishSection />
         <BeginnerTipSection />
         <PartnerCards />
-
-        {/* Teller modal */}
-        {tellerBet && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: '24px 16px' }}
-            onClick={() => setTellerBet(null)}>
-            <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}
-              onClick={e => e.stopPropagation()}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 8 }}>Bet at Counter</div>
-              <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-md)', padding: 14, fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.8, marginBottom: 14, border: '1px solid var(--border-subtle)', whiteSpace: 'pre-wrap' }}>
-                {tellerBet.script}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { navigator.clipboard?.writeText(tellerBet.script).catch(() => {}); setCopied('teller'); setTimeout(() => setCopied(null), 1500); }}>
-                  {copied === 'teller' ? '✓ Copied' : 'Copy'}
-                </button>
-                <button className="btn" style={{ flex: 1, border: '1px solid var(--border-subtle)' }} onClick={() => setTellerBet(null)}>Close</button>
-              </div>
-            </div>
-          </div>
-        )}
         <AffiliateDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} region={userRegion} recommendedHorse={drawerHorse} recommendedBet={drawerBetType} />
       </div>
     );
@@ -598,7 +555,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
         <PredictedFinishSection />
         <SummarySection />
         <PaceSection />
-        <TellerScriptSection />
         <BetRecsSection />
         <LegacyBetRecsSection />
         <VulnerableFavSection />
@@ -606,19 +562,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
         <MultiRaceSection />
         <BeginnerTipSection />
         <PartnerCards />
-        {tellerBet && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: '24px 16px' }}
-            onClick={() => setTellerBet(null)}>
-            <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 24, width: '100%', maxWidth: 440 }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 8 }}>Bet at Counter</div>
-              <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-md)', padding: 14, fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.8, marginBottom: 14, border: '1px solid var(--border-subtle)', whiteSpace: 'pre-wrap' }}>{tellerBet.script}</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { navigator.clipboard?.writeText(tellerBet.script).catch(() => {}); setCopied('teller'); setTimeout(() => setCopied(null), 1500); }}>{copied === 'teller' ? '✓ Copied' : 'Copy'}</button>
-                <button className="btn" style={{ flex: 1, border: '1px solid var(--border-subtle)' }} onClick={() => setTellerBet(null)}>Close</button>
-              </div>
-            </div>
-          </div>
-        )}
         <AffiliateDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} region={userRegion} recommendedHorse={drawerHorse} recommendedBet={drawerBetType} />
       </div>
     );
@@ -634,7 +577,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
       <PredictedFinishSection />
       <BetRecsSection />
       <LegacyBetRecsSection />
-      <TellerScriptSection small />
       <MultiRaceSection />
 
       {/* "Explain simply" collapsible */}
@@ -660,19 +602,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
       <BeginnerTipSection />
       <PartnerCards />
-      {tellerBet && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: '24px 16px' }}
-          onClick={() => setTellerBet(null)}>
-          <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 24, width: '100%', maxWidth: 440 }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 8 }}>Bet at Counter</div>
-            <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-md)', padding: 14, fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.8, marginBottom: 14, border: '1px solid var(--border-subtle)', whiteSpace: 'pre-wrap' }}>{tellerBet.script}</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { navigator.clipboard?.writeText(tellerBet.script).catch(() => {}); setCopied('teller'); setTimeout(() => setCopied(null), 1500); }}>{copied === 'teller' ? '✓ Copied' : 'Copy'}</button>
-              <button className="btn" style={{ flex: 1, border: '1px solid var(--border-subtle)' }} onClick={() => setTellerBet(null)}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
       <AffiliateDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} region={userRegion} recommendedHorse={drawerHorse} recommendedBet={drawerBetType} />
     </div>
   );
@@ -746,6 +675,8 @@ export default function RaceDetailPage() {
   const [debriefPending, setDebriefPending] = useState(false);
   const [raceResults, setRaceResults] = useState(null);
   const [pendingMode, setPendingMode] = useState(null);
+  const [bellSubscribed, setBellSubscribed] = useState(() => typeof localStorage !== 'undefined' && localStorage.getItem(`sub:${raceId}`) === 'true');
+  const [scorecardOpen, setScorecardOpen] = useState(false);
   const abortRef = useRef(null);
 
   const runDebrief = async () => {
@@ -861,7 +792,7 @@ export default function RaceDetailPage() {
       setAnalyzeError(
         detail.includes('credit')
           ? 'Secretariat needs Anthropic API credits. Add credits at console.anthropic.com.'
-          : `Analysis failed: ${detail}`
+          : 'Could not reach Secretariat — check your connection and try again.'
       );
     }).finally(() => {
       setAnalysisStreaming(false);
@@ -951,7 +882,7 @@ export default function RaceDetailPage() {
         })()}
         {/* NotificationBell — top-right of header */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-          <NotificationBell raceId={raceId} raceName={race?.title || race?.race_name || ''} />
+          <NotificationBell raceId={raceId} raceName={race?.title || race?.race_name || ''} onSubscribe={setBellSubscribed} />
           {race && (
             <span style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: -2, whiteSpace: 'nowrap', display: 'block' }}>
               Alerts
@@ -999,14 +930,11 @@ export default function RaceDetailPage() {
         )}
 
         {/* ── Notification subscription note ────────────────────────── */}
-        {race && !raceFinished && (() => {
-          const subbed = typeof localStorage !== 'undefined' && localStorage.getItem(`sub:${raceId}`) === 'true';
-          return subbed ? (
-            <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>🔔</span> You'll be notified 30 min before post
-            </div>
-          ) : null;
-        })()}
+        {race && !raceFinished && bellSubscribed && (
+          <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>🔔</span> You'll be notified 30 min before post
+          </div>
+        )}
 
         {/* ── Finished race results ──────────────────────────────────── */}
         {raceFinished && raceResults && <ResultsPanel results={raceResults} />}
@@ -1225,7 +1153,21 @@ export default function RaceDetailPage() {
 
                 {scorecardData && (
                   <div style={{ marginTop: 16 }}>
-                    <ScorecardPanel raceScorecards={scorecardData} loading={false} runners={race?.runners || []} />
+                    <button
+                      onClick={() => setScorecardOpen(o => !o)}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 14px', background: 'var(--bg-card)',
+                        border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)', fontSize: 13, fontWeight: 700,
+                        cursor: 'pointer', fontFamily: 'var(--font-display)', letterSpacing: '0.04em',
+                        marginBottom: scorecardOpen ? 8 : 0,
+                      }}
+                    >
+                      <span>FIELD SCORECARD</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{scorecardOpen ? '▲' : '▼'}</span>
+                    </button>
+                    {scorecardOpen && <ScorecardPanel raceScorecards={scorecardData} loading={false} runners={race?.runners || []} />}
                   </div>
                 )}
               </>

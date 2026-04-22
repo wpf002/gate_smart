@@ -138,7 +138,7 @@ function Message({ msg }) {
         }}>
           {isError
             ? <Icon name="warning" size={14} color="var(--accent-red-bright)" />
-            : <Icon name="robot" size={14} color="var(--accent-gold)" />}
+            : <Icon name="horse" size={14} color="var(--accent-gold)" />}
         </div>
       )}
       <div style={{
@@ -224,7 +224,7 @@ export default function AdvisorPage() {
           <div>
             <AccuracyBadge />
             <div style={{ textAlign: 'center', padding: '24px 0 20px', color: 'var(--text-muted)' }}>
-              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="robot" size={48} /></div>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="horse" size={48} /></div>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent-gold)', marginBottom: 6 }}>
                 Ask Secretariat
               </div>
@@ -270,7 +270,7 @@ export default function AdvisorPage() {
               background: 'rgba(201,162,39,0.15)',
               border: '1px solid var(--border-gold)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}><Icon name="robot" size={14} color="var(--accent-gold)" /></div>
+            }}><Icon name="horse" size={14} color="var(--accent-gold)" /></div>
             <div style={{
               padding: '10px 14px',
               borderRadius: '16px 16px 16px 4px',

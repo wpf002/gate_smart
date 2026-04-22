@@ -14,6 +14,8 @@ function TrackAccuracyBadge({ trackCode, trackName, compact }) {
   if (isLoading) return null;
 
   const noData = !data || data.itm_rate == null;
+  if (noData) return null;
+
   const displayName = trackName || data?.track_code || trackCode;
 
   if (compact) {
@@ -48,23 +50,17 @@ function TrackAccuracyBadge({ trackCode, trackName, compact }) {
         SECRETARIAT AT {(displayName || '').toUpperCase()}
       </div>
 
-      {noData ? (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          Secretariat is building track history here
-        </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--accent-gold)' }}>
-            {Math.round((data.itm_rate || 0) * 100)}% ITM
-          </span>
-          <span style={{ fontSize: 14, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-            · {Math.round((data.win_rate || 0) * 100)}% Win
-          </span>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            · {data.total_predictions} races
-          </span>
-        </div>
-      )}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: 'var(--accent-gold)' }}>
+          {Math.round((data.itm_rate || 0) * 100)}% ITM
+        </span>
+        <span style={{ fontSize: 14, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+          · {Math.round((data.win_rate || 0) * 100)}% Win
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          · {data.total_predictions} races
+        </span>
+      </div>
       {data?.sample_size_note && (
         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
           {data.sample_size_note}
