@@ -15,9 +15,9 @@ export default function LoginPage() {
   const { setAuth, userProfile } = useAppStore();
   const navigate = useNavigate();
   const location = useLocation();
-  // Support ?from= query param or location.state.from for redirect-back
-  const params = new URLSearchParams(location.search);
-  const returnTo = params.get('from') || location.state?.from || '/';
+  // Always send to home after sign-in — Profile sends state.from='/profile' on logout
+  // but returning there is confusing; home is the natural landing page.
+  const returnTo = '/';
 
   const loginMutation = useMutation({
     mutationFn: () => authLogin(email.trim().toLowerCase(), password),
