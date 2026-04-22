@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store';
 import { getHorsePastPerformances } from '../../utils/api';
 import RadarChart from './RadarChart';
+import Icon from '../common/Icon';
 
 // ── Position badge helper ──────────────────────────────────────────────────────
 function PosBadge({ pos, fieldSize }) {
@@ -17,6 +18,19 @@ function PosBadge({ pos, fieldSize }) {
       {pos}{fieldSize ? `/${fieldSize}` : ''}
     </span>
   );
+}
+
+function decodeComment(raw) {
+  if (!raw) return '';
+  return raw
+    .replace(/\b(\d+)[pw]\b/g, (_, n) => `${n}-wide`)
+    .replace(/\b1\/4\b/g, 'at ¼mi').replace(/\b1\/2\b/g, 'at ½mi').replace(/\b3\/8\b/g, 'at ⅜mi')
+    .replace(/\bstr\b/gi, 'stretch').replace(/\bins\b/gi, 'inside').replace(/\bouts?\b/gi, 'outside')
+    .replace(/\bbmp(d)?\b/gi, 'bumped').replace(/\bstdy\b/gi, 'steadied').replace(/\bwknd\b/gi, 'weakened')
+    .replace(/\bfalt\b/gi, 'faltered').replace(/\bsvrd\b/gi, 'swerved').replace(/\bbid\b/gi, 'bid for lead')
+    .replace(/\btrkd\b/gi, 'tracked').replace(/\bbtw\b/gi, 'between').replace(/\bclrd\b/gi, 'cleared')
+    .replace(/\bdrv(g|n)?\b/gi, 'driving').replace(/\bchsd\b/gi, 'chased').replace(/\bprssd\b/gi, 'pressed')
+    .replace(/,(\S)/g, ', $1');
 }
 
 // ── UK/IRE form string chips ───────────────────────────────────────────────────
@@ -123,7 +137,7 @@ function EquibasePP({ horse, maxRuns = 5 }) {
                 <>
                   <span style={{ color: 'var(--border-medium)', margin: '0 4px' }}>|</span>
                   <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: 130 }}>
-                    {r.short_comment}
+                    {decodeComment(r.short_comment)}
                   </span>
                 </>
               )}
@@ -294,10 +308,10 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             {/* Horse profile link — always visible */}
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/horse/${horse.horse_id}`); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, flexShrink: 0 }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center' }}
               title="View horse profile"
             >
-              🔍
+              <Icon name="search" size={13} color="var(--text-muted)" />
             </button>
             {isScratched && (
               <span className="badge badge-muted" style={{ flexShrink: 0, fontSize: 10 }}>Scratched</span>

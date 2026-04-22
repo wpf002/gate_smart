@@ -355,18 +355,18 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Box: {rec.box_option}</div>
                   )}
                 </div>
-                {/* Right: action buttons stacked, centered */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0, alignItems: 'stretch' }}>
+                {/* Right: action buttons side by side */}
+                <div style={{ display: 'flex', flexDirection: 'row', gap: 5, flexShrink: 0 }}>
                   <button
                     onClick={() => toggleTeller(`bet-${type}`)}
                     style={{
                       fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
                       border: '1px solid var(--accent-gold)',
                       background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                      cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center',
+                      cursor: 'pointer', whiteSpace: 'nowrap',
                     }}
                   >
-                    {isOpen ? 'Hide ▲' : 'Counter ▼'}
+                    {isOpen ? 'Hide ▲' : 'Bet at Counter ▼'}
                   </button>
                   <button
                     onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
@@ -374,7 +374,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
                       fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
                       border: '1px solid var(--accent-gold)',
                       background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                      cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center',
+                      cursor: 'pointer', whiteSpace: 'nowrap',
                     }}
                   >
                     Bet Online →
@@ -450,9 +450,9 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
   // Beginner tip
   const BeginnerTipSection = () => analysis.beginner_tip ? (
-    <div style={{ marginTop: 4, padding: '8px 12px', background: 'rgba(26,107,168,0.1)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', borderLeft: '2px solid var(--accent-blue)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-      <Icon name="lightbulb" size={15} color="var(--accent-blue-bright)" style={{ flexShrink: 0, marginTop: 1 }} />
-      <span><strong style={{ color: 'var(--accent-blue-bright)' }}>Tip:</strong> {analysis.beginner_tip}</span>
+    <div style={{ marginTop: 4, padding: '8px 12px', background: 'rgba(201,162,39,0.08)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', borderLeft: '2px solid var(--accent-gold)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+      <Icon name="lightbulb" size={15} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: 1 }} />
+      <span><strong style={{ color: 'var(--accent-gold)' }}>Tip:</strong> {analysis.beginner_tip}</span>
     </div>
   ) : null;
 
@@ -799,11 +799,14 @@ export default function RaceDetailPage() {
       }
     }).catch((err) => {
       if (err.name === 'AbortError') return;
-      const detail = err.message || 'Unknown error';
+      const detail = err.message || '';
+      const status = err?.response?.status || err?.status;
       setAnalyzeError(
-        detail.includes('credit')
+        detail.includes('credit') || status === 402
           ? 'Secretariat needs Anthropic API credits. Add credits at console.anthropic.com.'
-          : 'Could not reach Secretariat — check your connection and try again.'
+          : status === 503 || status === 502
+          ? 'Secretariat is temporarily unavailable — try again in a moment.'
+          : 'Analysis failed — tap Reset and try again.'
       );
     }).finally(() => {
       setAnalysisStreaming(false);
@@ -905,11 +908,18 @@ export default function RaceDetailPage() {
       <div style={{ padding: '16px' }}>
         {/* ── Race meta ─────────────────────────────────────────────── */}
         {race && !isLoading && (() => {
+          const fmtClass = (cls) => {
+            if (!cls) return null;
+            return cls.replace(/CLAIMING\s*\(\s*\$?([\d,]+)\s*\)/i, (_, n) => {
+              const num = parseInt(n.replace(/,/g, ''), 10);
+              return `Claiming ($${num.toLocaleString()})`;
+            });
+          };
           const items = [
             (race.distance || race.distance_f) ? formatDistance(race.distance, race.distance_f, race.region) : null,
             race.surface || null,
             race.going ? `Track: ${race.going}` : null,
-            race.race_class || null,
+            fmtClass(race.race_class) || null,
             formatPurse(race) || null,
             race.runners?.length ? `${race.runners.length} runners` : null,
           ].filter(Boolean);
