@@ -807,8 +807,8 @@ function BankrollTab() {
         color: 'var(--text-secondary)',
         lineHeight: 1.6,
       }}>
-        <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          <Icon name="lightbulb" size={14} color="var(--accent-gold-bright)" style={{ flexShrink: 0, marginTop: 1 }} />
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="lightbulb" size={14} color="var(--accent-gold-bright)" style={{ flexShrink: 0 }} />
           <span><strong style={{ color: 'var(--accent-gold-bright)' }}>Reality check:</strong> Even professional handicappers hit ~30–35% win rate on flat bets. A 50-bet losing streak is statistically possible. Size bets so a bad run doesn't wipe you out.</span>
         </span>
       </div>

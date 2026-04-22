@@ -180,7 +180,7 @@ const PATHS = {
   ),
 };
 
-export default function Icon({ name, size = 24, color = 'currentColor' }) {
+export default function Icon({ name, size = 24, color = 'currentColor', style }) {
   const paths = PATHS[name];
   if (!paths) return null;
   return (
@@ -194,6 +194,7 @@ export default function Icon({ name, size = 24, color = 'currentColor' }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      style={style}
     >
       {paths}
     </svg>
