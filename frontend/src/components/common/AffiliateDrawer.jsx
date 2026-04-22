@@ -167,7 +167,7 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
                         className="btn btn-primary"
                         style={{ fontSize: 11, padding: '6px 12px', whiteSpace: 'nowrap' }}
                       >
-                        {opt.label}
+                        Place Bet
                       </button>
                     ))}
                   </div>
@@ -175,9 +175,9 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
                   <button
                     onClick={() => openAffiliate(affiliate, affiliate.baseUrl, sessionId, onClose)}
                     className="btn btn-primary"
-                    style={{ flexShrink: 0, fontSize: 12, padding: '8px 14px' }}
+                    style={{ flexShrink: 0, fontSize: 12, padding: '8px 16px' }}
                   >
-                    {affiliate.cta}
+                    Place Bet
                   </button>
                 )}
               </div>

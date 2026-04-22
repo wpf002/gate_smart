@@ -339,40 +339,47 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           const isOpen = !!tellerOpenMap[`bet-${type}`];
           return (
             <div key={type} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', marginBottom: 2 }}>
-                {effectiveViewMode === 'beginner' ? (BET_LABELS[type] || type) : type.charAt(0).toUpperCase() + type.slice(1)}
-                {rec.stake_suggestion && (
-                  <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>{rec.stake_suggestion}</span>
-                )}
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: rec.box_option ? 4 : 8 }}>{rec.reasoning}</div>
-              {rec.box_option && effectiveViewMode === 'technical' && (
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>Box: {rec.box_option}</div>
-              )}
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button
-                  onClick={() => toggleTeller(`bet-${type}`)}
-                  style={{
-                    fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 6,
-                    border: '1px solid var(--accent-gold)',
-                    background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                    cursor: 'pointer', whiteSpace: 'nowrap',
-                  }}
-                >
-                  {isOpen ? 'Hide Script ▲' : 'Bet at Counter ▼'}
-                </button>
-                <button
-                  onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
-                  style={{
-                    fontSize: 11, fontWeight: 700, padding: '5px 10px', borderRadius: 6,
-                    border: '1px solid var(--accent-gold)',
-                    background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                    cursor: 'pointer', whiteSpace: 'nowrap',
-                  }}
-                >
-                  Bet Online →
-                </button>
+              {/* Two-column: content left, buttons right */}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                {/* Left: bet info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', marginBottom: 2 }}>
+                    {effectiveViewMode === 'beginner' ? (BET_LABELS[type] || type) : type.charAt(0).toUpperCase() + type.slice(1)}
+                    {rec.stake_suggestion && (
+                      <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>{rec.stake_suggestion}</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>{rec.reasoning}</div>
+                  {rec.box_option && effectiveViewMode === 'technical' && (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Box: {rec.box_option}</div>
+                  )}
+                </div>
+                {/* Right: action buttons stacked, centered */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0, alignItems: 'stretch' }}>
+                  <button
+                    onClick={() => toggleTeller(`bet-${type}`)}
+                    style={{
+                      fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
+                      border: '1px solid var(--accent-gold)',
+                      background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
+                      cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center',
+                    }}
+                  >
+                    {isOpen ? 'Hide ▲' : 'Counter ▼'}
+                  </button>
+                  <button
+                    onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
+                    style={{
+                      fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
+                      border: '1px solid var(--accent-gold)',
+                      background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
+                      cursor: 'pointer', whiteSpace: 'nowrap', textAlign: 'center',
+                    }}
+                  >
+                    Bet Online →
+                  </button>
+                </div>
               </div>
               {isOpen && (
                 <div style={{
