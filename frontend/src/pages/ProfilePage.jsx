@@ -8,7 +8,7 @@ import { authUpdateProfile, authLogout } from '../utils/api';
 import { TIMEZONE_OPTIONS } from '../utils/timezone';
 
 const RISK_OPTIONS = ['low', 'medium', 'high'];
-const EXPERIENCE_OPTIONS = ['beginner', 'intermediate', 'advanced'];
+const EXPERIENCE_OPTIONS = ['beginner', 'advanced'];
 
 function SegmentControl({ options, value, onChange }) {
   return (
@@ -213,18 +213,16 @@ export default function ProfilePage() {
         />
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
           {{
-            beginner:     'Plain English, top pick highlighted, details hidden until you tap.',
-            intermediate: 'Pace analysis, bet recommendations, full race data.',
-            advanced:     'Full technical view — all data visible, nothing simplified.',
+            beginner: 'Plain English, top pick highlighted, details hidden until you tap.',
+            advanced: 'Full technical view — pace, all bet types, Beyer figures, nothing simplified.',
           }[userProfile.experienceLevel]}
         </div>
 
         {/* Compact level comparison */}
-        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           {[
-            { key: 'beginner',     label: 'Beginner',     note: 'Simple layout, plain English, key pick highlighted' },
-            { key: 'intermediate', label: 'Intermediate', note: 'Pace, bet recs, full race data shown' },
-            { key: 'advanced',     label: 'Advanced',     note: 'All data visible, Beyer focus, technical layout' },
+            { key: 'beginner', label: 'Beginner', note: 'Simple layout, plain English, key pick highlighted' },
+            { key: 'advanced', label: 'Advanced', note: 'Full data, pace analysis, all bet types, technical layout' },
           ].map(({ key, label, note }) => {
             const isActive = userProfile.experienceLevel === key;
             return (

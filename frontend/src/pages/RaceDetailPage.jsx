@@ -47,7 +47,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
   const { addToBetSlip } = useAppStore();
   const experienceLevel = useAppStore(s => s.userProfile?.experienceLevel || 'beginner');
 
-  // Resolve effective view mode: advanced defaults to technical, others to beginner
+  // Resolve effective view mode: advanced defaults to technical, beginner defaults to beginner
   const effectiveViewMode = viewMode ?? (experienceLevel === 'advanced' ? 'technical' : 'beginner');
 
   const normName = (s) => (s || '').toLowerCase().replace(/[^a-z\s]/g, '').trim();
@@ -109,7 +109,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
               color: effectiveViewMode === v ? '#000' : 'var(--text-muted)',
               cursor: 'pointer', textTransform: 'capitalize',
             }}>
-              {v === 'beginner' ? 'Plain' : 'Technical'}
+              {v === 'beginner' ? 'Beginner' : 'Advanced'}
             </button>
           ))}
         </div>
@@ -550,26 +550,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
         </div>
 
         <PredictedFinishSection />
-        <BeginnerTipSection />
-        <PartnerCards />
-        <AffiliateDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} region={userRegion} recommendedHorse={drawerHorse} recommendedBet={drawerBetType} />
-      </div>
-    );
-  }
-
-  // ── INTERMEDIATE LAYOUT ────────────────────────────────────────────────────
-  if (experienceLevel === 'intermediate') {
-    return (
-      <div style={panelStyle}>
-        <PanelHeader />
-        <PredictedFinishSection />
-        <SummarySection />
-        <PaceSection />
-        <BetRecsSection />
-        <LegacyBetRecsSection />
-        <VulnerableFavSection />
-        <LongshotSection />
-        <MultiRaceSection />
         <BeginnerTipSection />
         <PartnerCards />
         <AffiliateDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} region={userRegion} recommendedHorse={drawerHorse} recommendedBet={drawerBetType} />

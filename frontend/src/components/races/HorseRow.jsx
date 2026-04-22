@@ -251,7 +251,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
   const experienceLevel = useAppStore((s) => s.userProfile?.experienceLevel);
   const [expanded, setExpanded] = useState(false);
   const isBeginner = experienceLevel === 'beginner';
-  const isAdvanced = experienceLevel === 'advanced';
+  const isAdvanced = !isBeginner;
 
   const isScratched = horse.non_runner || horse.scratched ||
     ['scratched', 'non-runner', 'nr', 'withdrawn'].includes((horse.status || '').toLowerCase());

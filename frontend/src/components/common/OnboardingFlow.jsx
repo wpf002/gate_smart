@@ -5,9 +5,8 @@ import { authLogin, authRegister } from '../../utils/api';
 const TOTAL_STEPS = 3;
 
 const EXPERIENCE_OPTIONS = [
-  { value: 'beginner',     label: 'Complete Beginner',    desc: "I'm new to horse racing" },
-  { value: 'intermediate', label: 'Casual Bettor',        desc: 'I bet occasionally' },
-  { value: 'advanced',     label: 'Experienced Bettor',   desc: "I know what I'm doing" },
+  { value: 'beginner', label: 'Beginner', desc: "New to horse racing — plain English explanations, key pick highlighted" },
+  { value: 'advanced', label: 'Advanced', desc: "Experienced bettor — full technical data, all bet types, pace analysis" },
 ];
 
 const RISK_OPTIONS = [

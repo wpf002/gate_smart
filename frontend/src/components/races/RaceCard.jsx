@@ -115,7 +115,7 @@ export function RaceCard({ race, isTomorrow = false }) {
   const { time: displayTime, label: timeLabel, usTime, usLabel } = getDisplayTime(race, timezone);
   const runnersCount = race.runners?.length ?? race.no_of_runners;
   const isBeginner = experienceLevel === 'beginner';
-  const isAdvanced = experienceLevel === 'advanced';
+  const isAdvanced = !isBeginner;
 
   return (
     <div
