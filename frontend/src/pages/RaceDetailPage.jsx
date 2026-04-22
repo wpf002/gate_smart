@@ -688,7 +688,6 @@ export default function RaceDetailPage() {
   const [pendingMode, setPendingMode] = useState(null);
   const [bellSubscribed, setBellSubscribed] = useState(() => typeof localStorage !== 'undefined' && localStorage.getItem(`sub:${raceId}`) === 'true');
   const [scorecardOpen, setScorecardOpen] = useState(false);
-  const [runnersExpanded, setRunnersExpanded] = useState(!!validCache?.analysis);
   const abortRef = useRef(null);
 
   const runDebrief = async () => {
@@ -735,10 +734,6 @@ export default function RaceDetailPage() {
       getRaceResults(raceId).then(setRaceResults).catch(() => {});
     }
   }, [race, raceId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (analysis && !analysisStreaming) setRunnersExpanded(true);
-  }, [analysis, analysisStreaming]);
 
   const runAnalysisAndScore = (mode = analysisMode) => {
     const cached = raceAnalysisCache[raceId];
@@ -1052,29 +1047,15 @@ export default function RaceDetailPage() {
 
         {/* ── Runners ───────────────────────────────────────────────── */}
         <div style={{ marginBottom: 12 }}>
-          <div
-            onClick={() => setRunnersExpanded(e => !e)}
-            role="button"
-            style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: runnersExpanded ? 10 : 0, cursor: 'pointer' }}
-          >
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '0.04em' }}>
-              RUNNERS
-            </span>
-            {!runnersExpanded && race?.runners?.length > 0 && (
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>
-                {race.runners.length} horses — tap to view
-              </span>
-            )}
-            {runnersExpanded && analysis && (
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '0.04em' }}>RUNNERS</h3>
+            {analysis && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 Colored circle = AI contender score (0–100, higher is stronger)
               </span>
             )}
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }}>
-              {runnersExpanded ? '▲' : '▼'}
-            </span>
           </div>
-          {runnersExpanded && (isLoading ? (
+          {isLoading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[...Array(8)].map((_, i) => <HorseRowSkeleton key={i} />)}
             </div>
@@ -1211,7 +1192,7 @@ export default function RaceDetailPage() {
                 )}
               </>
             );
-          })())}
+          })()}
         </div>
       </div>
     </div>
