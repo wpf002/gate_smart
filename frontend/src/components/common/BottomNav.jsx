@@ -4,7 +4,7 @@ import Icon from './Icon';
 const NAV_ITEMS = [
   { path: '/',          icon: 'home',      label: 'Races'   },
   { path: '/search',    icon: 'search',    label: 'Search'  },
-  { path: '/advisor',   icon: 'simulator', label: 'Advisor' },
+  { path: '/advisor',   icon: 'robot',     label: 'Advisor' },
   { path: '/education', icon: 'learn',     label: 'Learn'   },
   { path: '/profile',   icon: 'profile',   label: 'Profile' },
 ];

@@ -164,6 +164,14 @@ const PATHS = {
       <circle cx="17" cy="13" r="1.5" fill="currentColor" stroke="none" />
     </>
   ),
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path strokeLinecap="round" d="M12 3c-2.5 4-2.5 14 0 18M12 3c2.5 4 2.5 14 0 18" />
+      <path strokeLinecap="round" d="M3 12h18" />
+      <path strokeLinecap="round" d="M3.6 7.5h16.8M3.6 16.5h16.8" />
+    </>
+  ),
   horse: (
     <>
       <path strokeLinecap="round" strokeLinejoin="round" d="M5 19l2-5 4-2 2-4 3-1 1-3h2l-1 4-2 1-1 3-3 2-1 5H5z" />

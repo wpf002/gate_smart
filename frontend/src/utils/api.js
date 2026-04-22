@@ -144,30 +144,6 @@ export const logAffiliateClick = (affiliateId, sessionId, raceId = '') =>
   api.post('/affiliate/click', { affiliate_id: affiliateId, session_id: sessionId, race_id: raceId })
     .then((r) => r.data).catch(() => null); // fire-and-forget, never throw
 
-// ── Paper Trading Simulator ───────────────────────────────────────────────────
-export const simPlaceBet = (bet) =>
-  api.post('/simulator/bet', bet).then((r) => r.data);
-
-export const simSettle = (raceId) =>
-  api.post(`/simulator/settle/${raceId}`).then((r) => r.data);
-
-export const simGetBets = () =>
-  api.get('/simulator/bets').then((r) => r.data);
-
-export const simGetBank = () =>
-  api.get('/simulator/bank').then((r) => r.data);
-
-export const simGetStats = () =>
-  api.get('/simulator/stats').then((r) => r.data);
-
-export const simReset = () =>
-  api.post('/simulator/reset').then((r) => r.data);
-
-export const simDeleteBet = (betId) =>
-  api.delete(`/simulator/bet/${betId}`).then((r) => r.data);
-
-export const simTopup = (amount) =>
-  api.post('/simulator/bank/topup', { amount }).then((r) => r.data);
 
 // ── Push Notifications ────────────────────────────────────────────────────────
 // ── Auth ──────────────────────────────────────────────────────────────────────

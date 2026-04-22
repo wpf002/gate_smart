@@ -92,7 +92,7 @@ const BET_TYPES = [
 const ODDS_CONTENT = [
   {
     title: 'American (Moneyline) Odds',
-    emoji: '🇺🇸',
+    icon: 'globe',
     body: `The standard at US racetracks and ADW platforms like TwinSpires, TVG, NYRA Bets, and AmWager.
 
 Positive (+) odds show profit on a $100 bet:
@@ -125,7 +125,7 @@ Value exists when the final tote odds are higher than the horse's true winning p
   },
   {
     title: 'Fractional Odds (UK / Ireland)',
-    emoji: '🇬🇧',
+    icon: 'globe',
     body: `Used in UK/Irish racing and sometimes shown on international simulcast feeds.
 
 Written as 5/2, 7/4, 11/10 — first number is profit, second is stake.
