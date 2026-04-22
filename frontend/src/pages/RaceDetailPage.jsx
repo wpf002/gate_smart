@@ -646,7 +646,7 @@ function TabBar({ tabs, active, onChange }) {
 export default function RaceDetailPage() {
   const { raceId } = useParams();
   const navigate = useNavigate();
-  const { userProfile, raceAnalysisCache, setRaceAnalysisCache, clearRaceAnalysisCache } = useAppStore();
+  const { userProfile, setUserProfile, raceAnalysisCache, setRaceAnalysisCache, clearRaceAnalysisCache } = useAppStore();
 
   const cached = raceAnalysisCache[raceId];
   const CACHE_TTL = 5 * 60 * 1000;
@@ -796,6 +796,7 @@ export default function RaceDetailPage() {
       setPendingMode(newMode);
     } else {
       setAnalysisMode(newMode);
+      setUserProfile({ riskTolerance: newMode });
     }
   };
 
@@ -803,6 +804,7 @@ export default function RaceDetailPage() {
     const mode = pendingMode;
     setPendingMode(null);
     setAnalysisMode(mode);
+    setUserProfile({ riskTolerance: mode });
     setAnalysis(null);
     setScorecardData(null);
     runAnalysisAndScore(mode);
