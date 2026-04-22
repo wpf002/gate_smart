@@ -36,7 +36,6 @@ const CONFIDENCE_PLAIN = {
 // ── AnalysisPanel ─────────────────────────────────────────────────────────────
 function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '', raceType = '' }) {
   const [techExpanded, setTechExpanded] = useState(false);
-  const [plainExpanded, setPlainExpanded] = useState(false);
   const [viewMode, setViewMode] = useState(null); // null = auto from experienceLevel
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerHorse, setDrawerHorse] = useState('');
@@ -590,28 +589,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
       <LegacyBetRecsSection />
       <MultiRaceSection />
 
-      {/* "Explain simply" collapsible */}
-      {(analysis.overall_summary_beginner || analysis.overall_summary) && (
-        <div style={{ marginBottom: 8 }}>
-          <button
-            onClick={() => setPlainExpanded(e => !e)}
-            style={{
-              background: 'none', border: 'none', padding: '4px 0',
-              color: 'var(--text-muted)', fontSize: 11, fontWeight: 600,
-              cursor: 'pointer', textDecoration: 'underline',
-            }}
-          >
-            {plainExpanded ? '▲ Hide plain explanation' : '▼ Explain simply'}
-          </button>
-          {plainExpanded && (
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 6 }}>
-              {analysis.overall_summary_beginner || analysis.overall_summary}
-            </p>
-          )}
-        </div>
-      )}
-
-      <BeginnerTipSection />
+<BeginnerTipSection />
       <PartnerCards />
       <AffiliateDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} region={userRegion} recommendedHorse={drawerHorse} recommendedBet={drawerBetType} />
     </div>
