@@ -1115,6 +1115,193 @@ async def _store_prediction(
 
 # ── Daily Email Report ────────────────────────────────────────────────────────
 
+async def _compute_category_trends(report_date, lookback_days: int = 7) -> dict:
+    """
+    Cross-day trend analysis grounded in real settled results.
+
+    Groups the last `lookback_days` of NA predictions by (track_code, race_type)
+    and surfaces three buckets so the digest's "How I'm Evolving" section is
+    anchored in movement, not single-day narrative:
+      - persistent_weak: category trailing the 7-day baseline by ≥10pts, n≥5
+      - regressing:      today worse than prior-6-days by ≥15pts, today n≥2
+      - improving:       today better than prior-6-days by ≥15pts, today n≥2
+
+    Returns { "block": str, "persistent_weak": [...], "regressing": [...], "improving": [...] }.
+    `block` is a formatted string ready for prompt injection and email display.
+    Empty block when sample is insufficient.
+    """
+    import datetime
+    from collections import defaultdict
+
+    if report_date is None:
+        return {"block": "", "persistent_weak": [], "regressing": [], "improving": []}
+
+    start_date = report_date - datetime.timedelta(days=lookback_days - 1)
+
+    try:
+        from app.core.database import _AsyncSessionLocal
+        from app.models.accuracy import RacePrediction
+        from sqlalchemy import select, and_, or_
+
+        if not _AsyncSessionLocal:
+            return {"block": "", "persistent_weak": [], "regressing": [], "improving": []}
+
+        async with _AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(RacePrediction).where(
+                    and_(
+                        RacePrediction.race_date >= start_date,
+                        RacePrediction.race_date <= report_date,
+                        RacePrediction.result_fetched == True,  # noqa: E712
+                        or_(RacePrediction.region == "na", RacePrediction.region == None),  # noqa: E711
+                    )
+                )
+            )
+            rows = result.scalars().all()
+    except Exception:
+        return {"block": "", "persistent_weak": [], "regressing": [], "improving": []}
+
+    if not rows or len(rows) < 15:
+        return {"block": "", "persistent_weak": [], "regressing": [], "improving": []}
+
+    # Group by (track, race_type) — the dimension where failures concentrate
+    buckets: dict = defaultdict(lambda: {"window_n": 0, "window_w": 0, "today_n": 0, "today_w": 0})
+    window_total = {"n": 0, "w": 0}
+    for r in rows:
+        key = (r.track_code or "?", r.race_type or "?")
+        is_today = r.race_date == report_date
+        hit = 1 if r.top_pick_correct else 0
+        buckets[key]["window_n"] += 1
+        buckets[key]["window_w"] += hit
+        window_total["n"] += 1
+        window_total["w"] += hit
+        if is_today:
+            buckets[key]["today_n"] += 1
+            buckets[key]["today_w"] += hit
+
+    if window_total["n"] == 0:
+        return {"block": "", "persistent_weak": [], "regressing": [], "improving": []}
+
+    baseline = window_total["w"] / window_total["n"]
+
+    persistent_weak: list[dict] = []
+    regressing: list[dict] = []
+    improving: list[dict] = []
+
+    for (track, rtype), b in buckets.items():
+        if b["window_n"] < 4:
+            continue
+        wr = b["window_w"] / b["window_n"]
+        prior_n = b["window_n"] - b["today_n"]
+        prior_w = b["window_w"] - b["today_w"]
+        today_rate = (b["today_w"] / b["today_n"]) if b["today_n"] else None
+        prior_rate = (prior_w / prior_n) if prior_n else None
+
+        entry = {
+            "track": track,
+            "race_type": rtype,
+            "window_rate": wr,
+            "window_n": b["window_n"],
+            "window_w": b["window_w"],
+            "today_rate": today_rate,
+            "today_n": b["today_n"],
+            "today_w": b["today_w"],
+            "prior_rate": prior_rate,
+            "prior_n": prior_n,
+        }
+
+        if b["window_n"] >= 5 and wr <= baseline - 0.10:
+            persistent_weak.append(entry)
+        if b["today_n"] >= 2 and prior_n >= 3 and today_rate is not None and prior_rate is not None:
+            if today_rate <= prior_rate - 0.15:
+                regressing.append(entry)
+            elif today_rate >= prior_rate + 0.15:
+                improving.append(entry)
+
+    persistent_weak.sort(key=lambda e: (e["window_rate"], -e["window_n"]))
+    regressing.sort(key=lambda e: (e["today_rate"] - e["prior_rate"]))
+    improving.sort(key=lambda e: -(e["today_rate"] - e["prior_rate"]))
+
+    persistent_weak = persistent_weak[:3]
+    regressing = regressing[:3]
+    improving = improving[:3]
+
+    if not (persistent_weak or regressing or improving):
+        return {"block": "", "persistent_weak": [], "regressing": [], "improving": []}
+
+    def _fmt(e: dict) -> str:
+        parts = [f"{e['track']} {e['race_type']}: {lookback_days}d {e['window_w']}/{e['window_n']} ({e['window_rate']:.0%})"]
+        if e["today_n"]:
+            parts.append(f"today {e['today_w']}/{e['today_n']}")
+        return " — ".join(parts)
+
+    lines: list[str] = [
+        f"{lookback_days}-DAY CATEGORY TRENDS (baseline {baseline:.0%} on {window_total['n']} races):"
+    ]
+    if persistent_weak:
+        lines.append("Persistent weak spots (below baseline across the window):")
+        lines.extend(f"  - {_fmt(e)}" for e in persistent_weak)
+    if regressing:
+        lines.append("Regressing today vs prior 6 days:")
+        lines.extend(f"  - {_fmt(e)}" for e in regressing)
+    if improving:
+        lines.append("Improving today vs prior 6 days:")
+        lines.extend(f"  - {_fmt(e)}" for e in improving)
+
+    return {
+        "block": "\n".join(lines),
+        "persistent_weak": persistent_weak,
+        "regressing": regressing,
+        "improving": improving,
+    }
+
+
+def _render_trends_html(trends: dict) -> str:
+    """Render the 7-day trend buckets as an HTML section for the digest email."""
+    if not trends or not trends.get("block"):
+        return ""
+
+    def _row(e: dict) -> str:
+        today_cell = (
+            f"{e['today_w']}/{e['today_n']} ({e['today_rate']:.0%})"
+            if e.get("today_n") else "—"
+        )
+        return (
+            '<tr>'
+            f'<td style="padding:3px 8px">{e["track"]}</td>'
+            f'<td style="padding:3px 8px">{e["race_type"]}</td>'
+            f'<td style="padding:3px 8px">{e["window_w"]}/{e["window_n"]} ({e["window_rate"]:.0%})</td>'
+            f'<td style="padding:3px 8px">{today_cell}</td>'
+            '</tr>'
+        )
+
+    def _section(title: str, entries: list, color: str) -> str:
+        if not entries:
+            return ""
+        rows = "\n".join(_row(e) for e in entries)
+        return (
+            f'<h4 style="color:{color};margin:12px 0 4px">{title}</h4>'
+            '<table style="border-collapse:collapse;width:100%;font-size:12px">'
+            '<tr style="background:#eee"><th style="padding:3px 8px;text-align:left">Track</th>'
+            '<th style="padding:3px 8px;text-align:left">Type</th>'
+            '<th style="padding:3px 8px;text-align:left">7-day</th>'
+            '<th style="padding:3px 8px;text-align:left">Today</th></tr>'
+            f'{rows}</table>'
+        )
+
+    sections = "".join([
+        _section("Persistent weak spots", trends.get("persistent_weak", []), "#a33"),
+        _section("Regressing today", trends.get("regressing", []), "#c06"),
+        _section("Improving today", trends.get("improving", []), "#2d6a2d"),
+    ])
+    if not sections:
+        return ""
+    return (
+        '<h2 style="color:#555">📊 7-Day Category Trends</h2>'
+        + sections
+    )
+
+
 async def generate_daily_email_report(report, predictions: list) -> dict:
     """
     Builds a complete daily digest email for every settled race.
@@ -1203,6 +1390,10 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
         for p in misses[:20]
     ) or "none"
 
+    # Cross-day trends — grounds "How I'm Evolving" in actual category movement
+    trends = await _compute_category_trends(report.report_date, lookback_days=7)
+    trends_block = trends.get("block", "")
+
     # Load stored lessons so the email reflects what's actually being applied
     stored_lessons_block = ""
     try:
@@ -1229,14 +1420,17 @@ By surface (wins/total): {_fmt_bucket(by_surface)}
 
 Sample correct picks: {hit_sample}
 Sample misses: {miss_sample}
-{stored_lessons_block}
+{(trends_block + chr(10)) if trends_block else ""}{stored_lessons_block}
 Write three analysis sections for Secretariat's nightly digest. Be specific and honest.
+When the trend data above shows persistent weak spots or regressions, you MUST name them and
+treat single-day improvements as provisional until they repeat. In "how_im_evolving", only
+claim a prior lesson is working if a category it targeted has actually improved in the trend data.
 Return JSON exactly:
 {{
   "subject": "Secretariat – {today_str} | {len(hits)}/{total} ({win_pct}) win rate",
   "what_went_right": "2-4 sentences: which patterns produced correct picks today and why those signals worked. Name specific tracks, race types, or surfaces if there's a pattern.",
   "what_went_wrong": "2-4 sentences: which patterns failed and the likely reason. Be honest about systematic weaknesses, not just bad luck.",
-  "how_im_evolving": "2-4 sentences: specific adjustments I will make, grounding them in today's data AND referencing which stored lessons above are being confirmed or revised. Must be concrete, not generic."
+  "how_im_evolving": "2-4 sentences: specific adjustments I will make, grounded in the 7-day trend data above. If a persistent weak spot exists, name it and commit to a concrete gate. If a prior lesson has NOT moved its target category in the trend data, say so plainly."
 }}"""
 
     response = await client.messages.create(
@@ -1259,6 +1453,8 @@ Return JSON exactly:
     evolving = analysis.get("how_im_evolving", "")
 
     # ── Assemble final email in Python ──
+    trends_text_section = f"\n7-DAY TRENDS\n{trends_block}\n" if trends_block else ""
+
     text_body = f"""SECRETARIAT DAILY DIGEST — {today_str.upper()}
 {'='*60}
 
@@ -1275,7 +1471,7 @@ WHAT WENT WRONG
 
 HOW I'M EVOLVING
 {evolving}
-
+{trends_text_section}
 COMPLETE RESULTS ({total} races)
 {'─'*60}
 {text_table}
@@ -1308,7 +1504,7 @@ COMPLETE RESULTS ({total} races)
 
   <h2 style="color:#c8a84b">🔄 How I'm Evolving</h2>
   <p>{evolving}</p>
-
+{_render_trends_html(trends)}
   <h2>📋 Complete Results — All {total} Races</h2>
   {html_table}
 
