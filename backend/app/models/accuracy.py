@@ -118,6 +118,10 @@ class SecretariatCalibration(Base):
     win_rate_by_track: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     win_rate_by_type: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     win_rate_by_surface: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # Combo buckets keyed "track/race_type" or "track/surface" — the dimension where
+    # weakness actually concentrates (e.g. "LRL/Turf" can be 0/10 while LRL overall is 5%).
+    win_rate_by_track_type: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    win_rate_by_track_surface: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # Lists of strings like "Maiden races (28% win rate, 18 races)"
     weak_spots: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     strong_spots: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)

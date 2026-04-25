@@ -27,6 +27,8 @@ async def _ensure_columns(engine) -> None:
         "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS reflection TEXT",
         "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)",
         "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
+        "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS win_rate_by_track_type JSONB",
+        "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS win_rate_by_track_surface JSONB",
     ]
     async with engine.begin() as conn:
         for stmt in ddl:
@@ -37,8 +39,14 @@ def _win_rate(wins: int, total: int) -> float:
     return wins / total if total else 0.0
 
 
-def _categorise(data: dict, min_samples: int = 10, low: float = 0.35, high: float = 0.55):
-    """Split a {category: {wins, total}} dict into weak/strong spots."""
+def _categorise(data: dict, baseline: float, min_samples: int = 10, delta: float = 0.08):
+    """Split a {category: {wins, total}} dict into weak/strong spots, baseline-relative.
+
+    A bucket is "weak" if its win rate is at least `delta` below baseline, and
+    "strong" if at least `delta` above. Absolute thresholds (the prior 35%/55%
+    cutoffs) miss the actual signal when baseline drifts — at a 26% baseline,
+    every bucket reads as "weak."
+    """
     weak, strong = [], []
     for cat, counts in data.items():
         total = counts["total"]
@@ -46,10 +54,13 @@ def _categorise(data: dict, min_samples: int = 10, low: float = 0.35, high: floa
             continue
         wr = _win_rate(counts["wins"], total)
         label = f"{cat} ({wr:.0%} win rate, {total} races)"
-        if wr < low:
+        if wr <= baseline - delta:
             weak.append(label)
-        elif wr > high:
+        elif wr >= baseline + delta:
             strong.append(label)
+    # Hardest-hit / strongest first so the truncated [:10] keeps the most extreme
+    weak.sort(key=lambda lbl: float(lbl.split("(")[1].split("%")[0]))
+    strong.sort(key=lambda lbl: -float(lbl.split("(")[1].split("%")[0]))
     return weak, strong
 
 
@@ -85,13 +96,20 @@ async def main(dry_run: bool):
     by_track: dict = defaultdict(lambda: {"wins": 0, "total": 0})
     by_type: dict = defaultdict(lambda: {"wins": 0, "total": 0})
     by_surface: dict = defaultdict(lambda: {"wins": 0, "total": 0})
+    by_track_type: dict = defaultdict(lambda: {"wins": 0, "total": 0})
+    by_track_surface: dict = defaultdict(lambda: {"wins": 0, "total": 0})
 
     for p in predictions:
+        track = p.track_code or "unknown"
+        rtype = p.race_type or "unknown"
+        surface = p.surface or "unknown"
         for bucket, key in [
             (by_mode, p.analysis_mode or "unknown"),
-            (by_track, p.track_code or "unknown"),
-            (by_type, p.race_type or "unknown"),
-            (by_surface, p.surface or "unknown"),
+            (by_track, track),
+            (by_type, rtype),
+            (by_surface, surface),
+            (by_track_type, f"{track}/{rtype}"),
+            (by_track_surface, f"{track}/{surface}"),
         ]:
             bucket[key]["total"] += 1
             if p.top_pick_correct:
@@ -108,16 +126,20 @@ async def main(dry_run: bool):
     track_rates = _to_rates(by_track)
     type_rates = _to_rates(by_type)
     surface_rates = _to_rates(by_surface)
+    track_type_rates = _to_rates(by_track_type)
+    track_surface_rates = _to_rates(by_track_surface)
 
-    weak_track, strong_track = _categorise(by_track)
-    weak_type, strong_type = _categorise(by_type)
-    weak_surface, strong_surface = _categorise(by_surface)
+    weak_track, strong_track = _categorise(by_track, rolling_win_rate)
+    weak_type, strong_type = _categorise(by_type, rolling_win_rate)
+    weak_surface, strong_surface = _categorise(by_surface, rolling_win_rate)
+    # Combo buckets — use a smaller min_samples since combos slice the data thinner
+    weak_combo, strong_combo = _categorise(by_track_type, rolling_win_rate, min_samples=5)
 
-    weak_spots = weak_track + weak_type + weak_surface
-    strong_spots = strong_track + strong_type + strong_surface
+    weak_spots = weak_combo + weak_track + weak_type + weak_surface
+    strong_spots = strong_combo + strong_track + strong_type + strong_surface
 
-    print(f"  Weak spots ({len(weak_spots)}): {weak_spots}")
-    print(f"  Strong spots ({len(strong_spots)}): {strong_spots}")
+    print(f"  Weak spots ({len(weak_spots)}): {weak_spots[:10]}")
+    print(f"  Strong spots ({len(strong_spots)}): {strong_spots[:10]}")
     print("  By mode:", {k: f"{v['wins']}/{v['total']} ({v['win_rate']:.0%})" for k, v in mode_rates.items()})
 
     if dry_run:
@@ -135,6 +157,8 @@ async def main(dry_run: bool):
             existing.win_rate_by_track = track_rates
             existing.win_rate_by_type = type_rates
             existing.win_rate_by_surface = surface_rates
+            existing.win_rate_by_track_type = track_type_rates
+            existing.win_rate_by_track_surface = track_surface_rates
             existing.weak_spots = weak_spots[:10]
             existing.strong_spots = strong_spots[:10]
             existing.sample_size = total
@@ -147,6 +171,8 @@ async def main(dry_run: bool):
                 win_rate_by_track=track_rates,
                 win_rate_by_type=type_rates,
                 win_rate_by_surface=surface_rates,
+                win_rate_by_track_type=track_type_rates,
+                win_rate_by_track_surface=track_surface_rates,
                 weak_spots=weak_spots[:10],
                 strong_spots=strong_spots[:10],
                 sample_size=total,

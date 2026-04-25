@@ -24,8 +24,65 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-async def predict_race(client, race: dict, mode: str = "auto_daily") -> dict | None:
-    """Run a cheap haiku prediction on one race. Returns predicted_finish dict or None."""
+def _format_bucket_hint(track: str, race_type: str, surface: str, cal) -> str | None:
+    """Build a short calibration block telling the model how it has historically
+    performed in this exact bucket. Returns None if no usable calibration data.
+
+    Most-specific data wins: (track, race_type) combo > track-only > type-only.
+    A bucket needs at least 5 prior samples to be cited.
+    """
+    if not cal:
+        return None
+    baseline = cal.rolling_win_rate or 0.0
+    if not baseline:
+        return None
+
+    by_tt = cal.win_rate_by_track_type or {}
+    by_t = cal.win_rate_by_track or {}
+    by_rt = cal.win_rate_by_type or {}
+
+    def _flag(wr: float) -> str:
+        delta = wr - baseline
+        if delta <= -0.08:
+            return "WEAK BUCKET — be cautious; widen contenders, prefer value over chalk"
+        if delta >= 0.08:
+            return "STRONG BUCKET — be decisive on the top pick"
+        return "near baseline"
+
+    parts = [f"Your overall 30-day win rate: {baseline:.0%}."]
+
+    combo = by_tt.get(f"{track}/{race_type}")
+    if combo and combo.get("total", 0) >= 5:
+        wr = combo["win_rate"]
+        parts.append(
+            f"At {track} / {race_type}: {combo['wins']}/{combo['total']} ({wr:.0%}) — {_flag(wr)}."
+        )
+    else:
+        # Fall back to broader signals when combo sample is too thin
+        t_data = by_t.get(track)
+        if t_data and t_data.get("total", 0) >= 8:
+            wr = t_data["win_rate"]
+            parts.append(f"At {track} overall: {t_data['wins']}/{t_data['total']} ({wr:.0%}) — {_flag(wr)}.")
+        rt_data = by_rt.get(race_type)
+        if rt_data and rt_data.get("total", 0) >= 8:
+            wr = rt_data["win_rate"]
+            parts.append(f"On {race_type}: {rt_data['wins']}/{rt_data['total']} ({wr:.0%}) — {_flag(wr)}.")
+
+    return " ".join(parts) if len(parts) > 1 else None
+
+
+async def predict_race(
+    client,
+    race: dict,
+    mode: str = "auto_daily",
+    bucket_hint: str | None = None,
+) -> dict | None:
+    """Run a cheap haiku prediction on one race. Returns predicted_finish dict or None.
+
+    `bucket_hint`, when supplied, is a one-line calibration string injected at
+    the top of the prompt so haiku can adjust confidence based on Secretariat's
+    own historical accuracy in this track/type combination.
+    """
     runners = race.get("runners", [])
     if not runners:
         return None
@@ -41,7 +98,8 @@ async def predict_race(client, race: dict, mode: str = "auto_daily") -> dict | N
     ]
 
     prompt = (
-        f"Runners: {json.dumps(slim)}\n"
+        (bucket_hint + "\n\n" if bucket_hint else "")
+        + f"Runners: {json.dumps(slim)}\n"
         "Return ONLY this JSON, no explanation:\n"
         '{"first": "horse_name", "second": "horse_name", '
         '"third": "horse_name", "fourth": "horse_name"}'
@@ -92,6 +150,17 @@ async def main(target_date: datetime.date, dry_run: bool):
         http_client=httpx.AsyncClient(verify=ssl_ctx),
     )
 
+    # Load Secretariat's own calibration once — feeds bucket-specific accuracy
+    # context into every haiku prompt below so picks adjust to historical performance.
+    from app.models.accuracy import SecretariatCalibration
+    async with _db._AsyncSessionLocal() as _cal_db:
+        calibration = await _cal_db.get(SecretariatCalibration, 1)
+    if calibration and calibration.sample_size:
+        print(f"  Loaded calibration: {calibration.sample_size} races, {calibration.rolling_win_rate:.0%} win rate baseline")
+    else:
+        print("  No calibration data yet — running without bucket hints")
+        calibration = None
+
     from app.services.racing_api import get_na_racecards_full
 
     today = datetime.date.today()
@@ -130,7 +199,8 @@ async def main(target_date: datetime.date, dry_run: bool):
 
         print(f"  [{i+1}/{len(all_races)}] [{region.upper()}] {race_name or race_id}", end=" … ")
 
-        pf = await predict_race(client, race)
+        bucket_hint = _format_bucket_hint(track_code, race_type, surface, calibration)
+        pf = await predict_race(client, race, bucket_hint=bucket_hint)
         if not pf:
             print("skip (no prediction)")
             skipped += 1
