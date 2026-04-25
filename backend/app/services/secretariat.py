@@ -1166,18 +1166,25 @@ async def _compute_category_trends(report_date, lookback_days: int = 7) -> dict:
 
     # Group by (track, race_type) — the dimension where failures concentrate
     buckets: dict = defaultdict(lambda: {"window_n": 0, "window_w": 0, "today_n": 0, "today_w": 0})
+    track_buckets: dict = defaultdict(lambda: {"window_n": 0, "window_w": 0, "today_n": 0, "today_w": 0})
     window_total = {"n": 0, "w": 0}
     for r in rows:
-        key = (r.track_code or "?", r.race_type or "?")
+        track = r.track_code or "?"
+        rtype = r.race_type or "?"
+        key = (track, rtype)
         is_today = r.race_date == report_date
         hit = 1 if r.top_pick_correct else 0
         buckets[key]["window_n"] += 1
         buckets[key]["window_w"] += hit
+        track_buckets[track]["window_n"] += 1
+        track_buckets[track]["window_w"] += hit
         window_total["n"] += 1
         window_total["w"] += hit
         if is_today:
             buckets[key]["today_n"] += 1
             buckets[key]["today_w"] += hit
+            track_buckets[track]["today_n"] += 1
+            track_buckets[track]["today_w"] += hit
 
     if window_total["n"] == 0:
         return {"block": "", "persistent_weak": [], "regressing": [], "improving": []}
@@ -1188,35 +1195,54 @@ async def _compute_category_trends(report_date, lookback_days: int = 7) -> dict:
     regressing: list[dict] = []
     improving: list[dict] = []
 
-    for (track, rtype), b in buckets.items():
-        if b["window_n"] < 4:
-            continue
-        wr = b["window_w"] / b["window_n"]
-        prior_n = b["window_n"] - b["today_n"]
-        prior_w = b["window_w"] - b["today_w"]
-        today_rate = (b["today_w"] / b["today_n"]) if b["today_n"] else None
-        prior_rate = (prior_w / prior_n) if prior_n else None
-
-        entry = {
-            "track": track,
-            "race_type": rtype,
-            "window_rate": wr,
-            "window_n": b["window_n"],
-            "window_w": b["window_w"],
-            "today_rate": today_rate,
-            "today_n": b["today_n"],
-            "today_w": b["today_w"],
-            "prior_rate": prior_rate,
-            "prior_n": prior_n,
-        }
-
+    def _classify(entry: dict, b: dict) -> None:
+        wr = entry["window_rate"]
+        today_rate = entry["today_rate"]
+        prior_rate = entry["prior_rate"]
         if b["window_n"] >= 5 and wr <= baseline - 0.10:
             persistent_weak.append(entry)
-        if b["today_n"] >= 2 and prior_n >= 3 and today_rate is not None and prior_rate is not None:
+        if b["today_n"] >= 2 and entry["prior_n"] >= 3 and today_rate is not None and prior_rate is not None:
             if today_rate <= prior_rate - 0.15:
                 regressing.append(entry)
             elif today_rate >= prior_rate + 0.15:
                 improving.append(entry)
+
+    def _make_entry(track: str, rtype: str, b: dict) -> dict:
+        prior_n = b["window_n"] - b["today_n"]
+        prior_w = b["window_w"] - b["today_w"]
+        return {
+            "track": track,
+            "race_type": rtype,
+            "window_rate": b["window_w"] / b["window_n"],
+            "window_n": b["window_n"],
+            "window_w": b["window_w"],
+            "today_rate": (b["today_w"] / b["today_n"]) if b["today_n"] else None,
+            "today_n": b["today_n"],
+            "today_w": b["today_w"],
+            "prior_rate": (prior_w / prior_n) if prior_n else None,
+            "prior_n": prior_n,
+        }
+
+    # Per-(track, type) buckets — skip "?" types since they're a data-completeness artifact
+    for (track, rtype), b in buckets.items():
+        if rtype == "?" or b["window_n"] < 4:
+            continue
+        _classify(_make_entry(track, rtype, b), b)
+
+    # Track-overall buckets — surface track-wide signal even when no single race-type bucket clears the floor
+    for track, b in track_buckets.items():
+        if track == "?" or b["window_n"] < 5:
+            continue
+        _classify(_make_entry(track, "all types", b), b)
+
+    # Dedupe: when (track, "all types") qualifies, suppress that track's per-type entries in the same bucket
+    def _dedupe(entries: list) -> list:
+        tracks_with_all = {e["track"] for e in entries if e["race_type"] == "all types"}
+        return [e for e in entries if e["race_type"] == "all types" or e["track"] not in tracks_with_all]
+
+    persistent_weak = _dedupe(persistent_weak)
+    regressing = _dedupe(regressing)
+    improving = _dedupe(improving)
 
     persistent_weak.sort(key=lambda e: (e["window_rate"], -e["window_n"]))
     regressing.sort(key=lambda e: (e["today_rate"] - e["prior_rate"]))
@@ -1345,6 +1371,15 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
             f'</tr>'
         )
 
+    # Group by track, then race order within each track, so the digest reads track-by-track
+    predictions = sorted(
+        predictions,
+        key=lambda p: (
+            p.track_code or "ZZZ",
+            getattr(p, "post_time_et", None) or "99:99",
+            p.race_name or "",
+        ),
+    )
     text_table = "\n".join(_row_text(p) for p in predictions)
     html_rows = "\n".join(_row_html(p) for p in predictions)
     html_table = (
