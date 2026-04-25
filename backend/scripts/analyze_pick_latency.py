@@ -51,18 +51,18 @@ _BIN_ORDER = ["<1h", "1–3h", "3–6h", "6–10h", "10h+"]
 
 async def main(days: int) -> None:
     from sqlalchemy import select, and_, or_
-    from app.core.database import _AsyncSessionLocal, init_db
+    from app.core import database as _db
     from app.models.accuracy import RacePrediction
 
-    await init_db()
-    if not _AsyncSessionLocal:
+    await _db.init_db()
+    if not _db._AsyncSessionLocal:
         print("ERROR: database not initialized")
         return
 
     end = datetime.date.today()
     start = end - datetime.timedelta(days=days - 1)
 
-    async with _AsyncSessionLocal() as db:
+    async with _db._AsyncSessionLocal() as db:
         result = await db.execute(
             select(RacePrediction).where(
                 and_(
