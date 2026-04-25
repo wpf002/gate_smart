@@ -66,8 +66,8 @@ async def reflect_batch(client, races: list[dict]) -> list[dict]:
         "You are Secretariat reviewing your predictions. "
         "For each race return a JSON array element with:\n"
         '  "race_id": string\n'
-        '  "factor": the single key factor explaining the outcome '
-        "(pace shape, surface bias, class drop, connections, odds drift, field size, trainer pattern)\n"
+        '  "factor": a short phrase (2-5 words) naming the single key factor that explains the outcome — '
+        "use whatever wording fits the race; do not constrain yourself to a fixed vocabulary\n"
         '  "lesson_type": "continue" if CORRECT (this reasoning worked, keep it), '
         '"change" if MISSED (this reasoning failed, adjust it)\n'
         '  "lesson": one sentence — for CORRECT: what signal to keep trusting; '
@@ -99,8 +99,13 @@ async def reflect_batch(client, races: list[dict]) -> list[dict]:
 async def synthesise_lessons(client, reflections: list[dict], date_str: str) -> list[str]:
     """
     Synthesise durable lessons from all reflections.
-    Produces 3 CONTINUE + 3 CHANGE + 2 WATCH = 8 structured lessons
-    injected into every future analysis prompt.
+
+    Produces up to 8 lessons total, weighted by what actually emerged from the
+    day's results — no enforced split. Lesson types are CONTINUE (reasoning
+    that worked), CHANGE (reasoning that failed), and WATCH (emerging patterns
+    not yet ready to act on). On a sweep day this might be 6 CONTINUE / 1 CHANGE
+    / 1 WATCH; on a rough day it might be 0 / 6 / 2. The mix reflects the
+    races, not a quota.
     """
     continues = [r for r in reflections if r.get("lesson_type") == "continue"]
     changes = [r for r in reflections if r.get("lesson_type") == "change"]
@@ -115,13 +120,17 @@ async def synthesise_lessons(client, reflections: list[dict], date_str: str) -> 
         f"You are Secretariat synthesising what you learned on {date_str}.\n\n"
         f"REASONING THAT WORKED ({len(continues)} races):\n{_fmt(continues)}\n\n"
         f"REASONING THAT FAILED ({len(changes)} races):\n{_fmt(changes)}\n\n"
-        "Produce exactly 8 lessons I will carry into every future race I handicap:\n"
-        "- 3 labeled CONTINUE: patterns from correct picks to keep trusting\n"
-        "- 3 labeled CHANGE: specific adjustments to make based on failures\n"
-        "- 2 labeled WATCH: emerging patterns to monitor but not yet act on\n\n"
+        "Produce up to 8 lessons total that I will carry into every future race I handicap.\n"
+        "Lesson types — choose freely based on what actually emerged today, no enforced split:\n"
+        "- CONTINUE: a pattern from correct picks that's worth continuing to trust\n"
+        "- CHANGE:   a specific adjustment to make based on a failure\n"
+        "- WATCH:    an emerging pattern worth monitoring but not yet acting on\n\n"
+        "Only write a lesson when something genuine emerged — do not invent lessons "
+        "to fill a quota. A quiet day might warrant 2-3 lessons; a noisy day might "
+        "warrant 8. Skew the mix toward whichever type the day actually produced.\n\n"
         "Each lesson must be specific, actionable, and written in first person.\n"
         "Format each as: 'CONTINUE: When...', 'CHANGE: When...', 'WATCH: When...'\n\n"
-        'Return ONLY a JSON array of 8 strings.'
+        'Return ONLY a JSON array of strings (between 1 and 8 items).'
     )
 
     try:
