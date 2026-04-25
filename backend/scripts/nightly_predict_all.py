@@ -25,8 +25,10 @@ load_dotenv()
 
 
 def _format_bucket_hint(track: str, race_type: str, surface: str, cal) -> str | None:
-    """Build a short calibration block telling the model how it has historically
-    performed in this exact bucket. Returns None if no usable calibration data.
+    """Build a short calibration block giving the model its own historical
+    top-pick win rate in this bucket. Stats only — no directive language —
+    so the model's pick stays authentic to its own analysis, with metacognition
+    rather than steering. Returns None if no usable calibration data.
 
     Most-specific data wins: (track, race_type) combo > track-only > type-only.
     A bucket needs at least 5 prior samples to be cited.
@@ -41,32 +43,22 @@ def _format_bucket_hint(track: str, race_type: str, surface: str, cal) -> str | 
     by_t = cal.win_rate_by_track or {}
     by_rt = cal.win_rate_by_type or {}
 
-    def _flag(wr: float) -> str:
-        delta = wr - baseline
-        if delta <= -0.08:
-            return "WEAK BUCKET — be cautious; widen contenders, prefer value over chalk"
-        if delta >= 0.08:
-            return "STRONG BUCKET — be decisive on the top pick"
-        return "near baseline"
-
-    parts = [f"Your overall 30-day win rate: {baseline:.0%}."]
+    parts = [f"Your top-pick win rate over the last 30 days: {baseline:.0%}."]
 
     combo = by_tt.get(f"{track}/{race_type}")
     if combo and combo.get("total", 0) >= 5:
         wr = combo["win_rate"]
-        parts.append(
-            f"At {track} / {race_type}: {combo['wins']}/{combo['total']} ({wr:.0%}) — {_flag(wr)}."
-        )
+        parts.append(f"At {track} / {race_type}: {combo['wins']}/{combo['total']} ({wr:.0%}).")
     else:
         # Fall back to broader signals when combo sample is too thin
         t_data = by_t.get(track)
         if t_data and t_data.get("total", 0) >= 8:
             wr = t_data["win_rate"]
-            parts.append(f"At {track} overall: {t_data['wins']}/{t_data['total']} ({wr:.0%}) — {_flag(wr)}.")
+            parts.append(f"At {track} overall: {t_data['wins']}/{t_data['total']} ({wr:.0%}).")
         rt_data = by_rt.get(race_type)
         if rt_data and rt_data.get("total", 0) >= 8:
             wr = rt_data["win_rate"]
-            parts.append(f"On {race_type}: {rt_data['wins']}/{rt_data['total']} ({wr:.0%}) — {_flag(wr)}.")
+            parts.append(f"On {race_type}: {rt_data['wins']}/{rt_data['total']} ({wr:.0%}).")
 
     return " ".join(parts) if len(parts) > 1 else None
 
