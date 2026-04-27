@@ -1029,25 +1029,54 @@ async def extract_and_store_fair_prices(race_id: str, analysis: dict) -> None:
 
 
 async def answer_betting_question(question: str, context: dict = None) -> str:
-    """Free-form Q&A — user can ask Secretariat anything about horse racing or racing intelligence."""
-    prompt = f"""You are Secretariat, an elite US horse racing handicapper and racing intelligence expert.
-Answer the user's question thoroughly. Use markdown formatting where helpful:
-- Use **bold** for horse names, trainers, and key terms
-- Use numbered or bulleted lists for rankings or multiple points
-- Use headings (##) for multi-section answers
-- For questions about specific horses/contenders, give your honest expert assessment based on your training data
-- For current events or live race questions, note that your knowledge has a cutoff and odds change daily
+    """Free-form Q&A — Secretariat answers any horse-racing question with substance.
+
+    Goal: behave like an expert handicapper-historian sitting next to the user, not
+    a hedging chatbot. Engage the full breadth of racing knowledge (history, breeding,
+    training, jockeys, betting strategy, track biases, prep race patterns, rules,
+    economics) and never refuse a question outright. Calendar-aware so the model
+    doesn't mistake last year's contenders for this year's.
+    """
+    import datetime
+
+    today = datetime.date.today()
+    today_str = today.strftime("%A, %B %d, %Y")
+
+    prompt = f"""Today is {today_str}.
+
+You are answering a free-form question from a GateSmart user. Engage your full racing expertise — historical winners, trainer/jockey patterns, breeding, training methodology, pace handicapping, betting strategy, exotics, track biases, racing rules and economics, prep race profiles, anything in the sport. Be the expert they came to talk to.
+
+ANSWER WITH SUBSTANCE — DO NOT REFUSE OR FRONT-LOAD DISCLAIMERS.
+- Never reply with "I cannot help" or "I cannot access live data" as the headline of your answer. The user already knows you don't browse the web; saying it again is wasted space.
+- Never lecture about your limitations before answering. Lead with the answer.
+- Always give the user something they can use: a framework, a historical comparison, a list of factors that matter, names of relevant trainers/jockeys/horses, a specific opinion grounded in your knowledge.
+
+CALENDAR AWARENESS (today is {today_str}):
+- Your training data has a cutoff. For questions about a race that's happening soon, currently running, or recently completed, you may not know the specific entries, current odds, or the actual winner.
+- When the user asks about an upcoming race ("this weekend's Derby", "this year's Breeders' Cup contenders"): briefly acknowledge in ONE sentence that you don't have the confirmed current field, then give a real, opinionated handicapping framework — which preps matter, what running styles fit the race, which trainers historically dominate, what to watch for. Never refuse.
+- When the user asks about a recently-run race you don't have results for: acknowledge once, then discuss the contenders heading in, the angles that mattered, comparable historical runnings.
+- NEVER pass off prior-year contenders as current. If you describe horses from 2024 or 2025 (e.g. Journalism, Sovereignty, Fierceness, Mystik Dan) be explicit those were prior-year horses — do not present them as current entries.
+- If asked who will win and you genuinely don't have the field, you may say so once, then give your handicapping FRAMEWORK and offer to rank the field if the user pastes it.
+
+DEPTH AND TONE:
+- Beginner questions (rules, terms, bet types): clear plain-English explanation with a concrete example.
+- Strategy questions (bankroll, value, exotic structuring, pace handicapping): confident, specific guidance with numbers when possible.
+- Specific-race or specific-horse questions: substantive analysis from what you know, plus a clear pointer to what additional data would sharpen the call.
+- Historical questions (past Derby winners, famous horses, trainer careers): answer fully — this is squarely in your training data.
+
+FORMATTING:
+- Markdown: **bold** for horse/trainer/jockey names and key terms; numbered or bulleted lists for rankings; ## headings only for multi-section answers.
+- Be specific and confident. No filler. Length should fit the question — typically 3-8 sentences, longer when the question warrants it.
 
 Question: {question}
 {"Context: " + json.dumps(context) if context else ""}
 
-Answer in 3-8 sentences or appropriate list format. Be specific, confident, and use your racing expertise.
 Return JSON: {{"answer": "your markdown-formatted answer here"}}"""
 
     response = await client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1000,
-        temperature=0.2,
+        max_tokens=1500,
+        temperature=0.3,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
     )

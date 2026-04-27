@@ -230,7 +230,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
   const VulnerableFavSection = () => analysis.vulnerable_favorite ? (
     <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-red-bright)', marginBottom: 4 }}>
-        {effectiveViewMode === 'beginner' ? 'The favorite looks beatable' : 'Vulnerable Favorite'}
+        {effectiveViewMode === 'beginner' ? 'The favorite looks beatable' : 'Beatable Favorite'}
       </div>
       <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>{analysis.vulnerable_favorite}</div>
       {effectiveViewMode === 'beginner' && (

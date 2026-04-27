@@ -138,7 +138,7 @@ function Message({ msg }) {
         }}>
           {isError
             ? <Icon name="warning" size={14} color="var(--accent-red-bright)" />
-            : <Icon name="horse" size={14} color="var(--accent-gold)" />}
+            : <Icon name="robot" size={16} color="var(--accent-gold)" />}
         </div>
       )}
       <div style={{
@@ -269,7 +269,7 @@ export default function AdvisorPage() {
               background: 'rgba(201,162,39,0.15)',
               border: '1px solid var(--border-gold)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}><Icon name="horse" size={14} color="var(--accent-gold)" /></div>
+            }}><Icon name="robot" size={16} color="var(--accent-gold)" /></div>
             <div style={{
               padding: '10px 14px',
               borderRadius: '16px 16px 16px 4px',
