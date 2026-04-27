@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getRacesToday, getRacesByDate, getDailyAccuracy } from '../utils/api';
 import { RaceCard, RaceCardSkeleton } from '../components/races/RaceCard';
@@ -118,6 +118,10 @@ export default function HomePage() {
       selectedDay === 'today'
         ? getRacesToday('usa')
         : getRacesByDate('tomorrow', 'usa'),
+    // Keep last-good data visible while refetching or during a transient
+    // failure, so a brief Railway redeploy or network blip doesn't blank
+    // the screen with a scary error.
+    placeholderData: keepPreviousData,
   });
 
   const isRefreshing = isFetching;
@@ -239,7 +243,9 @@ export default function HomePage() {
             fontSize: 13,
             marginBottom: 16,
           }}>
-            Failed to load races. Check your connection and try again.
+            {races.length > 0
+              ? "Couldn't refresh — showing last update. Tap refresh to try again."
+              : 'Failed to load races. Check your connection and try again.'}
           </div>
         )}
 
