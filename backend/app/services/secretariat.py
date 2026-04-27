@@ -1031,38 +1031,33 @@ async def extract_and_store_fair_prices(race_id: str, analysis: dict) -> None:
 async def answer_betting_question(question: str, context: dict = None) -> str:
     """Free-form Q&A — Secretariat answers any horse-racing question with substance.
 
-    Goal: behave like an expert handicapper-historian sitting next to the user, not
-    a hedging chatbot. Engage the full breadth of racing knowledge (history, breeding,
-    training, jockeys, betting strategy, track biases, prep race patterns, rules,
-    economics) and never refuse a question outright. Calendar-aware so the model
-    doesn't mistake last year's contenders for this year's.
+    Uses Anthropic's native web search tool so Secretariat can pull current race
+    fields, odds, prep results, and breaking racing news in real time. Falls back
+    on its trained knowledge for evergreen topics (history, breeding, strategy,
+    handicapping principles).
     """
     import datetime
 
-    today = datetime.date.today()
-    today_str = today.strftime("%A, %B %d, %Y")
+    today_str = datetime.date.today().strftime("%A, %B %d, %Y")
 
     prompt = f"""Today is {today_str}.
 
-You are answering a free-form question from a GateSmart user. Engage your full racing expertise — historical winners, trainer/jockey patterns, breeding, training methodology, pace handicapping, betting strategy, exotics, track biases, racing rules and economics, prep race profiles, anything in the sport. Be the expert they came to talk to.
+You are answering a free-form question from a GateSmart user. Engage your full racing expertise — historical winners, trainer/jockey patterns, breeding, training methodology, pace handicapping, betting strategy, exotics, track biases, racing rules and economics, prep race profiles, anything in the sport.
 
-ANSWER WITH SUBSTANCE — DO NOT REFUSE OR FRONT-LOAD DISCLAIMERS.
-- Never reply with "I cannot help" or "I cannot access live data" as the headline of your answer. The user already knows you don't browse the web; saying it again is wasted space.
-- Never lecture about your limitations before answering. Lead with the answer.
-- Always give the user something they can use: a framework, a historical comparison, a list of factors that matter, names of relevant trainers/jockeys/horses, a specific opinion grounded in your knowledge.
+YOU HAVE WEB SEARCH. Use it whenever the answer depends on current state of the world: who's entered in a race this week, current morning line odds, recent prep race results, today's scratches, jockey changes, trainer news, last week's stakes results, current Derby/Breeders' Cup points standings, anything time-sensitive. Prefer authoritative racing sources (kentuckyderby.com, equibase.com, bloodhorse.com, drf.com, paulickreport.com, thoroughbreddailynews.com, ntra.com, official track sites). Synthesize what you find — don't just dump a link.
 
-CALENDAR AWARENESS (today is {today_str}):
-- Your training data has a cutoff. For questions about a race that's happening soon, currently running, or recently completed, you may not know the specific entries, current odds, or the actual winner.
-- When the user asks about an upcoming race ("this weekend's Derby", "this year's Breeders' Cup contenders"): briefly acknowledge in ONE sentence that you don't have the confirmed current field, then give a real, opinionated handicapping framework — which preps matter, what running styles fit the race, which trainers historically dominate, what to watch for. Never refuse.
-- When the user asks about a recently-run race you don't have results for: acknowledge once, then discuss the contenders heading in, the angles that mattered, comparable historical runnings.
-- NEVER pass off prior-year contenders as current. If you describe horses from 2024 or 2025 (e.g. Journalism, Sovereignty, Fierceness, Mystik Dan) be explicit those were prior-year horses — do not present them as current entries.
-- If asked who will win and you genuinely don't have the field, you may say so once, then give your handicapping FRAMEWORK and offer to rank the field if the user pastes it.
+DO NOT search for evergreen topics already in your training (historical race winners, how a Beyer figure works, what an exacta is, basic handicapping theory, famous trainers' career arcs). Save search budget for current info.
+
+ANSWER WITH SUBSTANCE.
+- Never lead with "I cannot help" or hedge-walls about limitations. Lead with the answer.
+- Always give the user something usable: a real opinion, a ranked list, a specific angle, a framework, a historical comparable.
+- When you've searched, weave the current facts (entries, odds, results) directly into your handicapping voice — be the expert who just glanced at the program, not a search-result paraphraser.
 
 DEPTH AND TONE:
-- Beginner questions (rules, terms, bet types): clear plain-English explanation with a concrete example.
-- Strategy questions (bankroll, value, exotic structuring, pace handicapping): confident, specific guidance with numbers when possible.
-- Specific-race or specific-horse questions: substantive analysis from what you know, plus a clear pointer to what additional data would sharpen the call.
-- Historical questions (past Derby winners, famous horses, trainer careers): answer fully — this is squarely in your training data.
+- Beginner questions (rules, terms, bet types): clear plain-English with a concrete example.
+- Strategy questions (bankroll, value, exotic structuring, pace handicapping): confident, specific guidance with numbers.
+- Specific upcoming/recent race questions: search first, then deliver an opinionated read using the actual field/odds/results.
+- Historical and evergreen questions: answer from training — no search needed.
 
 FORMATTING:
 - Markdown: **bold** for horse/trainer/jockey names and key terms; numbered or bulleted lists for rankings; ## headings only for multi-section answers.
@@ -1071,18 +1066,39 @@ FORMATTING:
 Question: {question}
 {"Context: " + json.dumps(context) if context else ""}
 
-Return JSON: {{"answer": "your markdown-formatted answer here"}}"""
+Reply with the markdown answer directly — no JSON wrapper, no preface."""
 
-    response = await client.messages.create(
+    create_args = dict(
         model="claude-sonnet-4-6",
-        max_tokens=1500,
+        max_tokens=2000,
         temperature=0.3,
         system=SECRETARIAT_SYSTEM,
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role": "user", "content": prompt}],
     )
 
-    parsed = _parse_json(response.content[0].text)
-    return parsed.get("answer", "") if isinstance(parsed, dict) else str(parsed)
+    try:
+        response = await client.messages.create(
+            **create_args,
+            tools=[{
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 3,
+            }],
+        )
+    except anthropic.APIError:
+        # If web search is unavailable for any reason (SDK mismatch, region,
+        # rate limit, billing), still answer the question from training.
+        response = await client.messages.create(**create_args)
+
+    # Web search interleaves server_tool_use / web_search_tool_result blocks
+    # between text blocks. Earlier text blocks are typically narration ("Let me
+    # search for ..."); the final answer is in the last text block.
+    text_blocks = [
+        getattr(b, "text", "")
+        for b in response.content
+        if getattr(b, "type", None) == "text" and getattr(b, "text", "")
+    ]
+    return text_blocks[-1].strip() if text_blocks else ""
 
 
 # ── Prediction Storage ────────────────────────────────────────────────────────

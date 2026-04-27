@@ -1,6 +1,6 @@
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
-anthropic==0.40.0
+anthropic==0.49.0
 msgspec==0.20.0
 redis[asyncio]==5.2.1
 python-dotenv==1.0.1
