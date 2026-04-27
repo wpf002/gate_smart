@@ -1042,31 +1042,50 @@ async def answer_betting_question(question: str, context: dict = None) -> str:
 
     prompt = f"""Today is {today_str}.
 
-You are answering a free-form question from a GateSmart user. Engage your full racing expertise — historical winners, trainer/jockey patterns, breeding, training methodology, pace handicapping, betting strategy, exotics, track biases, racing rules and economics, prep race profiles, anything in the sport.
+You are Secretariat answering a question from a GateSmart user. You are an elite handicapper, racing historian, and betting strategist. Engage your full expertise — historical winners, trainer/jockey patterns, breeding, training methodology, pace handicapping, betting strategy, exotics, track biases, racing rules and economics, prep race profiles, anything in the sport.
 
-YOU HAVE WEB SEARCH. Use it whenever the answer depends on current state of the world: who's entered in a race this week, current morning line odds, recent prep race results, today's scratches, jockey changes, trainer news, last week's stakes results, current Derby/Breeders' Cup points standings, anything time-sensitive. Prefer authoritative racing sources (kentuckyderby.com, equibase.com, bloodhorse.com, drf.com, paulickreport.com, thoroughbreddailynews.com, ntra.com, official track sites). Synthesize what you find — don't just dump a link.
+YOU HAVE WEB SEARCH AND YOU ARE EXPECTED TO USE IT.
 
-DO NOT search for evergreen topics already in your training (historical race winners, how a Beyer figure works, what an exacta is, basic handicapping theory, famous trainers' career arcs). Save search budget for current info.
+You MUST search the web before answering when the question is about ANY of the following:
+- Who will win / who's the favorite / who do you like in a specific upcoming race (Derby, Preakness, Belmont, Breeders' Cup, any stakes race, any race "this weekend" / "tomorrow" / "today")
+- Who is entered, drawn, scratched, or running in a current race or meet
+- Current morning line odds, current betting odds, current points standings
+- Recent prep race results, last week's stakes, this season's leaderboards
+- Trainer/jockey news, equipment changes, workout reports, breaking racing news
+- Anything that depends on the current state of the racing world
 
-ANSWER WITH SUBSTANCE.
-- Never lead with "I cannot help" or hedge-walls about limitations. Lead with the answer.
-- Always give the user something usable: a real opinion, a ranked list, a specific angle, a framework, a historical comparable.
-- When you've searched, weave the current facts (entries, odds, results) directly into your handicapping voice — be the expert who just glanced at the program, not a search-result paraphraser.
+When you search, prefer authoritative racing sources: kentuckyderby.com, equibase.com, bloodhorse.com, drf.com (Daily Racing Form), paulickreport.com, thoroughbreddailynews.com, ntra.com, official track sites. Synthesize what you find into a handicapping opinion — don't just paraphrase a webpage.
+
+DO NOT search for evergreen topics already in your training (what a Beyer figure is, what an exacta is, who won the 1973 Belmont, basic handicapping theory). Answer those from knowledge.
+
+REQUIRED OUTPUT FOR "WHO WILL WIN" / RACE-PREDICTION QUESTIONS:
+1. Search the current field, current morning line, recent prep results.
+2. Open with your TOP PICK named explicitly. Bold it.
+3. Give a ranked top 3-4 with a one-sentence reason for each (form, pace fit, post position, trainer pattern, current figure).
+4. Optionally: a value angle, a longshot, a horse to fade.
+5. Always specific horse names. Never "the favorite" without naming it.
+
+NEVER ACCEPTABLE:
+- One-line throwaway answers like "Don't put all your chips on one horse" or "It's hard to say."
+- Refusing to pick. The user is asking for your opinion — give one.
+- Generic gambling platitudes instead of a real handicap.
+- Returning fewer than 4 sentences for a substantive question.
+- Answers that don't name specific horses for race-prediction questions.
 
 DEPTH AND TONE:
-- Beginner questions (rules, terms, bet types): clear plain-English with a concrete example.
-- Strategy questions (bankroll, value, exotic structuring, pace handicapping): confident, specific guidance with numbers.
-- Specific upcoming/recent race questions: search first, then deliver an opinionated read using the actual field/odds/results.
-- Historical and evergreen questions: answer from training — no search needed.
+- Beginner questions (rules, terms, bet types): plain English, concrete example.
+- Strategy questions (bankroll, value, exotic structuring): confident, specific, numerical when possible.
+- Specific race / horse questions: search first, then deliver a ranked, opinionated read.
+- Historical / evergreen: answer from training, with dates and details.
 
 FORMATTING:
 - Markdown: **bold** for horse/trainer/jockey names and key terms; numbered or bulleted lists for rankings; ## headings only for multi-section answers.
-- Be specific and confident. No filler. Length should fit the question — typically 3-8 sentences, longer when the question warrants it.
+- Length should fit the question — but for any substantive question, at minimum 4 sentences and a clear, named pick or stance.
 
 Question: {question}
 {"Context: " + json.dumps(context) if context else ""}
 
-Reply with the markdown answer directly — no JSON wrapper, no preface."""
+Reply with the markdown answer directly — no JSON wrapper, no preface, no meta-commentary about your tools."""
 
     create_args = dict(
         model="claude-sonnet-4-6",
@@ -1076,29 +1095,69 @@ Reply with the markdown answer directly — no JSON wrapper, no preface."""
         messages=[{"role": "user", "content": prompt}],
     )
 
+    web_search_tool = [{
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": 3,
+    }]
+
     try:
-        response = await client.messages.create(
-            **create_args,
-            tools=[{
-                "type": "web_search_20250305",
-                "name": "web_search",
-                "max_uses": 3,
-            }],
-        )
+        response = await client.messages.create(**create_args, tools=web_search_tool)
     except anthropic.APIError:
-        # If web search is unavailable for any reason (SDK mismatch, region,
-        # rate limit, billing), still answer the question from training.
+        # If web search is unavailable (SDK mismatch, region, rate limit, billing),
+        # still answer the question from training.
         response = await client.messages.create(**create_args)
 
-    # Web search interleaves server_tool_use / web_search_tool_result blocks
-    # between text blocks. Earlier text blocks are typically narration ("Let me
-    # search for ..."); the final answer is in the last text block.
-    text_blocks = [
-        getattr(b, "text", "")
+    answer = _extract_text(response)
+
+    # Defensive retry: if the model returned a one-liner non-answer to a
+    # substantive question, force it to use the search tool and try again.
+    if _is_throwaway(answer) and _looks_substantive(question):
+        try:
+            response = await client.messages.create(
+                **create_args,
+                tools=web_search_tool,
+                tool_choice={"type": "tool", "name": "web_search"},
+            )
+            answer = _extract_text(response) or answer
+        except anthropic.APIError:
+            pass
+
+    return answer
+
+
+def _extract_text(response) -> str:
+    """Pull all text blocks out of a messages response and join them.
+
+    Web search interleaves server_tool_use / web_search_tool_result blocks
+    between text blocks. Joining all text blocks captures both the model's
+    reasoning narration and the final synthesized answer, so we never lose
+    content to a too-narrow "last block only" rule.
+    """
+    parts = [
+        getattr(b, "text", "").strip()
         for b in response.content
         if getattr(b, "type", None) == "text" and getattr(b, "text", "")
     ]
-    return text_blocks[-1].strip() if text_blocks else ""
+    return "\n\n".join(p for p in parts if p).strip()
+
+
+def _is_throwaway(answer: str) -> bool:
+    """Heuristic: did the model bail out with a non-answer?"""
+    a = (answer or "").strip()
+    return len(a) < 80 or a.lower().startswith(("don't put", "it's hard", "i can't", "i cannot"))
+
+
+def _looks_substantive(question: str) -> bool:
+    """Heuristic: does the question deserve a real handicap, not a one-liner?"""
+    q = (question or "").lower()
+    triggers = (
+        "who will", "who do you", "who's going to", "who is going to",
+        "who's the favorite", "what's the favorite", "best bet",
+        "your pick", "your top pick", "win the", "this weekend",
+        "tomorrow", "today", "current odds", "morning line",
+    )
+    return any(t in q for t in triggers)
 
 
 # ── Prediction Storage ────────────────────────────────────────────────────────
