@@ -1372,6 +1372,8 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
         )
 
     # Group by track, then race order within each track, so the digest reads track-by-track
+    from itertools import groupby
+
     predictions = sorted(
         predictions,
         key=lambda p: (
@@ -1380,8 +1382,28 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
             p.race_name or "",
         ),
     )
-    text_table = "\n".join(_row_text(p) for p in predictions)
-    html_rows = "\n".join(_row_html(p) for p in predictions)
+
+    track_groups = [(track, list(items)) for track, items in groupby(predictions, key=lambda p: p.track_code or "?")]
+
+    text_chunks: list[str] = []
+    html_chunks: list[str] = []
+    for track, items in track_groups:
+        track_wins = sum(1 for p in items if p.top_pick_correct)
+        header = f"{track} — {track_wins}/{len(items)}"
+        if text_chunks:
+            text_chunks.append("")  # blank line between track sections
+        text_chunks.append(f"── {header} ──")
+        text_chunks.extend(_row_text(p) for p in items)
+
+        html_chunks.append(
+            f'<tr style="background:#c8a84b;color:#1a1a1a">'
+            f'<td colspan="6" style="padding:8px;font-weight:bold;font-size:14px">{header}</td>'
+            f'</tr>'
+        )
+        html_chunks.extend(_row_html(p) for p in items)
+
+    text_table = "\n".join(text_chunks)
+    html_rows = "\n".join(html_chunks)
     html_table = (
         '<table style="border-collapse:collapse;width:100%;font-size:13px">'
         '<tr style="background:#222;color:#fff">'
