@@ -43,6 +43,54 @@ class LargeFieldError(Exception):
     """Raised when a race has too many runners for full analysis."""
 
 
+# Track-code → full name lookup for the daily digest narrative.
+# Without this, the LLM hallucinates names from codes (e.g. FP → "Finger Lakes Park").
+# Codes not in this dict are kept as-is in the prompt; the model is instructed not to
+# invent full names for unknown codes.
+TRACK_NAMES: dict[str, str] = {
+    "AQU": "Aqueduct",
+    "BEL": "Belmont Park",
+    "BTP": "Belterra Park",
+    "CD":  "Churchill Downs",
+    "CT":  "Charles Town",
+    "DED": "Delta Downs",
+    "DMR": "Del Mar",
+    "ELP": "Ellis Park",
+    "EVD": "Evangeline Downs",
+    "FG":  "Fair Grounds",
+    "FL":  "Finger Lakes",
+    "FP":  "Fonner Park",
+    "GG":  "Golden Gate Fields",
+    "GP":  "Gulfstream Park",
+    "HAW": "Hawthorne",
+    "HST": "Hastings",
+    "IND": "Indiana Grand",
+    "KD":  "Kentucky Downs",
+    "KEE": "Keeneland",
+    "LA":  "Los Alamitos",
+    "LRC": "Los Alamitos",
+    "LRL": "Laurel Park",
+    "LS":  "Lone Star Park",
+    "MNR": "Mountaineer",
+    "MTH": "Monmouth Park",
+    "MVR": "Mahoning Valley",
+    "OP":  "Oaklawn Park",
+    "PEN": "Penn National",
+    "PID": "Presque Isle Downs",
+    "PIM": "Pimlico",
+    "PRX": "Parx Racing",
+    "RP":  "Remington Park",
+    "SA":  "Santa Anita",
+    "SAR": "Saratoga",
+    "TAM": "Tampa Bay Downs",
+    "TDN": "Thistledown",
+    "TP":  "Turfway Park",
+    "TUP": "Turf Paradise",
+    "WO":  "Woodbine",
+    "WRD": "Will Rogers Downs",
+}
+
+
 SECRETARIAT_SYSTEM = """You are Secretariat, an elite horse racing handicapper and betting strategist. Your primary expertise is North American thoroughbred racing — US tracks, US trainers, US jockeys, and US betting markets. You also have strong working knowledge of UK, Irish, and international racing.
 
 Your job inside GateSmart is to analyze races and give users clear, honest, actionable betting intelligence.
@@ -1551,6 +1599,17 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
         for p in misses[:20]
     ) or "none"
 
+    # Track-code reference for today's tracks — prevents the model from hallucinating
+    # full names from codes (e.g. FP → "Finger Lakes Park"). Only includes codes
+    # that actually appeared in today's races and have a known mapping.
+    todays_codes = sorted({(p.track_code or "").upper() for p in predictions if p.track_code})
+    track_ref_lines = [f"  {c} = {TRACK_NAMES[c]}" for c in todays_codes if c in TRACK_NAMES]
+    track_ref_block = (
+        "TRACK CODE REFERENCE (use these full names if you mention a track by name):\n"
+        + "\n".join(track_ref_lines)
+        + "\n"
+    ) if track_ref_lines else ""
+
     # Cross-day trends — grounds "How I'm Evolving" in actual category movement
     trends = await _compute_category_trends(report.report_date, lookback_days=7)
     trends_block = trends.get("block", "")
@@ -1581,8 +1640,11 @@ By surface (wins/total): {_fmt_bucket(by_surface)}
 
 Sample correct picks: {hit_sample}
 Sample misses: {miss_sample}
-{(trends_block + chr(10)) if trends_block else ""}{stored_lessons_block}
+{track_ref_block}{(trends_block + chr(10)) if trends_block else ""}{stored_lessons_block}
 Write three analysis sections for Secretariat's nightly digest. Be specific and honest.
+When you reference a track, use ONLY the code (e.g. "FL", "FP", "CD") OR the exact full name from
+the TRACK CODE REFERENCE above. NEVER invent or guess a full track name from a code — different
+codes can look similar (FP is Fonner Park, FL is Finger Lakes; do not confuse them).
 When the trend data above shows persistent weak spots or regressions, you MUST name them and
 treat single-day improvements as provisional until they repeat. In "how_im_evolving", only
 claim a prior lesson is working if a category it targeted has actually improved in the trend data.
