@@ -121,6 +121,7 @@ US HANDICAPPING FACTORS — weigh each factor based on what the race type and av
 
 3. PACE FIT & RUNNING STYLE:
 - Does the horse's style (front-runner, stalker, closer) match the expected pace scenario? Lone speed with no pressure is a major advantage.
+- Pace projections must be reasoned in conjunction with FIELD SIZE (see factor 8) — the same running style plays differently in a 5-horse field versus a 12-horse field.
 
 4. TRAINER/JOCKEY CONNECTIONS — weight these appropriately for the race type:
 - In maiden races, first-time starters, or horses returning from long layoffs: connections are often the PRIMARY factor since speed figures are thin or absent.
@@ -136,6 +137,12 @@ US HANDICAPPING FACTORS — weigh each factor based on what the race type and av
 
 7. EQUIPMENT CHANGES:
 - Blinkers on for the first time often produces improvement. Note any changes.
+
+8. FIELD SIZE & RACE SHAPE — a critical structural factor that changes how every other factor plays out:
+- Small fields (4-6 runners): pace is predictable, lone speed is a major edge, tactical horses with inside posts get a boost, traffic risk is minimal, prices on logical horses are short, exotics payouts are thin.
+- Mid fields (7-9 runners): standard handicapping. Post position bias matters more at certain tracks/distances (e.g. one-turn miles at Aqueduct, sprints at Saratoga).
+- Large fields (10+ runners): pace pressure typically intensifies — front-runners face more challenges and are more likely to compromise each other. Traffic risk rises sharply for deep closers without tactical speed or a clear path. Post position bias is amplified, especially in turf routes and dirt sprints. Longshot value increases (more horses = more chances for a price horse to hit). Exotics become more expensive to cover but pay materially more when hit.
+- Always state the field size explicitly in the pace scenario, and adjust your contender ranking and exotics strategy accordingly. Do not analyze running style or pace shape in a vacuum — anchor it to how many bodies are in the gate.
 
 Always include the program number (#) with every horse name in predictions and recommendations. Program numbers are how bettors identify horses at the teller window.
 
@@ -422,7 +429,7 @@ def _slim_race_for_prompt(race_data: dict) -> dict:
         "going_winner", "headgear", "headgear_first_time",
     }
     _RACE_DROP = {"raw", "big_race", "type_of_race", "pattern",
-                  "age_band", "sex_restriction", "field_size"}
+                  "age_band", "sex_restriction"}
     runners = race_data.get("runners", [])
     large_field = len(runners) > 10
     drop_set = _RUNNER_DROP_LARGE if large_field else _RUNNER_DROP
@@ -487,7 +494,7 @@ Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else 'unspecified'}
 Return this JSON exactly:
 {{
   "race_summary": "one sentence",
-  "pace_scenario": "one sentence",
+  "pace_scenario": "one sentence — must state the field size (N runners) and how that shape affects the pace projection",
   "vulnerable_favorite": "horse name or null",
   "runners": [
     {{
@@ -618,7 +625,7 @@ Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else 'unspecified'}
 Return this JSON exactly:
 {{
   "race_summary": "one sentence",
-  "pace_scenario": "one sentence",
+  "pace_scenario": "one sentence — must state the field size (N runners) and how that shape affects the pace projection",
   "vulnerable_favorite": "horse name or null",
   "runners": [
     {{
