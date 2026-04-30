@@ -65,7 +65,7 @@ describe('HorseRow', () => {
     // Click the row to expand it
     fireEvent.click(screen.getByText('Frankel'));
     // Then click the profile link inside the expanded section
-    fireEvent.click(screen.getByText('View horse profile →'));
+    fireEvent.click(screen.getByText('View Horse Profile →'));
     expect(mockNavigate).toHaveBeenCalledWith('/horse/h1');
   });
 

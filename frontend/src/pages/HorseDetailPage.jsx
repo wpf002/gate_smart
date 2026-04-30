@@ -414,21 +414,6 @@ export default function HorseDetailPage() {
               </div>
             )}
 
-            {/* Key facts */}
-            {explanation.key_stats?.length > 0 && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  Key Facts
-                </div>
-                {explanation.key_stats.map((s, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 5 }}>
-                    <span style={{ color: 'var(--accent-gold)', flexShrink: 0 }}>•</span>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{s}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* Beginner tip */}
             {explanation.beginner_explanation && (
               <div style={{

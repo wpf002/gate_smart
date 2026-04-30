@@ -357,14 +357,6 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             {isBeginner && isTopPick && !isScratched && (
               <span style={{ fontSize: 14, flexShrink: 0 }} title="Secretariat's top pick">⭐</span>
             )}
-            {/* Horse profile link — always visible */}
-            <button
-              onClick={(e) => { e.stopPropagation(); navigate(`/horse/${horse.horse_id}`); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center' }}
-              title="View horse profile"
-            >
-              <Icon name="search" size={13} color="var(--text-muted)" />
-            </button>
             {isScratched && (
               <span className="badge badge-muted" style={{ flexShrink: 0, fontSize: 10 }}>Scratched</span>
             )}
@@ -517,7 +509,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
 
           <RecentForm horse={horse} region={region} maxRuns={isAdvanced ? 3 : 5} />
 
-          {/* View horse profile link */}
+          {/* View Horse Profile link */}
           <button
             onClick={(e) => { e.stopPropagation(); navigate(`/horse/${horse.horse_id}`); }}
             style={{
@@ -532,7 +524,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
               textDecoration: 'underline',
             }}
           >
-            View horse profile →
+            View Horse Profile →
           </button>
         </div>
       )}

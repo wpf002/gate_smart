@@ -226,42 +226,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     </div>
   ) : null;
 
-  // Vulnerable favorite
-  const VulnerableFavSection = () => analysis.vulnerable_favorite ? (
-    <div style={{ background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-red-bright)', marginBottom: 4 }}>
-        {effectiveViewMode === 'beginner' ? 'The favorite looks beatable' : 'Beatable Favorite'}
-      </div>
-      <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>{analysis.vulnerable_favorite}</div>
-      {effectiveViewMode === 'beginner' && (
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.5 }}>
-          The horse most people are betting on may not win today — consider looking at other runners.
-        </div>
-      )}
-    </div>
-  ) : null;
-
-  // Longshot alert
-  const LongshotSection = () => analysis.longshot_alert?.horse_name ? (
-    <div style={{ background: 'rgba(42,122,75,0.1)', border: '1px solid rgba(42,122,75,0.25)', borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-green-bright)' }}>
-          {effectiveViewMode === 'beginner' ? 'Surprise Pick' : 'Longshot Alert'}
-        </span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-gold)' }}>{analysis.longshot_alert.odds}</span>
-        <span style={{ fontSize: 13, fontWeight: 700 }}>
-          {analysis.longshot_alert.number ? `#${analysis.longshot_alert.number} ` : ''}{analysis.longshot_alert.horse_name}
-        </span>
-      </div>
-      <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>{analysis.longshot_alert.reason}</div>
-      {effectiveViewMode === 'beginner' && (
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.5 }}>
-          A "longshot" is a horse with high odds — not many people are betting on it, but if it wins, the payout is much bigger than the favorite.
-        </div>
-      )}
-    </div>
-  ) : null;
-
   // Predicted finish order
   const PredictedFinishSection = () => analysis.predicted_finish ? (
     <div style={{ marginBottom: 16 }}>
@@ -540,8 +504,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           {techExpanded && (
             <div style={{ marginTop: 8, padding: '12px', background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
               <PaceSection />
-              <VulnerableFavSection />
-              <LongshotSection />
               <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
                 {analysis.overall_summary}
               </p>
@@ -562,8 +524,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     <div style={panelStyle}>
       <PanelHeader />
       <PaceSection />
-      <VulnerableFavSection />
-      <LongshotSection />
       <PredictedFinishSection />
       <BetRecsSection />
       <LegacyBetRecsSection />
