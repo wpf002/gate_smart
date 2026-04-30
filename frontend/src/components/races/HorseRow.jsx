@@ -270,11 +270,6 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
   const scoreClass =
     score >= 70 ? 'score-high' : score >= 40 ? 'score-med' : score != null ? 'score-low' : null;
 
-  // Top pick for beginner gold star indicator
-  const isTopPick = analysis?.runners?.length > 0 &&
-    score != null &&
-    score === Math.max(...analysis.runners.map(r => r.contender_score || 0));
-
   const summaryText = isBeginner
     ? (analysisData?.summary_beginner || analysisData?.summary)
     : analysisData?.summary;
@@ -353,10 +348,6 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             }}>
               {horse.horse_name}
             </div>
-            {/* Beginner: gold star for top pick */}
-            {isBeginner && isTopPick && !isScratched && (
-              <span style={{ fontSize: 14, flexShrink: 0 }} title="Secretariat's top pick">⭐</span>
-            )}
             {isScratched && (
               <span className="badge badge-muted" style={{ flexShrink: 0, fontSize: 10 }}>Scratched</span>
             )}
