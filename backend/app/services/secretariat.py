@@ -1506,6 +1506,10 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
     win_pct = f"{len(hits)/total:.1%}" if total else "0.0%"
     itm_list = [p for p in predictions if p.in_the_money]
     itm_pct = f"{len(itm_list)/total:.1%}" if total else "0.0%"
+    place_hits = [p for p in predictions if getattr(p, "place_pick_correct", False)]
+    show_hits = [p for p in predictions if getattr(p, "show_pick_correct", False)]
+    place_pct = f"{len(place_hits)/total:.1%}" if total else "0.0%"
+    show_pct = f"{len(show_hits)/total:.1%}" if total else "0.0%"
 
     # ── Build complete results table in Python (every race, no LLM needed) ──
     def _row_text(p):
@@ -1546,7 +1550,7 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
 
     text_chunks: list[str] = []
     html_chunks: list[str] = []
-    for track, items in track_groups:
+    for idx, (track, items) in enumerate(track_groups):
         track_wins = sum(1 for p in items if p.top_pick_correct)
         header = f"{track} — {track_wins}/{len(items)}"
         if text_chunks:
@@ -1554,6 +1558,10 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
         text_chunks.append(f"── {header} ──")
         text_chunks.extend(_row_text(p) for p in items)
 
+        if idx > 0:
+            html_chunks.append(
+                '<tr><td colspan="6" style="padding:0;height:12px;background:#fff"></td></tr>'
+            )
         html_chunks.append(
             f'<tr style="background:#c8a84b;color:#1a1a1a">'
             f'<td colspan="6" style="padding:8px;font-weight:bold;font-size:14px">{header}</td>'
@@ -1639,16 +1647,22 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
         pass
 
     analysis_prompt = f"""Date: {today_str}
-Total races: {total} | Wins: {len(hits)} ({win_pct}) | ITM: {report.in_the_money} ({itm_pct})
+Total races: {total}
+Win pick (1st): {len(hits)} ({win_pct}) | Win pick ITM (1st-3rd): {report.in_the_money} ({itm_pct})
+Place pick (2nd choice finished top 2): {len(place_hits)} ({place_pct})
+Show pick (3rd choice finished top 3): {len(show_hits)} ({show_pct})
 
-By track (wins/total): {_fmt_bucket(by_track)}
-By race type (wins/total): {_fmt_bucket(by_type)}
-By surface (wins/total): {_fmt_bucket(by_surface)}
+By track (win-pick wins/total): {_fmt_bucket(by_track)}
+By race type (win-pick wins/total): {_fmt_bucket(by_type)}
+By surface (win-pick wins/total): {_fmt_bucket(by_surface)}
 
 Sample correct picks: {hit_sample}
 Sample misses: {miss_sample}
 {track_ref_block}{(trends_block + chr(10)) if trends_block else ""}{stored_lessons_block}
 Write three analysis sections for Secretariat's nightly digest. Be specific and honest.
+Treat the win, place, and show pick rates as three separate accuracy signals — a strong show
+rate with a weak win rate means the model is identifying live contenders but mis-ranking them at
+the top, which is a different problem than missing the contenders entirely.
 When you reference a track, use ONLY the code (e.g. "FL", "FP", "CD") OR the exact full name from
 the TRACK CODE REFERENCE above. NEVER invent or guess a full track name from a code — different
 codes can look similar (FP is Fonner Park, FL is Finger Lakes; do not confuse them).
@@ -1658,8 +1672,8 @@ claim a prior lesson is working if a category it targeted has actually improved 
 Return JSON exactly:
 {{
   "subject": "Secretariat – {today_str} | {len(hits)}/{total} ({win_pct}) win rate",
-  "what_went_right": "2-4 sentences: which patterns produced correct picks today and why those signals worked. Name specific tracks, race types, or surfaces if there's a pattern.",
-  "what_went_wrong": "2-4 sentences: which patterns failed and the likely reason. Be honest about systematic weaknesses, not just bad luck.",
+  "what_went_right": "2-4 sentences: which patterns produced correct picks today and why those signals worked. If place or show rates are strong, name what's working at the contender-identification level even when the top pick missed. Name specific tracks, race types, or surfaces if there's a pattern.",
+  "what_went_wrong": "2-4 sentences: which patterns failed and the likely reason. Distinguish missing-the-contenders failures (low show rate) from mis-ranking failures (decent show rate, weak win rate). Be honest about systematic weaknesses, not just bad luck.",
   "how_im_evolving": "2-4 sentences: specific adjustments I will make, grounded in the 7-day trend data above. If a persistent weak spot exists, name it and commit to a concrete gate. If a prior lesson has NOT moved its target category in the trend data, say so plainly."
 }}"""
 
@@ -1690,8 +1704,10 @@ Return JSON exactly:
 
 SCORECARD
   Races analyzed : {total}
-  Wins           : {len(hits)} ({win_pct})
-  In the money   : {report.in_the_money} ({itm_pct})
+  Win pick (1st) : {len(hits)} ({win_pct})
+  Win pick ITM   : {report.in_the_money} ({itm_pct})
+  Place pick     : {len(place_hits)} ({place_pct})
+  Show pick      : {len(show_hits)} ({show_pct})
 
 WHAT WENT RIGHT
 {what_right}
@@ -1715,14 +1731,18 @@ COMPLETE RESULTS ({total} races)
 
   <table style="width:100%;background:#f8f4ec;border-radius:6px;padding:16px;margin:16px 0">
     <tr>
-      <td style="font-size:28px;font-weight:bold;text-align:center">{len(hits)}/{total}</td>
-      <td style="font-size:28px;font-weight:bold;text-align:center">{win_pct}</td>
-      <td style="font-size:28px;font-weight:bold;text-align:center">{itm_pct}</td>
+      <td style="font-size:24px;font-weight:bold;text-align:center">{len(hits)}/{total}</td>
+      <td style="font-size:24px;font-weight:bold;text-align:center">{win_pct}</td>
+      <td style="font-size:24px;font-weight:bold;text-align:center">{itm_pct}</td>
+      <td style="font-size:24px;font-weight:bold;text-align:center">{place_pct}</td>
+      <td style="font-size:24px;font-weight:bold;text-align:center">{show_pct}</td>
     </tr>
     <tr>
-      <td style="text-align:center;color:#666;font-size:12px">Wins / Races</td>
-      <td style="text-align:center;color:#666;font-size:12px">Win Rate</td>
-      <td style="text-align:center;color:#666;font-size:12px">ITM Rate</td>
+      <td style="text-align:center;color:#666;font-size:11px">Wins / Races</td>
+      <td style="text-align:center;color:#666;font-size:11px">Win Rate</td>
+      <td style="text-align:center;color:#666;font-size:11px">Win Pick ITM</td>
+      <td style="text-align:center;color:#666;font-size:11px">Place Pick</td>
+      <td style="text-align:center;color:#666;font-size:11px">Show Pick</td>
     </tr>
   </table>
 

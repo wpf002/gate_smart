@@ -57,6 +57,10 @@ class RacePrediction(Base):
     # Outcome flags
     top_pick_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     in_the_money: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    # Did predicted_second actually finish in the top 2 (place pool)?
+    place_pick_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    # Did predicted_third actually finish in the top 3 (show pool)?
+    show_pick_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
     # Post-race reflection — populated by nightly_reflect.py
     reflection: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -84,8 +88,12 @@ class DailyAccuracyReport(Base):
     races_analyzed: Mapped[int] = mapped_column(Integer, default=0)
     top_pick_wins: Mapped[int] = mapped_column(Integer, default=0)
     in_the_money: Mapped[int] = mapped_column(Integer, default=0)
+    place_picks_correct: Mapped[int] = mapped_column(Integer, default=0)
+    show_picks_correct: Mapped[int] = mapped_column(Integer, default=0)
     win_rate: Mapped[float] = mapped_column(Float, default=0.0)
     itm_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    place_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    show_rate: Mapped[float] = mapped_column(Float, default=0.0)
     best_call: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     worst_miss: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     by_mode: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

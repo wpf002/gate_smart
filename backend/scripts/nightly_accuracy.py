@@ -28,7 +28,13 @@ async def _ensure_columns(engine) -> None:
         "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS reflection TEXT",
         "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)",
         "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS place_pick_correct BOOLEAN",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS show_pick_correct BOOLEAN",
         "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
+        "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS place_picks_correct INTEGER DEFAULT 0",
+        "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS show_picks_correct INTEGER DEFAULT 0",
+        "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS place_rate FLOAT DEFAULT 0.0",
+        "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS show_rate FLOAT DEFAULT 0.0",
     ]
     async with engine.begin() as conn:
         for stmt in ddl:
@@ -105,22 +111,27 @@ async def main(target_date: datetime.date, dry_run: bool):
                 actual_first and pred.predicted_first and
                 _norm(actual_first) == _norm(pred.predicted_first)
             )
-            itm = bool(
-                pred.predicted_first and actual_first and (
-                    _norm(pred.predicted_first) == _norm(actual_first) or
-                    _norm(pred.predicted_first) == _norm(actual_second or "") or
-                    _norm(pred.predicted_first) == _norm(actual_third or "")
-                )
-            )
+            top2 = {_norm(actual_first or ""), _norm(actual_second or "")} - {""}
+            top3 = top2 | ({_norm(actual_third or "")} - {""})
+
+            itm = bool(pred.predicted_first and _norm(pred.predicted_first) in top3)
+            # Place pick: did predicted_second land in the top 2 (place pool)?
+            place_correct = bool(pred.predicted_second and _norm(pred.predicted_second) in top2)
+            # Show pick: did predicted_third land in the top 3 (show pool)?
+            show_correct = bool(pred.predicted_third and _norm(pred.predicted_third) in top3)
 
             settled.append({
                 "id": pred.id,
                 "race_id": pred.race_id,
                 "race_name": pred.race_name,
                 "predicted": pred.predicted_first,
+                "predicted_second": pred.predicted_second,
+                "predicted_third": pred.predicted_third,
                 "actual": actual_first,
                 "top_correct": top_correct,
                 "itm": itm,
+                "place_correct": place_correct,
+                "show_correct": show_correct,
                 "actual_first": actual_first,
                 "actual_second": actual_second,
                 "actual_third": actual_third,
@@ -149,6 +160,8 @@ async def main(target_date: datetime.date, dry_run: bool):
                     "result_fetched": True,
                     "top_pick_correct": s["top_correct"],
                     "in_the_money": s["itm"],
+                    "place_pick_correct": s["place_correct"],
+                    "show_pick_correct": s["show_correct"],
                     "settled_at": now,
                 }
                 if s["result_race_type"] and not s["existing_race_type"]:
@@ -164,8 +177,12 @@ async def main(target_date: datetime.date, dry_run: bool):
     total = len(settled)
     wins = sum(1 for s in settled if s["top_correct"])
     itm_count = sum(1 for s in settled if s["itm"])
+    place_count = sum(1 for s in settled if s["place_correct"])
+    show_count = sum(1 for s in settled if s["show_correct"])
     win_rate = wins / total if total else 0.0
     itm_rate = itm_count / total if total else 0.0
+    place_rate = place_count / total if total else 0.0
+    show_rate = show_count / total if total else 0.0
 
     best = max((s for s in settled if s["top_correct"]), key=lambda s: 1, default=None)
     worst = max((s for s in settled if not s["top_correct"]), key=lambda s: 1, default=None)
@@ -173,7 +190,10 @@ async def main(target_date: datetime.date, dry_run: bool):
     best_call = f"{best['race_name'] or best['race_id']}: {best['predicted']} won" if best else None
     worst_miss = f"{worst['race_name'] or worst['race_id']}: picked {worst['predicted']}, actual {worst['actual']}" if worst else None
 
-    print(f"\n  Summary: {wins}/{total} wins ({win_rate:.1%}), {itm_count} ITM ({itm_rate:.1%})")
+    print(
+        f"\n  Summary: {wins}/{total} wins ({win_rate:.1%}), {itm_count} ITM ({itm_rate:.1%}), "
+        f"place {place_count}/{total} ({place_rate:.1%}), show {show_count}/{total} ({show_rate:.1%})"
+    )
 
     # 5. Upsert DailyAccuracyReport
     from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -184,8 +204,12 @@ async def main(target_date: datetime.date, dry_run: bool):
         "races_analyzed": total,
         "top_pick_wins": wins,
         "in_the_money": itm_count,
+        "place_picks_correct": place_count,
+        "show_picks_correct": show_count,
         "win_rate": win_rate,
         "itm_rate": itm_rate,
+        "place_rate": place_rate,
+        "show_rate": show_rate,
         "best_call": best_call,
         "worst_miss": worst_miss,
     }
@@ -217,15 +241,21 @@ async def main(target_date: datetime.date, dry_run: bool):
     else:
         # Build a fake report object for dry-run
         # (capture locals first — class bodies can't reference same-named outer vars)
-        _wr, _ir, _bc, _wm = win_rate, itm_rate, best_call, worst_miss
+        _wr, _ir, _pr, _sr, _pc, _sc, _bc, _wm = (
+            win_rate, itm_rate, place_rate, show_rate, place_count, show_count, best_call, worst_miss,
+        )
 
         class _FakeReport:
             report_date = target_date
             races_analyzed = total
             top_pick_wins = wins
             in_the_money = itm_count
+            place_picks_correct = _pc
+            show_picks_correct = _sc
             win_rate = _wr
             itm_rate = _ir
+            place_rate = _pr
+            show_rate = _sr
             best_call = _bc
             worst_miss = _wm
             by_track = None
@@ -239,9 +269,13 @@ async def main(target_date: datetime.date, dry_run: bool):
                 self.race_type = s.get("result_race_type") or s.get("existing_race_type") or None
                 self.surface = None
                 self.predicted_first = s["predicted"]
+                self.predicted_second = s.get("predicted_second")
+                self.predicted_third = s.get("predicted_third")
                 self.actual_first = s["actual"]
                 self.top_pick_correct = s["top_correct"]
                 self.in_the_money = s["itm"]
+                self.place_pick_correct = s["place_correct"]
+                self.show_pick_correct = s["show_correct"]
 
         report_obj = _FakeReport()
         preds_list = [_FakePred(s) for s in settled]

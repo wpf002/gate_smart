@@ -2,11 +2,15 @@
 
 ## Schedule (all times ET)
 
+Source of truth: `backend/app/core/scheduler.py` (APScheduler runs in-process when the FastAPI server starts).
+
 | Time     | Script                     | Purpose                                                |
 | -------- | -------------------------- | ------------------------------------------------------ |
-| 08:00 AM | `nightly_predict_all.py`   | Lightweight haiku predictions for all US races         |
-| 11:00 PM | `nightly_accuracy.py`      | Fetch results, settle predictions, send email digest   |
+| 11:00 AM | `nightly_predict_all.py`   | Lightweight haiku predictions for all US races         |
+| 06:00 AM | `nightly_accuracy.py`      | Settle yesterday's predictions, send email digest      |
 | 11:30 PM | `nightly_recalibration.py` | Update 30-day rolling calibration, inject into prompts |
+| 12:00 AM | `nightly_reflect.py`       | Secretariat reflection layer                           |
+| every 5m | `race_alerts` (in-process) | Push notifications for upcoming races                  |
 
 ## Manual Run
 
@@ -46,11 +50,11 @@ cd /app && python scripts/<script_name>.py
 
 ## Email Configuration (Railway env vars)
 
-| Variable             | Value                      |
-| -------------------- | -------------------------- |
-| `GMAIL_USER`         | Your Gmail address         |
-| `GMAIL_APP_PASSWORD` | 16-char Gmail App Password |
-| `DAILY_REPORT_EMAIL` | wfoti71992@gmail.com       |
+| Variable             | Value                                                      |
+| -------------------- | ---------------------------------------------------------- |
+| `GMAIL_USER`         | Your Gmail address                                         |
+| `GMAIL_APP_PASSWORD` | 16-char Gmail App Password                                 |
+| `DAILY_REPORT_EMAIL` | `wfoti71992@gmail.com,kenfoti@gmail.com` (comma-separated) |
 
 Generate a Gmail App Password at: <https://myaccount.google.com/apppasswords>
 (Requires 2FA enabled on the Gmail account.)

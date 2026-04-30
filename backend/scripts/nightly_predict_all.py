@@ -79,19 +79,52 @@ async def predict_race(
     if not runners:
         return None
 
-    slim = [
-        {
-            "num": r.get("number") or r.get("cloth_number") or "?",
+    # Filter scratches — picking a horse that won't run is a guaranteed miss
+    # and a stale alert. Field size below 2 isn't a race to handicap.
+    active = [r for r in runners if not (r.get("scratched") or r.get("non_runner"))]
+    if len(active) < 2:
+        return None
+
+    slim = []
+    for r in active:
+        entry = {
+            "pp": str(r.get("number") or r.get("program_number") or r.get("cloth_number") or "?"),
             "name": r.get("horse") or r.get("horse_name", ""),
-            "odds": r.get("odds", "SP"),
+            "odds": r.get("odds") or r.get("sp") or "SP",
+            "jockey": (r.get("jockey") or "")[:30],
             "trainer": (r.get("trainer") or "")[:30],
         }
-        for r in runners
-    ]
+        # Optional fields only when present — keeps the prompt compact
+        if r.get("weight"):
+            entry["weight"] = r.get("weight")
+        if r.get("claiming_price"):
+            entry["claim"] = r.get("claiming_price")
+        if r.get("age"):
+            entry["age"] = r.get("age")
+        if r.get("sex"):
+            entry["sex"] = r.get("sex")
+        slim.append(entry)
+
+    # Race-level context — the same horse needs different handicapping at 5f vs 1m,
+    # on a fast dirt track vs muddy turf, in a maiden vs a graded stakes.
+    distance = race.get("distance") or (f"{race.get('distance_f')}f" if race.get("distance_f") else "")
+    race_ctx = {
+        k: v for k, v in {
+            "distance": distance,
+            "surface": race.get("surface", ""),
+            "going": race.get("going", ""),  # track condition
+            "race_class": race.get("race_class", ""),
+            "race_type": race.get("race_type", ""),
+            "purse": race.get("prize"),
+            "field_size": len(active),
+        }.items() if v
+    }
 
     prompt = (
         (bucket_hint + "\n\n" if bucket_hint else "")
-        + f"Runners: {json.dumps(slim)}\n"
+        + f"Race: {json.dumps(race_ctx)}\n"
+        f"Runners (scratched horses already removed): {json.dumps(slim)}\n\n"
+        "Pick the four most likely finishers. Use ONLY names from the runner list above.\n"
         "Return ONLY this JSON, no explanation:\n"
         '{"first": "horse_name", "second": "horse_name", '
         '"third": "horse_name", "fourth": "horse_name"}'
