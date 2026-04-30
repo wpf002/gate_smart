@@ -89,14 +89,20 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
   // ── Shared section builders ───────────────────────────────────────────────
 
-  // Panel header (always shown, toggle changes based on experience level)
+  // Panel header (always shown, toggle changes based on experience level).
+  // Both children use lineHeight: 1 so flex `center` aligns their visual
+  // centers — without it, the display-font SECRETARIAT label has more leading
+  // than the badge and they read as misaligned.
   const PanelHeader = () => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, lineHeight: 1, color: 'var(--accent-gold)' }}>
           SECRETARIAT
         </span>
-        <span className={`badge badge-${analysis.confidence === 'high' ? 'green' : analysis.confidence === 'low' ? 'red' : 'gold'}`}>
+        <span
+          className={`badge badge-${analysis.confidence === 'high' ? 'green' : analysis.confidence === 'low' ? 'red' : 'gold'}`}
+          style={{ lineHeight: 1, display: 'inline-flex', alignItems: 'center' }}
+        >
           {analysis.confidence} confidence
         </span>
       </div>
@@ -107,9 +113,9 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
               padding: '4px 10px', borderRadius: 14, border: 'none', fontSize: 11, fontWeight: 600,
               background: effectiveViewMode === v ? 'var(--accent-gold)' : 'transparent',
               color: effectiveViewMode === v ? '#000' : 'var(--text-muted)',
-              cursor: 'pointer', textTransform: 'capitalize',
+              cursor: 'pointer',
             }}>
-              {v === 'beginner' ? 'Beginner' : 'Advanced'}
+              {v === 'beginner' ? 'Plain' : 'Technical'}
             </button>
           ))}
         </div>
