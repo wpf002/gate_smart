@@ -36,7 +36,6 @@ const CONFIDENCE_PLAIN = {
 // ── AnalysisPanel ─────────────────────────────────────────────────────────────
 function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '', raceType = '' }) {
   const [techExpanded, setTechExpanded] = useState(false);
-  const [viewMode, setViewMode] = useState(null); // null = auto from experienceLevel
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerHorse, setDrawerHorse] = useState('');
   const [drawerBetType, setDrawerBetType] = useState('');
@@ -46,9 +45,16 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
   const toggleTeller = (type) => setTellerOpenMap(m => ({ ...m, [type]: !m[type] }));
   const { addToBetSlip } = useAppStore();
   const experienceLevel = useAppStore(s => s.userProfile?.experienceLevel || 'beginner');
+  const setUserProfile = useAppStore(s => s.setUserProfile);
 
-  // Resolve effective view mode: advanced defaults to technical, beginner defaults to beginner
-  const effectiveViewMode = viewMode ?? (experienceLevel === 'advanced' ? 'technical' : 'beginner');
+  // View mode is derived directly from the user's profile experienceLevel —
+  // no per-race local override. Toggling Plain/Technical here writes back to
+  // userProfile.experienceLevel so the change propagates everywhere (Profile
+  // page, future race opens, accuracy badges, etc.) and vice versa.
+  const effectiveViewMode = experienceLevel === 'advanced' ? 'technical' : 'beginner';
+  const setViewModeAndProfile = (mode) => {
+    setUserProfile({ experienceLevel: mode === 'technical' ? 'advanced' : 'beginner' });
+  };
 
   const normName = (s) => (s || '').toLowerCase().replace(/[^a-z\s]/g, '').trim();
 
@@ -106,20 +112,18 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           {analysis.confidence} confidence
         </span>
       </div>
-      {experienceLevel !== 'beginner' && (
-        <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 16, padding: 2, gap: 2 }}>
-          {['beginner', 'technical'].map(v => (
-            <button key={v} onClick={() => setViewMode(v === effectiveViewMode ? null : v)} style={{
-              padding: '4px 10px', borderRadius: 14, border: 'none', fontSize: 11, fontWeight: 600,
-              background: effectiveViewMode === v ? 'var(--accent-gold)' : 'transparent',
-              color: effectiveViewMode === v ? '#000' : 'var(--text-muted)',
-              cursor: 'pointer',
-            }}>
-              {v === 'beginner' ? 'Plain' : 'Technical'}
-            </button>
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 16, padding: 2, gap: 2 }}>
+        {['beginner', 'technical'].map(v => (
+          <button key={v} onClick={() => setViewModeAndProfile(v)} style={{
+            padding: '4px 10px', borderRadius: 14, border: 'none', fontSize: 11, fontWeight: 600,
+            background: effectiveViewMode === v ? 'var(--accent-gold)' : 'transparent',
+            color: effectiveViewMode === v ? '#000' : 'var(--text-muted)',
+            cursor: 'pointer',
+          }}>
+            {v === 'beginner' ? 'Plain' : 'Technical'}
+          </button>
+        ))}
+      </div>
     </div>
   );
 
@@ -599,6 +603,16 @@ export default function RaceDetailPage() {
   const validCache = cached && (Date.now() - cached.cachedAt) < CACHE_TTL ? cached : null;
 
   const [analysisMode, setAnalysisMode] = useState(validCache?.mode || userProfile.riskTolerance || 'medium');
+
+  // Reactive sync: if the user changes Risk Tolerance elsewhere (Profile page,
+  // another tab, deep link), reflect it on this page. Cached analysis is kept
+  // — the user can re-run when they want analysis at the new mode.
+  useEffect(() => {
+    if (userProfile.riskTolerance && userProfile.riskTolerance !== analysisMode) {
+      setAnalysisMode(userProfile.riskTolerance);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile.riskTolerance]);
   const [analysis, setAnalysis] = useState(validCache?.analysis || null);
   const [analysisStreaming, setAnalysisStreaming] = useState(false);
   const [scorecardData, setScorecardData] = useState(validCache?.scorecardData || null);
