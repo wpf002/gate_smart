@@ -72,9 +72,10 @@ describe('ProfilePage', () => {
 
   it('renders experience level options', () => {
     renderPage();
-    // 'beginner' appears in both the segment button and the profile summary
+    // 'beginner' appears in both the segment button and the profile summary.
+    // The page only offers two levels now (beginner and advanced); the prior
+    // 'intermediate' option was retired.
     expect(screen.getAllByText('beginner').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('intermediate')).toBeInTheDocument();
     expect(screen.getByText('advanced')).toBeInTheDocument();
   });
 

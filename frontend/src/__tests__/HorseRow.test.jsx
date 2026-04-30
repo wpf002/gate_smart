@@ -32,7 +32,15 @@ function renderRow(horse = baseHorse, analysis = null, raceId = 'r1') {
 
 beforeEach(() => {
   mockNavigate.mockClear();
-  useAppStore.setState({ betSlip: [] });
+  // Default to non-beginner so the collapsed row reveals jockey/trainer
+  // and the recommended_bet badge. Beginner mode hides those until expand.
+  useAppStore.setState({
+    betSlip: [],
+    userProfile: {
+      ...useAppStore.getState().userProfile,
+      experienceLevel: 'advanced',
+    },
+  });
 });
 
 describe('HorseRow', () => {

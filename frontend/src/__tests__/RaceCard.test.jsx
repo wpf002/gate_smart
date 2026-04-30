@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { RaceCard, RaceCardSkeleton, formatDistance } from '../components/races/RaceCard';
+import { useAppStore } from '../store';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -17,6 +18,14 @@ vi.mock('react-router-dom', async (importOriginal) => {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-04-04T08:00:00Z'));
+  // Default the store to advanced so the meta row (distance, surface, runners,
+  // prize, "Analyze →") renders. Beginner mode hides those by design.
+  useAppStore.setState({
+    userProfile: {
+      ...useAppStore.getState().userProfile,
+      experienceLevel: 'advanced',
+    },
+  });
 });
 afterEach(() => {
   vi.useRealTimers();
