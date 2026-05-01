@@ -316,7 +316,11 @@ async def _find_race_result(race_id: str) -> dict | None:
                                 "sp": str(entry.get("final_odds") or entry.get("morning_line_odds", "SP")),
                                 "number": str(entry.get("program_number", "")),
                             })
-                        if runners:
+                        has_positions = any(
+                            r["position"] and r["position"] not in ("0", "")
+                            for r in runners
+                        )
+                        if runners and has_positions:
                             return {
                                 "race_id": race_id,
                                 "runners": runners,
