@@ -362,3 +362,96 @@ async def test_explain_form_502_on_secretariat_error(client):
                               headers={"Content-Type": "application/json"})
     assert r.status_code == 502
     assert r.json()["detail"] == "AI analysis unavailable"
+
+
+# ---------------------------------------------------------------------------
+# _find_race_result — guards against generating a debrief from empty results
+# ---------------------------------------------------------------------------
+
+def _na_meet_results(runners_data: list, race_number: str = "8") -> dict:
+    """Build a fake NA meet-results payload shaped like racing_api.get_na_meet_results."""
+    return {
+        "races": [
+            {
+                "race_key": {"race_number": int(race_number)},
+                "race_name": "Test Race",
+                "runners": runners_data,
+            }
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_find_race_result_returns_none_when_all_positions_blank():
+    """When the racing feed returns runners with no finish positions yet, return None
+    so the route falls through to 202 pending instead of generating a useless debrief."""
+    from app.api.routes.ai_advisor import _find_race_result
+    runners = [
+        {"registration_number": "h1", "horse_name": "A", "program_number": "1"},
+        {"registration_number": "h2", "horse_name": "B", "program_number": "2"},
+    ]
+    with patch("app.api.routes.ai_advisor.racing_api.get_na_meet_results",
+               new=AsyncMock(return_value=_na_meet_results(runners))), \
+         patch("app.api.routes.ai_advisor.asyncio.sleep", new=AsyncMock()):
+        result = await _find_race_result("CD_meet-8")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_find_race_result_returns_none_when_positions_are_zero_or_empty_strings():
+    from app.api.routes.ai_advisor import _find_race_result
+    runners = [
+        {"registration_number": "h1", "horse_name": "A", "official_finish_position": ""},
+        {"registration_number": "h2", "horse_name": "B", "official_finish_position": "0"},
+        {"registration_number": "h3", "horse_name": "C", "finish_position": ""},
+    ]
+    with patch("app.api.routes.ai_advisor.racing_api.get_na_meet_results",
+               new=AsyncMock(return_value=_na_meet_results(runners))), \
+         patch("app.api.routes.ai_advisor.asyncio.sleep", new=AsyncMock()):
+        result = await _find_race_result("CD_meet-8")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_find_race_result_returns_data_when_positions_present():
+    from app.api.routes.ai_advisor import _find_race_result
+    runners = [
+        {"registration_number": "h1", "horse_name": "Winner",  "official_finish_position": "1"},
+        {"registration_number": "h2", "horse_name": "Second",  "official_finish_position": "2"},
+        {"registration_number": "h3", "horse_name": "Scratch", "official_finish_position": ""},
+    ]
+    with patch("app.api.routes.ai_advisor.racing_api.get_na_meet_results",
+               new=AsyncMock(return_value=_na_meet_results(runners))):
+        result = await _find_race_result("CD_meet-8")
+    assert result is not None
+    assert result["race_id"] == "CD_meet-8"
+    assert any(r["position"] == "1" and r["horse_name"] == "Winner" for r in result["runners"])
+
+
+@pytest.mark.asyncio
+async def test_find_race_result_accepts_finish_position_fallback():
+    """Some payloads only populate finish_position, not official_finish_position."""
+    from app.api.routes.ai_advisor import _find_race_result
+    runners = [
+        {"registration_number": "h1", "horse_name": "Winner", "finish_position": "1"},
+        {"registration_number": "h2", "horse_name": "Second", "finish_position": "2"},
+    ]
+    with patch("app.api.routes.ai_advisor.racing_api.get_na_meet_results",
+               new=AsyncMock(return_value=_na_meet_results(runners))):
+        result = await _find_race_result("CD_meet-8")
+    assert result is not None
+    assert any(r["position"] == "1" for r in result["runners"])
+
+
+@pytest.mark.asyncio
+async def test_find_race_result_returns_none_when_race_number_not_found():
+    from app.api.routes.ai_advisor import _find_race_result
+    payload = _na_meet_results(
+        [{"registration_number": "h1", "horse_name": "A", "official_finish_position": "1"}],
+        race_number="3",
+    )
+    with patch("app.api.routes.ai_advisor.racing_api.get_na_meet_results",
+               new=AsyncMock(return_value=payload)), \
+         patch("app.api.routes.ai_advisor.asyncio.sleep", new=AsyncMock()):
+        result = await _find_race_result("CD_meet-8")
+    assert result is None
