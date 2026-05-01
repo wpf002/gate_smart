@@ -65,9 +65,19 @@ const NAV_ITEMS = [
 function SideNav() {
   const navigate = useNavigate();
   const location = useLocation();
+  const lastRaceId = useAppStore(s => s.lastRaceId);
+
+  const goTo = (path) => {
+    if (path === '/') {
+      const inRacesStack = location.pathname === '/' || location.pathname.startsWith('/race/');
+      if (!inRacesStack && lastRaceId) return navigate(`/race/${lastRaceId}`);
+    }
+    navigate(path);
+  };
+
   return (
     <nav className="side-nav">
-      <div className="side-nav-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>GATE<br />SMART</div>
+      <div className="side-nav-logo" onClick={() => goTo('/')} style={{ cursor: 'pointer' }}>GATE<br />SMART</div>
       {NAV_ITEMS.map(({ path, label }, idx) => {
         const active = location.pathname === path ||
           (path !== '/' && location.pathname.startsWith(path));
@@ -81,7 +91,7 @@ function SideNav() {
               }} />
             )}
             <button
-              onClick={() => navigate(path)}
+              onClick={() => goTo(path)}
               className={`side-nav-item${active ? ' active' : ''}`}
             >
               <span style={{

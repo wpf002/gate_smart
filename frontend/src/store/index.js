@@ -111,6 +111,11 @@ export const useAppStore = create(
           valueAlerts: { ...state.valueAlerts, [raceId]: alerts },
         })),
 
+      // Last visited race id — lets the Races nav tab return the user to the
+      // race they were viewing when they tabbed over to Profile/Search/etc.
+      lastRaceId: null,
+      setLastRaceId: (raceId) => set({ lastRaceId: raceId }),
+
       // Race analysis cache — in-memory only, keyed by race_id
       // Lets the user navigate to a horse profile and back without losing analysis
       raceAnalysisCache: {},

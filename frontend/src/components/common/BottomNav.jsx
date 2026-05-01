@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from './Icon';
+import { useAppStore } from '../../store';
 
 const NAV_ITEMS = [
   { path: '/',          icon: 'home',      label: 'Races'   },
@@ -12,6 +13,16 @@ const NAV_ITEMS = [
 export default function BottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
+  const lastRaceId = useAppStore(s => s.lastRaceId);
+
+  // Tapping Races from another section (Profile, Search, etc.) returns the
+  // user to the race they were last viewing — iOS-tab-bar style restore.
+  // Tapping Races while already inside the Races stack pops to the home list.
+  const goToRaces = () => {
+    const inRacesStack = location.pathname === '/' || location.pathname.startsWith('/race/');
+    if (!inRacesStack && lastRaceId) navigate(`/race/${lastRaceId}`);
+    else navigate('/');
+  };
 
   return (
     <nav className="bottom-nav" style={{
@@ -28,7 +39,7 @@ export default function BottomNav() {
         return (
           <button
             key={path}
-            onClick={() => navigate(path)}
+            onClick={() => path === '/' ? goToRaces() : navigate(path)}
             style={{
               flex: 1,
               display: 'flex',

@@ -45,16 +45,13 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
   const toggleTeller = (type) => setTellerOpenMap(m => ({ ...m, [type]: !m[type] }));
   const { addToBetSlip } = useAppStore();
   const experienceLevel = useAppStore(s => s.userProfile?.experienceLevel || 'beginner');
-  const setUserProfile = useAppStore(s => s.setUserProfile);
 
-  // View mode is derived directly from the user's profile experienceLevel —
-  // no per-race local override. Toggling Plain/Technical here writes back to
-  // userProfile.experienceLevel so the change propagates everywhere (Profile
-  // page, future race opens, accuracy badges, etc.) and vice versa.
-  const effectiveViewMode = experienceLevel === 'advanced' ? 'technical' : 'beginner';
-  const setViewModeAndProfile = (mode) => {
-    setUserProfile({ experienceLevel: mode === 'technical' ? 'advanced' : 'beginner' });
-  };
+  // Beginners always see Plain content with no toggle. Advanced users get the
+  // Plain/Technical toggle as a per-race view override that does NOT touch
+  // their stored experience level — switching to Plain here is "show me the
+  // plain summary for this race", not "demote my account to beginner".
+  const [advancedViewMode, setAdvancedViewMode] = useState('technical');
+  const effectiveViewMode = experienceLevel === 'advanced' ? advancedViewMode : 'beginner';
 
   const normName = (s) => (s || '').toLowerCase().replace(/[^a-z\s]/g, '').trim();
 
@@ -115,7 +112,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
       {experienceLevel === 'advanced' && (
         <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 16, padding: 2, gap: 2 }}>
           {['beginner', 'technical'].map(v => (
-            <button key={v} onClick={() => setViewModeAndProfile(v)} style={{
+            <button key={v} onClick={() => setAdvancedViewMode(v)} style={{
               padding: '4px 10px', borderRadius: 14, border: 'none', fontSize: 11, fontWeight: 600,
               background: effectiveViewMode === v ? 'var(--accent-gold)' : 'transparent',
               color: effectiveViewMode === v ? '#000' : 'var(--text-muted)',
@@ -598,7 +595,11 @@ function TabBar({ tabs, active, onChange }) {
 export default function RaceDetailPage() {
   const { raceId } = useParams();
   const navigate = useNavigate();
-  const { userProfile, setUserProfile, raceAnalysisCache, setRaceAnalysisCache, clearRaceAnalysisCache } = useAppStore();
+  const { userProfile, setUserProfile, raceAnalysisCache, setRaceAnalysisCache, clearRaceAnalysisCache, setLastRaceId } = useAppStore();
+
+  useEffect(() => {
+    if (raceId) setLastRaceId(raceId);
+  }, [raceId, setLastRaceId]);
 
   const cached = raceAnalysisCache[raceId];
   const CACHE_TTL = 5 * 60 * 1000;
