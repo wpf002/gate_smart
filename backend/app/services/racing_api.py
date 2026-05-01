@@ -344,16 +344,14 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
         jockey = entry.get("jockey") or {}
         trainer = entry.get("trainer") or {}
         if isinstance(jockey, dict):
-            jockey_name = jockey.get("alias") or (
-                f"{jockey.get('first_name', '')} {jockey.get('last_name', '')}".strip()
-            )
+            first_last = f"{jockey.get('first_name', '')} {jockey.get('last_name', '')}".strip()
+            jockey_name = first_last or jockey.get("alias", "")
         else:
             jockey_name = str(jockey)
 
         if isinstance(trainer, dict):
-            trainer_name = trainer.get("alias") or (
-                f"{trainer.get('first_name', '')} {trainer.get('last_name', '')}".strip()
-            )
+            first_last = f"{trainer.get('first_name', '')} {trainer.get('last_name', '')}".strip()
+            trainer_name = first_last or trainer.get("alias", "")
         else:
             trainer_name = str(trainer)
 
