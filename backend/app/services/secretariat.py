@@ -144,6 +144,14 @@ US HANDICAPPING FACTORS — weigh each factor based on what the race type and av
 - Large fields (10+ runners): pace pressure typically intensifies — front-runners face more challenges and are more likely to compromise each other. Traffic risk rises sharply for deep closers without tactical speed or a clear path. Post position bias is amplified, especially in turf routes and dirt sprints. Longshot value increases (more horses = more chances for a price horse to hit). Exotics become more expensive to cover but pay materially more when hit.
 - Always state the field size explicitly in the pace scenario, and adjust your contender ranking and exotics strategy accordingly. Do not analyze running style or pace shape in a vacuum — anchor it to how many bodies are in the gate.
 
+9. TRACK CONDITION & OFF-TRACK FORM — when today's going is anything other than Fast (dirt) or Firm (turf), it becomes a top-tier signal:
+- An "off track" is any wet-dirt condition (Good/Wet-fast, Muddy, Sloppy, Sealed) or any soft-turf condition (Good/Yielding/Soft/Heavy). These conditions reshuffle the field — handicapping the race as if it were Fast/Firm is a recipe for missing the winner.
+- For each contender, scan the past performances for prior starts on a comparable off track. The PP rows include surface and track condition. A horse with one or more in-the-money finishes on Muddy/Sloppy/Sealed (dirt) or Yielding/Soft (turf) is a "proven mudder" / "proven on soft going" — promote it. A horse whose only off-track lines are double-digit beaten lengths is a "non-action mudder" — demote it even if its fast-track figures are best.
+- A horse with NO off-track sample at all is unproven, not bad. State that explicitly ("first start on a wet track") rather than treating absence of data as evidence either way. Lean on breeding when you can: certain sires (e.g. Smart Strike, Tapit, Curlin, Into Mischief, Quality Road on dirt; Kitten's Joy, Hard Spun progeny on soft turf) are well-known for getting wet-track / soft-going runners — invoke this only when you have specific knowledge of the sire, never invent a pattern.
+- Surface switches in the wet matter. A turf-to-dirt move because of an off-the-turf scratch produces a different race than the one carded — note when today's surface differs from the original card and which contenders benefit (typically dirt-bred horses in the field who only entered as a turf flier).
+- Sealed tracks (rolled-and-sealed dirt) play closer to fast than to muddy — speed often holds. Sloppy plays inside-speed-friendly. Muddy is the most chaotic and most likely to produce price upsets. Adjust pace projections accordingly.
+- Always state the going explicitly in your analysis when it's off, and explicitly call out the off-track form line for each top contender (e.g. "#3 is 2-1-0 in 4 starts on sloppy/muddy"). If a horse has no off-track line, say so.
+
 Always include the program number (#) with every horse name in predictions and recommendations. Program numbers are how bettors identify horses at the teller window.
 
 DUAL EXPLANATION REQUIREMENT:
@@ -305,6 +313,11 @@ async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, s
                                 f"R{r.pp_race_number}",
                                 f"Fin:{r.official_finish}",
                             ]
+                            surface_cond = "/".join(
+                                p for p in (r.pp_surface, r.pp_track_condition) if p
+                            )
+                            if surface_cond:
+                                parts.append(surface_cond)
                             if r.speed_figure is not None:
                                 parts.append(f"SF:{r.speed_figure}")
                             if r.pace_figure_1:
@@ -327,7 +340,7 @@ async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, s
                             f"EQUIBASE PAST PERFORMANCES (2023 US PP data, Beyer-comparable scale):\n"
                             f"{horse_name} — {', '.join(summary_parts)}:\n"
                             + "\n".join(pace_lines)
-                            + "\n(SF=speed figure, P1/P2=pace figures at calls, CLS=class rating)"
+                            + "\n(surface/condition shown when known, e.g. Dirt/Sloppy or Turf/Yielding; SF=speed figure, P1/P2=pace figures at calls, CLS=class rating)"
                         )
             except Exception:
                 pass

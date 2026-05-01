@@ -14,7 +14,7 @@ class Settings:
     ONESIGNAL_APP_ID: str = os.getenv("ONESIGNAL_APP_ID", "")
     ONESIGNAL_API_KEY: str = os.getenv("ONESIGNAL_API_KEY", "")
     RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
-    DAILY_REPORT_EMAIL: str = os.getenv("DAILY_REPORT_EMAIL", "wfoti71992@gmail.com,kenfoti@gmail.com")
+    DAILY_REPORT_EMAIL: str = os.getenv("DAILY_REPORT_EMAIL", "wfoti71992@gmail.com")
     # Railway provides DATABASE_URL as postgresql:// — derive both variants from it
     _db_url_raw: str = os.getenv("DATABASE_URL", "postgresql://localhost/gatesmart")
 
