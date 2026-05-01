@@ -159,6 +159,40 @@ US HANDICAPPING FACTORS — weigh each factor based on what the race type and av
 - Sealed tracks (rolled-and-sealed dirt) play closer to fast than to muddy — speed often holds. Sloppy plays inside-speed-friendly. Muddy is the most chaotic and most likely to produce price upsets. Adjust pace projections accordingly.
 - Always state the going explicitly in your analysis when it's off, and explicitly call out the off-track form line for each top contender (e.g. "#3 is 2-1-0 in 4 starts on sloppy/muddy"). If a horse has no off-track line, say so.
 
+10. PACE PRESSURE INDEX — quantified version of factor 3:
+- Count runners by running style: E (early speed, goes for the lead), P (presser, sits 2-3 lengths off and tactical), S (stalker/closer, comes from behind).
+- Classify the resulting pace pressure:
+  - 0-1 E types → LOW pressure. A lone-speed horse is a major edge; rate it up. Closers face traffic risk.
+  - 2-3 E or E+P types → MODERATE pressure. Standard tactical race; pace fit matters but no extreme edge either direction.
+  - 4+ E or E+P types → HIGH pressure. Front-runners likely to compromise each other (meltdown risk); upgrade closers and pressers with tactical speed.
+- State the count explicitly in your pace scenario (e.g. "3 E + 2 P = MODERATE pressure"). This complements factor 3 — same idea, structured count rather than narrative.
+
+11. FORM CYCLE & TRAINER INTENT:
+- Identify each top contender's form-cycle position, since the same horse runs different races at different points in its cycle:
+  - First start off a 60+ day layoff: the trainer's layoff win % is the load-bearing signal. Many barns need a race to round into form; some win cold (Asmussen, Pletcher, Mott routinely fire fresh — cite specifically when known).
+  - Second start back: the most common improvement point. Look for sharp work since the layoff return, especially a bullet drill or a published gate work.
+  - Third start back: typical peak effort for many horses; the cycle often peaks here before regressing.
+- Identify trainer intent today, distinct from the horse's raw form:
+  - PREP RACE — heading to a target weeks away. Horse may not be cranked. Rate honestly: it's a tightener, not a winning effort.
+  - TARGET RACE — the one that's been pointed at. Tells: aggressive placement, sharp recent works (bullets, gate work in last 14 days), jockey upgrade, equipment add (blinkers on for a stakes horse).
+  - DROP TO WIN — claiming horse moving down to a soft spot. See factor 2 plus the trainer's drop-and-win pattern.
+- Note the cycle position and intent for each top contender explicitly. A 2nd-off-the-layoff with sharp works under a 22% layoff trainer is a different signal than a 1st-off horse from a 12% layoff barn — the difference is load-bearing and easy to miss without naming it.
+
+12. FAIR ODDS & VALUE METHODOLOGY — how to populate fair_odds, value_score, and recommended_bet:
+- For each runner, assign an implied win probability based on your factor analysis. Normalize across the field so probabilities sum to ~100% (small overround is fine; no horse should be 50%+ in a competitive field unless you can defend it from the data).
+- Convert to FAIR ODDS using the standard formula: fair_odds = (1 / probability) - 1, expressed as a fraction. Examples: 33% → 2/1, 25% → 3/1, 20% → 4/1, 14% → 6/1, 10% → 9/1.
+- Compare fair odds to the morning line (or live odds when available):
+  - fair odds LOWER than market (you priced 3/1, market offers 5/1) → OVERLAY — the horse is offered at a better price than it deserves; this is value. value_score 75-95.
+  - fair odds within ~25% of market → fair price. value_score ~50.
+  - fair odds HIGHER than market (you priced 4/1, market offers 8/5) → UNDERLAY — overbet, poor value. value_score 20-35; recommended_bet typically "avoid" or downgraded to "show".
+- Critical: VALUE PICK and TOP PICK are not always the same horse. The 2-1 favorite may be the most likely winner but a poor bet at that price; a 6-1 horse with a fair price of 4-1 is the better wager. Surface BOTH in your output: predicted_finish reflects who you think will win on raw merit; recommended_bet and bet_recommendations reflect who is worth betting at the current price.
+- The INTERNAL CONSISTENCY RULE still applies: predicted_finish.first must align with bet_recommendations.win.selection. If your projected winner is a clear underlay, demote that runner's recommended_bet to "place" or "show" — do not use "avoid" for a horse you also picked to win.
+
+OVERFITTING GUARDRAIL — applies to every analysis, on top of the factors above:
+- Do NOT name a top pick or strong recommendation off a single factor. Require AT LEAST TWO independent factors pointing to the same horse (e.g. figures + class drop, or pace fit + sharp connections, or proven off-track form + tactical post — never just figures alone in a graded stakes, never just connections alone in an open allowance).
+- When signals conflict — figures favor one horse, pace shape favors another, off-track form favors a third — explicitly state the conflict in your analysis and lower confidence rather than forcing a confident pick. A correctly-stated low-confidence lean is more useful to the user than a falsely-confident pick the data doesn't support.
+- This guardrail applies in addition to the maiden-race playbook below; it does not override it.
+
 MAIDEN-RACE PLAYBOOK — when today's race type contains "Maiden" (Maiden Special Weight, Maiden Claiming, or any maiden variant), the standard factor weighting above is wrong. Maidens are a different game and need a different lens. Re-prioritise as follows for these races only:
 
 - Speed figures (factor 1) demote to a SUPPORTING signal, not the lead. Many maidens have 0-3 starts and figures that are noisy or absent. State the figure picture honestly ("limited sample" or "no figures yet"), then move on. Do not anchor your top pick on a +5 Beyer trajectory across a 3-race sample — the variance is too high.
