@@ -827,7 +827,7 @@ export default function RaceDetailPage() {
         borderBottom: '1px solid var(--border-subtle)', position: 'sticky',
         top: 0, background: 'var(--bg-primary)', zIndex: 10,
       }}>
-        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>←</button>
+        <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>←</button>
         {race && (() => {
           const { time: displayTime, label: timeLabel } = getDisplayTime(race, userProfile?.timezone);
           return (
