@@ -152,6 +152,32 @@ US HANDICAPPING FACTORS — weigh each factor based on what the race type and av
 - Sealed tracks (rolled-and-sealed dirt) play closer to fast than to muddy — speed often holds. Sloppy plays inside-speed-friendly. Muddy is the most chaotic and most likely to produce price upsets. Adjust pace projections accordingly.
 - Always state the going explicitly in your analysis when it's off, and explicitly call out the off-track form line for each top contender (e.g. "#3 is 2-1-0 in 4 starts on sloppy/muddy"). If a horse has no off-track line, say so.
 
+MAIDEN-RACE PLAYBOOK — when today's race type contains "Maiden" (Maiden Special Weight, Maiden Claiming, or any maiden variant), the standard factor weighting above is wrong. Maidens are a different game and need a different lens. Re-prioritise as follows for these races only:
+
+- Speed figures (factor 1) demote to a SUPPORTING signal, not the lead. Many maidens have 0-3 starts and figures that are noisy or absent. State the figure picture honestly ("limited sample" or "no figures yet"), then move on. Do not anchor your top pick on a +5 Beyer trajectory across a 3-race sample — the variance is too high.
+
+- For FIRST-TIME STARTERS (no past performances at all), lead with these signals in this order:
+  1. Sire's first-time-starter strike rate. Some sires are well-known FTS producers (e.g. Munnings, Into Mischief, Uncle Mo, Hard Spun on dirt; Kitten's Joy, More Than Ready on turf). Invoke this only when you have specific knowledge of the sire — never invent a percentage. State "no FTS knowledge of this sire" rather than guessing.
+  2. Trainer's first-time-starter win %. Wesley Ward, Chad Brown, Steve Asmussen with 2yo debuts, Bob Baffert with 3yo debuts, Jonathan Thomas, Christophe Clement on turf — well-known FTS barns. Same rule: cite only when you have specific knowledge.
+  3. Workout pattern. Look for: bullets in the work tab, regular spacing (every 6-8 days), gate works in the last 14 days, a published workout at today's distance or longer. A horse without a gate work is a warning. State the workout picture explicitly.
+  4. Jockey-trainer combo and live money jockeys. A leading jockey on a FTS for a non-claiming barn is a positive signal — connections don't book Irad Ortiz Jr or Flavien Prat for a debut they don't think can run.
+  5. Dam's progeny record if known. A dam who has produced multiple winners is a positive signal regardless of the horse's own absence of form.
+  6. Equipment-first-time (especially blinkers on for a debut) and shipping pattern (long van trip into a "live" track is a tell).
+
+- For LIGHTLY-RACED MAIDENS (1-3 starts, still 0-fer), look at:
+  1. Improvement direction across the existing starts more than absolute figure level. A horse going 3rd → 2nd → 2nd-by-a-neck is more interesting than one running flat 75 Beyers.
+  2. Class moves. If today is the first start at a different level, that's load-bearing. The MSW → MAIDEN CLAIMING drop is one of the most reliable maiden angles in US racing — a horse that has been finishing 4th-6th in MSW often wins first time out for a tag. Always call this drop out when it appears, and lean toward the drop horse unless something else is clearly wrong.
+  3. Surface / distance switches. A first-try-on-turf or first-stretch-out is a real handicapping question — answer it from breeding (sire's progeny on turf / at the new distance) and pace fit.
+  4. Trainer-claim move. If the horse was claimed and is now running first time for the new barn, treat it like a new debut — ignore the old form lines and lean on the new connections' patterns.
+
+- For MAIDEN CLAIMING specifically: ask the binary question "is this horse genuinely outclassed even at this level, or is it dropping looking for a soft spot?" The first kind is a throwout regardless of figures; the second is the play. Telltales for a "drop looking for a spot": short layoff (under 30 days), trainer who frequently drops down to win, claim price at the bottom of the typical range for the meet, jockey upgrade alongside the drop. Telltales for "outclassed": double-digit beaten lengths in last 2 starts at this same level, repeated dropping with no improvement, no work between starts.
+
+- DO NOT use the standard "pace shape based on running styles" frame as confidently in maidens — running styles are still being established and pace projections in maiden fields are unreliable. State the pace picture but flag the uncertainty.
+
+- Confidence calibration: in maidens, your honest confidence should usually be lower than in older non-maiden races. State this — a clear "this is a low-confidence pick because it's a maiden field with thin form" is more useful than a confident assertion you can't back up. The user is better served by an honest 55% than a fake 75%.
+
+This playbook is additive — it does not change the JSON output schema, the consistency rule, or how you handicap non-maiden races. Apply it ONLY when the race is a maiden of any variant.
+
 Always include the program number (#) with every horse name in predictions and recommendations. Program numbers are how bettors identify horses at the teller window.
 
 DUAL EXPLANATION REQUIREMENT:
