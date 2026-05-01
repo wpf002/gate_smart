@@ -780,6 +780,7 @@ export default function RaceDetailPage() {
     setScorecardData(null);
     setAnalyzeError(null);
     setActiveTab('analysis');
+    runAnalysisAndScore();
   };
 
   const analyzeMutation = { isPending: analysisStreaming, mutate: () => runAnalysisAndScore() };
@@ -930,7 +931,7 @@ export default function RaceDetailPage() {
             </button>
           )}
           {analysis && !analysisStreaming && (
-            <button className="btn btn-ghost" onClick={handleResetAnalysis} style={{ fontSize: 12, padding: '6px 12px' }}>
+            <button className="btn btn-primary" onClick={handleResetAnalysis} disabled={isLoading} style={{ fontSize: 12, padding: '6px 12px' }}>
               Reset
             </button>
           )}
