@@ -221,11 +221,11 @@ export default function OnboardingFlow() {
   const skip = () => completeOnboarding();
 
   const handleAuthSuccess = (user, mode) => {
-    if (mode === 'login' && user?.experience_level && user.experience_level !== 'beginner') {
+    if (mode === 'login') {
       setUserProfile({
-        bankroll: user.bankroll || 500,
-        riskTolerance: user.risk_tolerance || 'medium',
-        experienceLevel: user.experience_level || 'beginner',
+        bankroll: user?.bankroll || 500,
+        riskTolerance: user?.risk_tolerance || 'medium',
+        experienceLevel: user?.experience_level || 'beginner',
         region: 'usa',
       });
       completeOnboarding();
