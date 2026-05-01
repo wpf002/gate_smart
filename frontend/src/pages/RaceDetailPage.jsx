@@ -34,7 +34,7 @@ const CONFIDENCE_PLAIN = {
 };
 
 // ── AnalysisPanel ─────────────────────────────────────────────────────────────
-function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '', raceType = '' }) {
+function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '', raceType = '', raceFinished = false }) {
   const [techExpanded, setTechExpanded] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerHorse, setDrawerHorse] = useState('');
@@ -177,6 +177,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
   // Teller script section — "Bet at Counter" toggle button for top pick (used in BEGINNER)
   const TellerScriptSection = () => {
     if (!winTellerScript && !topPick) return null;
+    if (raceFinished) return null;
     const scriptText = winTellerScript?.replace(/^Say to teller:\s*/i, '').trim()
       || (topPick ? `$2 to win on ${topPick.horse_name}` : null);
     if (!scriptText) return null;
@@ -328,30 +329,32 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
                   )}
                 </div>
                 {/* Right: action buttons side by side */}
-                <div style={{ display: 'flex', flexDirection: 'row', gap: 5, flexShrink: 0 }}>
-                  <button
-                    onClick={() => toggleTeller(`bet-${type}`)}
-                    style={{
-                      fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
-                      border: '1px solid var(--accent-gold)',
-                      background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                      cursor: 'pointer', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {isOpen ? 'Hide ▲' : 'Bet at Counter ▼'}
-                  </button>
-                  <button
-                    onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
-                    style={{
-                      fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
-                      border: '1px solid var(--accent-gold)',
-                      background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                      cursor: 'pointer', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    Bet Online →
-                  </button>
-                </div>
+                {!raceFinished && (
+                  <div style={{ display: 'flex', flexDirection: 'row', gap: 5, flexShrink: 0 }}>
+                    <button
+                      onClick={() => toggleTeller(`bet-${type}`)}
+                      style={{
+                        fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
+                        border: '1px solid var(--accent-gold)',
+                        background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {isOpen ? 'Hide ▲' : 'Bet at Counter ▼'}
+                    </button>
+                    <button
+                      onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
+                      style={{
+                        fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
+                        border: '1px solid var(--accent-gold)',
+                        background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Bet Online →
+                    </button>
+                  </div>
+                )}
               </div>
               {isOpen && (
                 <div style={{
@@ -904,33 +907,35 @@ export default function RaceDetailPage() {
         {raceFinished && raceResults && <ResultsPanel results={raceResults} />}
 
         {/* ── Mode selector ──────────────────────────────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
-            Risk Tolerance
-          </span>
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
-            {MODES.map(m => (
-              <button key={m.id} onClick={() => handleModeChange(m.id)} style={{
-                flexShrink: 0, padding: '6px 12px', borderRadius: 20, border: '1px solid',
-                borderColor: analysisMode === m.id ? 'var(--accent-gold)' : 'var(--border-subtle)',
-                background: analysisMode === m.id ? 'rgba(201,162,39,0.12)' : 'transparent',
-                color: analysisMode === m.id ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
-                fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-              }}>
-                {m.label}
-              </button>
-            ))}
+        {!raceFinished && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
+              Risk Tolerance
+            </span>
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+              {MODES.map(m => (
+                <button key={m.id} onClick={() => handleModeChange(m.id)} style={{
+                  flexShrink: 0, padding: '6px 12px', borderRadius: 20, border: '1px solid',
+                  borderColor: analysisMode === m.id ? 'var(--accent-gold)' : 'var(--border-subtle)',
+                  background: analysisMode === m.id ? 'rgba(201,162,39,0.12)' : 'transparent',
+                  color: analysisMode === m.id ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                }}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ── Action buttons ─────────────────────────────────────────── */}
         <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {showAnalyseBtn && (
+          {showAnalyseBtn && !raceFinished && (
             <button className="btn btn-primary btn-full" onClick={() => analyzeMutation.mutate()} disabled={isLoading}>
               Analyze with Secretariat
             </button>
           )}
-          {analysis && !analysisStreaming && (
+          {analysis && !analysisStreaming && !raceFinished && (
             <button className="btn btn-primary" onClick={handleResetAnalysis} disabled={isLoading} style={{ fontSize: 12, padding: '6px 12px' }}>
               Reset
             </button>
@@ -984,7 +989,7 @@ export default function RaceDetailPage() {
         {showTabs && (
           <div style={{ marginBottom: 16 }}>
             {tabs.length > 1 && <TabBar tabs={tabs} active={validTab} onChange={setActiveTab} />}
-            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} runners={race?.runners || []} userRegion={userProfile?.region || 'usa'} raceId={raceId} course={race?.course || race?.venue || ''} raceType={race?.race_type || race?.race_class || ''} />}
+            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} runners={race?.runners || []} userRegion={userProfile?.region || 'usa'} raceId={raceId} course={race?.course || race?.venue || ''} raceType={race?.race_type || race?.race_class || ''} raceFinished={raceFinished} />}
             {validTab === 'debrief' && <DebriefPanel debrief={debrief} loading={debriefLoading} />}
           </div>
         )}

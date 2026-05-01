@@ -251,13 +251,41 @@ async def get_na_meet_entries(meet_id: str) -> dict:
     )
 
 
+def _na_results_have_finishes(data: dict) -> bool:
+    if not isinstance(data, dict):
+        return False
+    for race in data.get("races", []) or []:
+        for runner in race.get("runners", []) or []:
+            pos = runner.get("official_finish_position") or runner.get("finish_position")
+            if pos and str(pos).strip() not in ("", "0"):
+                return True
+    return False
+
+
 async def get_na_meet_results(meet_id: str) -> dict:
-    """Get results for a North America meet."""
-    return await _get(
-        f"/north-america/meets/{meet_id}/results",
-        cache_key=f"na:results:{meet_id}",
-        ttl=3600,
-    )
+    """Get results for a North America meet.
+
+    Uses a short TTL when the response has no finish positions yet (results
+    feed hasn't synced) so Try Again actually retries instead of returning
+    a stale empty payload for the next hour.
+    """
+    cache_key = f"na:results:{meet_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"{BASE_URL}/north-america/meets/{meet_id}/results",
+            auth=_auth(),
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Racing API error: {resp.status_code}")
+
+    data = resp.json()
+    ttl = 3600 if _na_results_have_finishes(data) else 30
+    await cache_set(cache_key, data, ex=ttl)
+    return data
 
 
 def _parse_na_distance_furlongs(description: str, dist_value=None, dist_unit: str = "") -> float | None:
