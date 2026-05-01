@@ -38,6 +38,36 @@ async def _find_runner_in_racecards(horse_id: str) -> tuple[dict | None, dict | 
     return None, None
 
 
+def _dedupe_horses(horses: list) -> list:
+    """Collapse duplicate entries for the same horse.
+
+    The Racing API search can return the same horse multiple times when the
+    name appears across feeds (form database, current entries, etc.) often
+    with subtly different trainer spellings. Dedupe on (name + course); keep
+    the entry with more populated fields and merge in any missing values
+    from the discarded entry.
+    """
+    def _filled_count(h: dict) -> int:
+        return sum(1 for v in h.values() if v not in (None, "", [], {}))
+
+    by_key: dict[tuple[str, str], dict] = {}
+    for h in horses:
+        name = (h.get("horse_name") or h.get("horse") or "").strip().lower()
+        course = (h.get("course") or "").strip().lower()
+        key = (name, course)
+        if not name:
+            by_key[(id(h), "")] = h
+            continue
+        existing = by_key.get(key)
+        if existing is None:
+            by_key[key] = h
+            continue
+        keep, drop = (h, existing) if _filled_count(h) > _filled_count(existing) else (existing, h)
+        merged = {**drop, **{k: v for k, v in keep.items() if v not in (None, "", [], {})}}
+        by_key[key] = merged
+    return list(by_key.values())
+
+
 @router.get("/search")
 async def horse_search(q: str = ""):
     """Search by name — API first, local racecard fallback."""
@@ -49,7 +79,7 @@ async def horse_search(q: str = ""):
     # Try the Racing API search endpoint (Standard plan)
     try:
         api_result = await racing_api.search_horses(q_stripped)
-        horses = api_result.get("horses", [])
+        horses = _dedupe_horses(api_result.get("horses", []))
         if horses:
             return {"horses": horses, "total": len(horses), "source": "api"}
     except Exception:
