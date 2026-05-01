@@ -459,7 +459,7 @@ async def get_na_racecards_full(date: str = None) -> dict:
 
     import re as _re
     _WAGER_POOL = _re.compile(
-        r'\b(pick\s*\d+|trifecta|superfecta|exacta|daily\s*double|rolling\s*pick)\b',
+        r'\b(pick\s*\d+|trifecta|superfecta|exacta|daily\s*double|rolling\s*pick|over\s*[/-]?\s*under)\b',
         _re.IGNORECASE,
     )
 
@@ -468,6 +468,11 @@ async def get_na_racecards_full(date: str = None) -> dict:
     for meet in meets:
         meet_id = meet.get("meet_id", "")
         if not meet_id:
+            continue
+        # Skip Over/Under prop-bet pools — meet_id prefix "OMA_" signals these
+        # sportsbook-style wagers (race_name='Over/Under', field_size=2). They're
+        # not real races and should not appear on the racecard list.
+        if meet_id.startswith("OMA_"):
             continue
         # Skip exotic wager pool "meets" — they duplicate individual race entries.
         # Check all string fields on the meet object (name, track_name, meet_id, etc.)

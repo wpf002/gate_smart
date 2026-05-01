@@ -112,18 +112,20 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           {analysis.confidence} confidence
         </span>
       </div>
-      <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 16, padding: 2, gap: 2 }}>
-        {['beginner', 'technical'].map(v => (
-          <button key={v} onClick={() => setViewModeAndProfile(v)} style={{
-            padding: '4px 10px', borderRadius: 14, border: 'none', fontSize: 11, fontWeight: 600,
-            background: effectiveViewMode === v ? 'var(--accent-gold)' : 'transparent',
-            color: effectiveViewMode === v ? '#000' : 'var(--text-muted)',
-            cursor: 'pointer',
-          }}>
-            {v === 'beginner' ? 'Plain' : 'Technical'}
-          </button>
-        ))}
-      </div>
+      {experienceLevel === 'advanced' && (
+        <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 16, padding: 2, gap: 2 }}>
+          {['beginner', 'technical'].map(v => (
+            <button key={v} onClick={() => setViewModeAndProfile(v)} style={{
+              padding: '4px 10px', borderRadius: 14, border: 'none', fontSize: 11, fontWeight: 600,
+              background: effectiveViewMode === v ? 'var(--accent-gold)' : 'transparent',
+              color: effectiveViewMode === v ? '#000' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}>
+              {v === 'beginner' ? 'Plain' : 'Technical'}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 

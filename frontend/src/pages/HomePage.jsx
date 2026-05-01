@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getRacesToday, getRacesByDate, getDailyAccuracy } from '../utils/api';
 import { RaceCard, RaceCardSkeleton } from '../components/races/RaceCard';
@@ -112,6 +112,8 @@ export default function HomePage() {
   const [selectedDay, setSelectedDay] = useState('today');
   const [trackSearch, setTrackSearch] = useState('');
 
+  const queryClient = useQueryClient();
+
   const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ['races', selectedDay],
     queryFn: () =>
@@ -124,39 +126,54 @@ export default function HomePage() {
     placeholderData: keepPreviousData,
   });
 
+  // Warm the cache for the other day so toggling tabs feels instant.
+  useEffect(() => {
+    const otherDay = selectedDay === 'today' ? 'tomorrow' : 'today';
+    queryClient.prefetchQuery({
+      queryKey: ['races', otherDay],
+      queryFn: () =>
+        otherDay === 'today'
+          ? getRacesToday('usa')
+          : getRacesByDate('tomorrow', 'usa'),
+    });
+  }, [selectedDay, queryClient]);
+
   const isRefreshing = isFetching;
   const handleRefetch = () => { refetch(); };
 
   const races = data?.racecards ?? [];
 
-  // Normalize course names — strip exotic wager suffixes the NA API appends
-  // e.g. "Keeneland Turf Pick 3" → "Keeneland"
-  const normalizeCourse = (c) =>
-    (c || 'Unknown')
-      .replace(/\s+(turf\s+)?pick\s+\d+$/i, '')
-      .replace(/\s+(super|grand)\s+pick\s+\d+$/i, '')
-      .trim() || 'Unknown';
+  // Group/sort/filter the race list. Memoised on (races, trackSearch) so
+  // unrelated re-renders (e.g. tab highlight updates, refetch toggles) don't
+  // re-run the whole pipeline over 100+ races.
+  const { byTrack, tracks, allTracks } = useMemo(() => {
+    const normalizeCourse = (c) =>
+      (c || 'Unknown')
+        .replace(/\s+(turf\s+)?pick\s+\d+$/i, '')
+        .replace(/\s+(super|grand)\s+pick\s+\d+$/i, '')
+        .trim() || 'Unknown';
 
-  // Group by course, sort courses alphabetically
-  const byTrack = races.reduce((acc, race) => {
-    const course = normalizeCourse(race.course);
-    if (!acc[course]) acc[course] = [];
-    acc[course].push(race);
-    return acc;
-  }, {});
+    const grouped = races.reduce((acc, race) => {
+      const course = normalizeCourse(race.course);
+      if (!acc[course]) acc[course] = [];
+      acc[course].push(race);
+      return acc;
+    }, {});
 
-  const allTracks = Object.keys(byTrack).sort((a, b) => a.localeCompare(b));
-  const tracks = trackSearch.trim()
-    ? allTracks.filter(t => t.toLowerCase().includes(trackSearch.trim().toLowerCase()))
-    : allTracks;
+    const allTracks = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+    const filtered = trackSearch.trim()
+      ? allTracks.filter(t => t.toLowerCase().includes(trackSearch.trim().toLowerCase()))
+      : allTracks;
 
-  // Sort races within each track by off_dt (accurate) then time string fallback
-  tracks.forEach(t => {
-    byTrack[t].sort((a, b) => {
-      if (a.off_dt && b.off_dt) return new Date(a.off_dt) - new Date(b.off_dt);
-      return (a.time || '').localeCompare(b.time || '');
+    filtered.forEach(t => {
+      grouped[t].sort((a, b) => {
+        if (a.off_dt && b.off_dt) return new Date(a.off_dt) - new Date(b.off_dt);
+        return (a.time || '').localeCompare(b.time || '');
+      });
     });
-  });
+
+    return { byTrack: grouped, tracks: filtered, allTracks };
+  }, [races, trackSearch]);
 
   return (
     <div>
