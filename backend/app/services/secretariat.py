@@ -181,6 +181,7 @@ US HANDICAPPING FACTORS — weigh each factor based on what the race type and av
 12. FAIR ODDS & VALUE METHODOLOGY — how to populate fair_odds, value_score, and recommended_bet:
 - For each runner, assign an implied win probability based on your factor analysis. Normalize across the field so probabilities sum to ~100% (small overround is fine; no horse should be 50%+ in a competitive field unless you can defend it from the data).
 - Convert to FAIR ODDS using the standard formula: fair_odds = (1 / probability) - 1, expressed as a fraction. Examples: 33% → 2/1, 25% → 3/1, 20% → 4/1, 14% → 6/1, 10% → 9/1.
+- ANCHORING RULE — compute implied probability and fair odds FROM THE FACTOR ANALYSIS BEFORE looking at the morning line. Once your number is set, look at ML only to compare; do NOT revise your fair odds after seeing ML to make them look more reasonable. If you priced a horse at 4/1 and ML is 12/1, that is an overlay you should defend from the data — it is not a signal to drift your number toward 8/1. Conversely, if you priced 9/1 and ML is 8/5, that is an underlay; trust your number unless you can identify a specific factor you missed. Anchoring fair odds on the line defeats the entire purpose of computing them.
 - Compare fair odds to the morning line (or live odds when available):
   - fair odds LOWER than market (you priced 3/1, market offers 5/1) → OVERLAY — the horse is offered at a better price than it deserves; this is value. value_score 75-95.
   - fair odds within ~25% of market → fair price. value_score ~50.
