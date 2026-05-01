@@ -501,9 +501,12 @@ async def get_na_racecards_full(date: str = None) -> dict:
         if meet_id.startswith("OMA_"):
             continue
         # Skip exotic wager pool "meets" — they duplicate individual race entries.
-        # Check all string fields on the meet object (name, track_name, meet_id, etc.)
-        # because the API stores the wager name in different fields depending on pool type.
-        meet_text = " ".join(str(v) for v in meet.values() if isinstance(v, str))
+        # Check ONLY identifier fields (name, track_name, meet_id), not every string
+        # field on the meet object. Joining all values caught legitimate tracks
+        # whose metadata mentioned wager sequences (e.g. "Late Pick 4 features
+        # Kentucky Oaks") and dropped the entire card. Race-id dedup below catches
+        # any wager-pool duplicates that slip through this narrower check.
+        meet_text = " ".join(str(meet.get(k, "")) for k in ("meet_name", "name", "track_name", "meet_id"))
         if _WAGER_POOL.search(meet_text):
             continue
         try:

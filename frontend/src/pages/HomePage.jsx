@@ -114,7 +114,7 @@ export default function HomePage() {
 
   const queryClient = useQueryClient();
 
-  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['races', selectedDay],
     queryFn: () =>
       selectedDay === 'today'
@@ -137,9 +137,6 @@ export default function HomePage() {
           : getRacesByDate('tomorrow', 'usa'),
     });
   }, [selectedDay, queryClient]);
-
-  const isRefreshing = isFetching;
-  const handleRefetch = () => { refetch(); };
 
   const races = data?.racecards ?? [];
 
@@ -180,20 +177,6 @@ export default function HomePage() {
       <PageHeader
         title="GATESMART"
         subtitle="AI-POWERED RACING INTELLIGENCE"
-        right={
-          <button
-            onClick={handleRefetch}
-            disabled={isRefreshing}
-            style={{
-              background: 'none', border: 'none', cursor: isRefreshing ? 'default' : 'pointer',
-              fontSize: 18, color: 'var(--text-muted)',
-              display: 'inline-flex', alignItems: 'center',
-              animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none',
-            }}
-          >
-            ↻
-          </button>
-        }
       />
 
       <SecretariatReportCard />
