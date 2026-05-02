@@ -382,31 +382,30 @@ def _na_meet_results(runners_data: list, race_number: str = "8") -> dict:
 
 
 @pytest.mark.asyncio
-async def test_find_race_result_returns_none_when_all_positions_blank():
-    """When the racing feed returns runners with no finish positions yet, return None
-    so the route falls through to 202 pending instead of generating a useless debrief."""
+async def test_find_race_result_uses_array_index_when_no_position_field():
+    """The NA results endpoint returns top-3 finishers in finish order with no
+    explicit position field; we must derive position from the array index."""
     from app.api.routes.ai_advisor import _find_race_result
     runners = [
-        {"registration_number": "h1", "horse_name": "A", "program_number": "1"},
-        {"registration_number": "h2", "horse_name": "B", "program_number": "2"},
+        {"registration_number": "h1", "horse_name": "Winner",  "program_number": "11"},
+        {"registration_number": "h2", "horse_name": "Place",   "program_number": "3"},
+        {"registration_number": "h3", "horse_name": "Show",    "program_number": "4"},
     ]
     with patch("app.api.routes.ai_advisor.racing_api.get_na_meet_results",
-               new=AsyncMock(return_value=_na_meet_results(runners))), \
-         patch("app.api.routes.ai_advisor.asyncio.sleep", new=AsyncMock()):
+               new=AsyncMock(return_value=_na_meet_results(runners))):
         result = await _find_race_result("CD_meet-8")
-    assert result is None
+    assert result is not None
+    positions = {r["horse_name"]: r["position"] for r in result["runners"]}
+    assert positions == {"Winner": "1", "Place": "2", "Show": "3"}
 
 
 @pytest.mark.asyncio
-async def test_find_race_result_returns_none_when_positions_are_zero_or_empty_strings():
+async def test_find_race_result_returns_none_when_runners_empty():
+    """No runners means the meet results haven't loaded yet — return None so
+    the route falls through to 202 pending."""
     from app.api.routes.ai_advisor import _find_race_result
-    runners = [
-        {"registration_number": "h1", "horse_name": "A", "official_finish_position": ""},
-        {"registration_number": "h2", "horse_name": "B", "official_finish_position": "0"},
-        {"registration_number": "h3", "horse_name": "C", "finish_position": ""},
-    ]
     with patch("app.api.routes.ai_advisor.racing_api.get_na_meet_results",
-               new=AsyncMock(return_value=_na_meet_results(runners))), \
+               new=AsyncMock(return_value=_na_meet_results([]))), \
          patch("app.api.routes.ai_advisor.asyncio.sleep", new=AsyncMock()):
         result = await _find_race_result("CD_meet-8")
     assert result is None

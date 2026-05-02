@@ -153,45 +153,42 @@ def _na_meet_results(runners_data: list, race_number: str = "8") -> dict:
 
 
 @pytest.mark.asyncio
-async def test_results_for_race_404_when_all_positions_blank(client):
-    """Racing feed flagged the race finished but hasn't synced positions —
-    return 404 so the frontend can show 'pending' instead of an empty card."""
+async def test_results_for_race_uses_array_index_when_no_position_field(client):
+    """The NA results endpoint returns top-3 finishers in finish order with no
+    explicit position field — derive position from the array index."""
     runners = [
-        {"registration_number": "h1", "horse_name": "A", "program_number": "1"},
-        {"registration_number": "h2", "horse_name": "B", "program_number": "2"},
-    ]
-    with patch("app.api.routes.races.racing_api.get_na_meet_results",
-               new=AsyncMock(return_value=_na_meet_results(runners))), \
-         patch("app.api.routes.races.asyncio.sleep", new=AsyncMock()):
-        r = await client.get("/api/races/results/race/CD_meet-8")
-    assert r.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_results_for_race_404_when_positions_zero_or_empty(client):
-    runners = [
-        {"registration_number": "h1", "horse_name": "A", "official_finish_position": ""},
-        {"registration_number": "h2", "horse_name": "B", "official_finish_position": "0"},
-        {"registration_number": "h3", "horse_name": "C", "finish_position": ""},
-    ]
-    with patch("app.api.routes.races.racing_api.get_na_meet_results",
-               new=AsyncMock(return_value=_na_meet_results(runners))), \
-         patch("app.api.routes.races.asyncio.sleep", new=AsyncMock()):
-        r = await client.get("/api/races/results/race/CD_meet-8")
-    assert r.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_results_for_race_returns_runners_when_positions_present(client):
-    runners = [
-        {"registration_number": "h1", "horse_name": "Winner", "official_finish_position": "1", "program_number": "4"},
-        {"registration_number": "h2", "horse_name": "Second", "official_finish_position": "2", "program_number": "7"},
-        {"registration_number": "h3", "horse_name": "Scratch", "official_finish_position": ""},
+        {"registration_number": "h1", "horse_name": "Powershift",  "program_number": "11"},
+        {"registration_number": "h2", "horse_name": "Silent Way",  "program_number": "3"},
+        {"registration_number": "h3", "horse_name": "Ingleborough", "program_number": "4"},
     ]
     with patch("app.api.routes.races.racing_api.get_na_meet_results",
                new=AsyncMock(return_value=_na_meet_results(runners))):
         r = await client.get("/api/races/results/race/CD_meet-8")
     assert r.status_code == 200
     body = r.json()
-    assert body["race_id"] == "CD_meet-8"
+    positions = {rn["horse_name"]: rn["position"] for rn in body["runners"]}
+    assert positions == {"Powershift": "1", "Silent Way": "2", "Ingleborough": "3"}
+
+
+@pytest.mark.asyncio
+async def test_results_for_race_404_when_runners_empty(client):
+    """No runners means the meet results haven't loaded yet — return 404."""
+    with patch("app.api.routes.races.racing_api.get_na_meet_results",
+               new=AsyncMock(return_value=_na_meet_results([]))), \
+         patch("app.api.routes.races.asyncio.sleep", new=AsyncMock()):
+        r = await client.get("/api/races/results/race/CD_meet-8")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_results_for_race_prefers_explicit_position_when_present(client):
+    runners = [
+        {"registration_number": "h1", "horse_name": "Winner", "official_finish_position": "1", "program_number": "4"},
+        {"registration_number": "h2", "horse_name": "Second", "official_finish_position": "2", "program_number": "7"},
+    ]
+    with patch("app.api.routes.races.racing_api.get_na_meet_results",
+               new=AsyncMock(return_value=_na_meet_results(runners))):
+        r = await client.get("/api/races/results/race/CD_meet-8")
+    assert r.status_code == 200
+    body = r.json()
     assert any(rn["position"] == "1" and rn["horse_name"] == "Winner" for rn in body["runners"])

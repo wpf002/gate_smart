@@ -302,25 +302,25 @@ async def _find_race_result(race_id: str) -> dict | None:
                     race_key = race.get("race_key") or {}
                     rnum = str(race_key.get("race_number", "")) if isinstance(race_key, dict) else ""
                     if rnum == str(race_number):
-                        # Normalize runners for the debrief
+                        # The NA results endpoint returns the runners array as the
+                        # top-3 finishers in finish order, with no explicit position
+                        # field. Fall back to (index + 1) so we can surface results.
                         runners = []
-                        for entry in race.get("runners", []):
+                        for idx, entry in enumerate(race.get("runners", [])):
+                            explicit = (
+                                entry.get("official_finish_position")
+                                or entry.get("finish_position")
+                            )
+                            position = str(explicit) if explicit else str(idx + 1)
                             runners.append({
                                 "horse_id": str(entry.get("registration_number", "")),
                                 "horse_name": entry.get("horse_name", ""),
                                 "horse": entry.get("horse_name", ""),
-                                "position": str(
-                                    entry.get("official_finish_position") or
-                                    entry.get("finish_position") or ""
-                                ),
+                                "position": position,
                                 "sp": str(entry.get("final_odds") or entry.get("morning_line_odds", "SP")),
                                 "number": str(entry.get("program_number", "")),
                             })
-                        has_positions = any(
-                            r["position"] and r["position"] not in ("0", "")
-                            for r in runners
-                        )
-                        if runners and has_positions:
+                        if runners:
                             return {
                                 "race_id": race_id,
                                 "runners": runners,

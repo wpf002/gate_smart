@@ -70,28 +70,25 @@ async def results_for_race(race_id: str):
                     rk = race.get("race_key") or {}
                     rnum = str(rk.get("race_number", "")) if isinstance(rk, dict) else ""
                     if rnum == str(race_number):
-                        runners = [
-                            {
+                        # NA results endpoint returns runners as the top-3
+                        # finishers in finish order, with no explicit position
+                        # field. Fall back to (index + 1) so the result card
+                        # shows actual finish positions.
+                        runners = []
+                        for idx, e in enumerate(race.get("runners", [])):
+                            explicit = (
+                                e.get("official_finish_position")
+                                or e.get("finish_position")
+                            )
+                            position = str(explicit) if explicit else str(idx + 1)
+                            runners.append({
                                 "horse_id": str(e.get("registration_number", "")),
                                 "horse_name": e.get("horse_name", ""),
-                                "position": str(
-                                    e.get("official_finish_position")
-                                    or e.get("finish_position") or ""
-                                ),
+                                "position": position,
                                 "sp": str(e.get("final_odds") or e.get("morning_line_odds", "SP")),
                                 "number": str(e.get("program_number", "")),
-                            }
-                            for e in race.get("runners", [])
-                        ]
-                        # Match the debrief endpoint: only return results once at
-                        # least one runner has a real finish position. Otherwise
-                        # the racing feed has flagged the race finished but not
-                        # synced positions, and we'd render an empty result card.
-                        has_positions = any(
-                            r["position"] and r["position"] not in ("0", "")
-                            for r in runners
-                        )
-                        if runners and has_positions:
+                            })
+                        if runners:
                             return {"race_id": race_id, "title": race.get("race_name", ""), "runners": runners}
         except Exception:
             pass
