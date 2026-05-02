@@ -143,9 +143,9 @@ export default function DebriefPanel({ debrief, loading }) {
                       </div>
                     )}
                   </td>
-                  <td style={numStyle}>{r.win_payoff || '—'}</td>
-                  <td style={numStyle}>{r.place_payoff || '—'}</td>
-                  <td style={numStyle}>{r.show_payoff || '—'}</td>
+                  <td style={r.win_payoff   ? { ...numStyle, color: 'var(--accent-gold-bright)', fontWeight: 600 } : numStyle}>{r.win_payoff   || '—'}</td>
+                  <td style={r.place_payoff ? { ...numStyle, color: 'var(--accent-gold-bright)', fontWeight: 600 } : numStyle}>{r.place_payoff || '—'}</td>
+                  <td style={r.show_payoff  ? { ...numStyle, color: 'var(--accent-gold-bright)', fontWeight: 600 } : numStyle}>{r.show_payoff  || '—'}</td>
                 </tr>
               ))}
             </tbody>
