@@ -131,7 +131,10 @@ async def predict_race(
     )
 
     try:
-        resp = await client.messages.create(
+        from app.core.llm_cost import tracked_create
+        resp = await tracked_create(
+            client,
+            endpoint="nightly_predict_all",
             model="claude-haiku-4-5-20251001",
             max_tokens=100,
             temperature=0.1,

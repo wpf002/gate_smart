@@ -8,6 +8,7 @@ import anthropic
 import httpx
 import json
 from app.core.config import settings
+from app.core.llm_cost import tracked_create
 
 # Use system SSL certs — avoids certifi/OpenSSL incompatibility on macOS Python 3.13
 _ssl_ctx = ssl.create_default_context()
@@ -674,9 +675,11 @@ Return this JSON exactly:
 }}"""
 
     try:
-        response = await client.messages.create(
+        response = await tracked_create(
+            client,
+            endpoint="analyze_race",
             model="claude-haiku-4-5-20251001",
-            max_tokens=8192,
+            max_tokens=3000,
             temperature=0.2,
             system=SECRETARIAT_SYSTEM,
             messages=[{"role": "user", "content": prompt}]
@@ -687,26 +690,7 @@ Return this JSON exactly:
         raise
 
     raw_text = response.content[0].text
-    try:
-        result = _truncate_analysis(_parse_json(raw_text))
-    except json.JSONDecodeError:
-        # Retry once with a simplified prompt asking only for JSON
-        retry_prompt = (
-            "Return ONLY the JSON object from your previous analysis — "
-            "no explanation, no markdown, just the raw JSON."
-        )
-        retry_response = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=8192,
-            temperature=0.2,
-            system=SECRETARIAT_SYSTEM,
-            messages=[
-                {"role": "user", "content": prompt},
-                {"role": "assistant", "content": raw_text},
-                {"role": "user", "content": retry_prompt},
-            ]
-        )
-        result = _truncate_analysis(_parse_json(retry_response.content[0].text))
+    result = _truncate_analysis(_parse_json(raw_text))
 
     try:
         await extract_and_store_fair_prices(race_data.get("race_id", ""), result)
@@ -806,9 +790,10 @@ Return this JSON exactly:
     )
 
     full_text = ""
+    final_message = None
     async with client.messages.stream(
         model="claude-haiku-4-5-20251001",
-        max_tokens=8192,
+        max_tokens=3000,
         temperature=0.2,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
@@ -816,23 +801,20 @@ Return this JSON exactly:
         async for text in stream.text_stream:
             full_text += text
             yield ("chunk", text)
+        final_message = await stream.get_final_message()
 
-    try:
-        result = _truncate_analysis(_parse_json(full_text))
-    except (json.JSONDecodeError, ValueError, KeyError):
-        # JSON was truncated — retry without streaming to get a complete response
-        retry_response = await client.messages.create(
+    # Log cost for the streamed call (no retry path — truncation surfaces as a parse error)
+    if final_message is not None:
+        from app.core.llm_cost import log_call
+        usage = getattr(final_message, "usage", None)
+        await log_call(
+            endpoint="stream_analyze_race",
             model="claude-haiku-4-5-20251001",
-            max_tokens=8192,
-            temperature=0.2,
-            system=SECRETARIAT_SYSTEM,
-            messages=[
-                {"role": "user", "content": prompt},
-                {"role": "assistant", "content": full_text},
-                {"role": "user", "content": "Complete the JSON object you started. Return ONLY the complete, valid JSON — no other text."},
-            ]
+            input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
+            output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
         )
-        result = _truncate_analysis(_parse_json(retry_response.content[0].text))
+
+    result = _truncate_analysis(_parse_json(full_text))
 
     yield ("result", result)
 
@@ -882,7 +864,9 @@ Return this JSON exactly:
   "good_for_beginners": true
 }}"""
 
-    response = await client.messages.create(
+    response = await tracked_create(
+        client,
+        endpoint="explain_horse",
         model="claude-haiku-4-5-20251001",
         max_tokens=500,
         temperature=0.2,
@@ -934,7 +918,9 @@ Return JSON:
   "bet_sizing_explanation": "Explain to the user why these stake amounts make sense for their bankroll"
 }}"""
 
-    response = await client.messages.create(
+    response = await tracked_create(
+        client,
+        endpoint="recommend_bet_type",
         model="claude-sonnet-4-6",
         max_tokens=1500,
         temperature=0.2,
@@ -967,7 +953,9 @@ Return JSON:
   "positive_signs": ["any good patterns"]
 }}"""
 
-    response = await client.messages.create(
+    response = await tracked_create(
+        client,
+        endpoint="explain_form_string",
         model="claude-haiku-4-5-20251001",
         max_tokens=1200,
         temperature=0.2,
@@ -1030,7 +1018,9 @@ If historical data is absent for a dimension, score conservatively (40-60) rathe
 Be honest. A 50 is average. Reserve 80+ for genuinely strong attributes.
 A horse can score 90 on speed and 20 on value — that's fine and useful."""
 
-    response = await client.messages.create(
+    response = await tracked_create(
+        client,
+        endpoint="score_horse",
         model="claude-haiku-4-5-20251001",
         max_tokens=1000,
         temperature=0.2,
@@ -1354,17 +1344,38 @@ async def extract_and_store_fair_prices(race_id: str, analysis: dict) -> None:
             continue
 
 
-async def answer_betting_question(question: str, context: dict = None) -> str:
-    """Free-form Q&A — Secretariat answers any horse-racing question with substance.
+_LIVE_RACING_KEYWORDS = (
+    "today", "tonight", "tomorrow", "this weekend", "this week",
+    "currently", "live odds", "right now", "post time",
+    "current odds", "current morning line", "morning line",
+    "scratched", "who's running", "who is running",
+    "who do you like", "who will win",
+    "this season", "this meet",
+)
 
-    Uses Anthropic's native web search tool so Secretariat can pull current race
-    fields, odds, prep results, and breaking racing news in real time. Falls back
-    on its trained knowledge for evergreen topics (history, breeding, strategy,
-    handicapping principles).
+
+def _needs_web_search(question: str) -> bool:
+    """True if the question is asking about current racing state (entries, odds,
+    upcoming races) and therefore justifies the more expensive Sonnet+search path.
+    Otherwise we answer cheaply from Haiku's training knowledge."""
+    q = (question or "").lower()
+    return any(kw in q for kw in _LIVE_RACING_KEYWORDS)
+
+
+async def answer_betting_question(question: str, context: dict = None) -> str:
+    """Free-form Q&A — Secretariat answers any horse-racing question.
+
+    Cost-tiered routing:
+    - Default: Haiku, no web search. Cheap (~$0.003/call). Handles evergreen
+      topics — handicapping theory, history, bet types, breeding, strategy.
+    - Live-racing intent (today's races, current odds, named upcoming stakes):
+      Sonnet + web search. Expensive (~$0.07/call). Only fires when the
+      question actually needs current information.
     """
     import datetime
 
     today_str = datetime.date.today().strftime("%A, %B %d, %Y")
+    use_search = _needs_web_search(question)
 
     prompt = f"""Today is {today_str}.
 
@@ -1413,43 +1424,43 @@ Question: {question}
 
 Reply with the markdown answer directly — no JSON wrapper, no preface, no meta-commentary about your tools."""
 
-    create_args = dict(
-        model="claude-sonnet-4-6",
-        max_tokens=2000,
+    if use_search:
+        # Live-racing intent: pay for Sonnet + web search (≈$0.07/call)
+        create_args = dict(
+            model="claude-sonnet-4-6",
+            max_tokens=2000,
+            temperature=0.3,
+            system=SECRETARIAT_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        web_search_tool = [{
+            "type": "web_search_20250305",
+            "name": "web_search",
+            "max_uses": 3,
+        }]
+        try:
+            response = await tracked_create(
+                client,
+                endpoint="ask_sonnet_search",
+                tools=web_search_tool,
+                **create_args,
+            )
+        except anthropic.APIError:
+            # Web search unavailable — answer from training instead of swallowing the cost twice
+            response = await tracked_create(client, endpoint="ask_sonnet_nosearch", **create_args)
+        return _extract_text(response)
+
+    # Default: Haiku, no web search (≈$0.003/call) for evergreen handicapping/strategy/history
+    response = await tracked_create(
+        client,
+        endpoint="ask_haiku",
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
         temperature=0.3,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
     )
-
-    web_search_tool = [{
-        "type": "web_search_20250305",
-        "name": "web_search",
-        "max_uses": 3,
-    }]
-
-    try:
-        response = await client.messages.create(**create_args, tools=web_search_tool)
-    except anthropic.APIError:
-        # If web search is unavailable (SDK mismatch, region, rate limit, billing),
-        # still answer the question from training.
-        response = await client.messages.create(**create_args)
-
-    answer = _extract_text(response)
-
-    # Defensive retry: if the model returned a one-liner non-answer to a
-    # substantive question, force it to use the search tool and try again.
-    if _is_throwaway(answer) and _looks_substantive(question):
-        try:
-            response = await client.messages.create(
-                **create_args,
-                tools=web_search_tool,
-                tool_choice={"type": "tool", "name": "web_search"},
-            )
-            answer = _extract_text(response) or answer
-        except anthropic.APIError:
-            pass
-
-    return answer
+    return _extract_text(response)
 
 
 def _extract_text(response) -> str:
@@ -1466,24 +1477,6 @@ def _extract_text(response) -> str:
         if getattr(b, "type", None) == "text" and getattr(b, "text", "")
     ]
     return "\n\n".join(p for p in parts if p).strip()
-
-
-def _is_throwaway(answer: str) -> bool:
-    """Heuristic: did the model bail out with a non-answer?"""
-    a = (answer or "").strip()
-    return len(a) < 80 or a.lower().startswith(("don't put", "it's hard", "i can't", "i cannot"))
-
-
-def _looks_substantive(question: str) -> bool:
-    """Heuristic: does the question deserve a real handicap, not a one-liner?"""
-    q = (question or "").lower()
-    triggers = (
-        "who will", "who do you", "who's going to", "who is going to",
-        "who's the favorite", "what's the favorite", "best bet",
-        "your pick", "your top pick", "win the", "this weekend",
-        "tomorrow", "today", "current odds", "morning line",
-    )
-    return any(t in q for t in triggers)
 
 
 # ── Prediction Storage ────────────────────────────────────────────────────────
@@ -2244,7 +2237,9 @@ Return JSON exactly:
   "how_im_evolving": "2-4 sentences: specific adjustments I will make, grounded in the 7-day trend data above. If a persistent weak spot exists, name it and commit to a concrete gate. If a prior lesson has NOT moved its target category in the trend data, say so plainly."
 }}"""
 
-    response = await client.messages.create(
+    response = await tracked_create(
+        client,
+        endpoint="generate_daily_email_report",
         model="claude-sonnet-4-6",
         max_tokens=1200,
         temperature=0.4,

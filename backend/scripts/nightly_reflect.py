@@ -124,7 +124,10 @@ async def reflect_batch(client, races: list[dict]) -> list[dict]:
     )
 
     try:
-        resp = await client.messages.create(
+        from app.core.llm_cost import tracked_create
+        resp = await tracked_create(
+            client,
+            endpoint="nightly_reflect_batch",
             model="claude-haiku-4-5-20251001",
             max_tokens=1024,
             temperature=0.2,
@@ -182,7 +185,10 @@ async def curate_lessons(
     )
 
     try:
-        resp = await client.messages.create(
+        from app.core.llm_cost import tracked_create
+        resp = await tracked_create(
+            client,
+            endpoint="nightly_reflect_curate",
             model="claude-sonnet-4-6",
             max_tokens=2000,
             temperature=0.2,
@@ -252,7 +258,10 @@ async def synthesise_lessons(client, reflections: list[dict], date_str: str) -> 
     )
 
     try:
-        resp = await client.messages.create(
+        from app.core.llm_cost import tracked_create
+        resp = await tracked_create(
+            client,
+            endpoint="nightly_reflect_synthesise",
             model="claude-sonnet-4-6",
             max_tokens=1200,
             temperature=0.3,

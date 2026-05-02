@@ -108,6 +108,30 @@ class DailyAccuracyReport(Base):
     )
 
 
+class LLMCallLog(Base):
+    """One row per Claude API call — used to track daily cost burn by endpoint/model."""
+    __tablename__ = "llm_call_log"
+    __table_args__ = (
+        Index("ix_llm_call_log_date", "call_date"),
+        Index("ix_llm_call_log_endpoint", "endpoint"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    call_date: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    endpoint: Mapped[str] = mapped_column(String(80), nullable=False)
+    model: Mapped[str] = mapped_column(String(80), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    web_searches: Mapped[int] = mapped_column(Integer, default=0)
+    est_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+
+
 class SecretariatCalibration(Base):
     """
     Single-row rolling calibration state — always UPDATE id=1, never INSERT a second row.
