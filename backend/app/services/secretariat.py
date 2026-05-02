@@ -1945,18 +1945,32 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
     show_pct = f"{len(show_hits)/total:.1%}" if total else "0.0%"
 
     # ── Build complete results table in Python (every race, no LLM needed) ──
+    def _ps_segments(p):
+        """Build [(label, name, hit_bool), ...] for whichever of P/S picks exist."""
+        out = []
+        if p.predicted_second:
+            out.append(("P", p.predicted_second, bool(getattr(p, "place_pick_correct", False))))
+        if p.predicted_third:
+            out.append(("S", p.predicted_third, bool(getattr(p, "show_pick_correct", False))))
+        return out
+
     def _row_text(p):
         icon = "✅" if p.top_pick_correct else ("🔶" if p.in_the_money else "❌")
-        return (
+        main = (
             f"{icon} {p.race_name or p.race_id} | {p.track_code or '?'} | "
             f"{p.race_type or getattr(p, 'surface', None) or '?'} | Picked: {p.predicted_first or '?'} | "
             f"Won: {p.actual_first or 'N/A'}"
         )
+        segs = _ps_segments(p)
+        if not segs:
+            return main
+        sub = "  ·  ".join(f"{lbl}: {name} {'✓' if hit else '✗'}" for lbl, name, hit in segs)
+        return f"{main}\n     {sub}"
 
     def _row_html(p):
         icon = "✅" if p.top_pick_correct else ("🔶" if p.in_the_money else "❌")
         bg = "#f0fff0" if p.top_pick_correct else ("#fffbe6" if p.in_the_money else "#fff5f5")
-        return (
+        main = (
             f'<tr style="background:{bg}">'
             f'<td style="padding:4px 8px">{icon}</td>'
             f'<td style="padding:4px 8px">{p.race_name or p.race_id}</td>'
@@ -1966,6 +1980,23 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
             f'<td style="padding:4px 8px">{p.actual_first or "N/A"}</td>'
             f'</tr>'
         )
+        segs = _ps_segments(p)
+        if not segs:
+            return main
+        parts = []
+        for lbl, name, hit in segs:
+            mark = '<span style="color:#2d6a2d">✓</span>' if hit else '<span style="color:#a33">✗</span>'
+            parts.append(f'<strong>{lbl}:</strong> {name} {mark}')
+        sub_text = '  ·  '.join(parts)
+        sub = (
+            f'<tr style="background:{bg}">'
+            f'<td style="padding:0 8px 6px 8px"></td>'
+            f'<td colspan="5" style="padding:0 8px 6px 8px;color:#666;font-size:12px">'
+            f'{sub_text}'
+            f'</td>'
+            f'</tr>'
+        )
+        return main + sub
 
     # Group by track, then race order within each track, so the digest reads track-by-track
     from itertools import groupby
