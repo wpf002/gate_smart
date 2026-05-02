@@ -1677,9 +1677,10 @@ async def generate_morning_line_email(predictions: list, report_date) -> dict:
                 if sig else "no history yet"
             )
 
+            num = (p.predicted_first_num or "").lstrip("#").strip()
             win_label = (
-                f"#{p.predicted_first_num} {p.predicted_first}"
-                if p.predicted_first_num else (p.predicted_first or "?")
+                f"#{num} {p.predicted_first}"
+                if num else (p.predicted_first or "?")
             )
             place_label = p.predicted_second or "—"
             show_label = p.predicted_third or "—"

@@ -58,6 +58,7 @@ async def main(target_date: datetime.date, dry_run: bool):
                 RacePrediction.race_date == target_date,
                 or_(RacePrediction.region == "na", RacePrediction.region == None),  # noqa: E711
                 RacePrediction.user_id == None,  # noqa: E711  global auto-prediction rows
+                RacePrediction.analysis_mode == "auto_daily",  # one row per race
             )
         )
         predictions = list(result.scalars().all())
