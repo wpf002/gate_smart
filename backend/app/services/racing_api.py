@@ -601,6 +601,9 @@ async def get_na_results_full(date: str = None) -> dict:
                     ),
                     "surface": race.get("surface_description") or race.get("surface", ""),
                     "runners": runners,
+                    # Forwarded so post-race reflection (nightly_reflect.py) can
+                    # reason about exotic structuring and value, not just W/L names.
+                    "payoffs": race.get("payoffs") or [],
                 })
         except Exception:
             continue
