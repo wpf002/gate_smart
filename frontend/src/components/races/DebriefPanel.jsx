@@ -73,26 +73,29 @@ export default function DebriefPanel({ debrief, loading }) {
   };
 
   const race = debrief.race || {};
-  const meta = [race.class, race.distance, race.surface, race.going, race.purse]
-    .filter(Boolean)
-    .join(' · ');
 
   return (
     <div style={{ padding: '0 0 8px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--accent-gold)' }}>
-          OFFICIAL CHART
-        </span>
-        {accBadge && (
-          <span className={`badge ${accBadge.cls}`}>{accBadge.label}</span>
-        )}
-      </div>
-      {meta && (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-          {meta}
+      <div style={{
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-gold)',
+        borderRadius: 'var(--radius-md)',
+        padding: 14,
+        marginBottom: 16,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--accent-gold)' }}>
+            OFFICIAL RESULT
+          </span>
+          {accBadge && (
+            <span className={`badge ${accBadge.cls}`}>{accBadge.label}</span>
+          )}
         </div>
-      )}
+        {race.purse && (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.04em', marginBottom: 16 }}>
+            OPTIONAL CLAIMING VALUE: <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{race.purse}</span>
+          </div>
+        )}
 
       {/* Official order */}
       {debrief.official_order?.length > 0 && (
@@ -200,6 +203,7 @@ export default function DebriefPanel({ debrief, loading }) {
           </p>
         </Section>
       )}
+      </div>
 
       {/* Pre-race prediction comparison */}
       {debrief.prediction_check?.contenders?.length > 0 && (

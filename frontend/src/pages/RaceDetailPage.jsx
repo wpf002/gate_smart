@@ -934,7 +934,8 @@ export default function RaceDetailPage() {
         )}
 
         {/* ── Finished race results ──────────────────────────────────── */}
-        {raceFinished && raceResults && <ResultsPanel results={raceResults} />}
+        {/* Hidden once debrief is loaded — the debrief card supersedes it. */}
+        {raceFinished && raceResults && !debrief && <ResultsPanel results={raceResults} />}
 
         {/* ── Mode selector ──────────────────────────────────────────── */}
         {!raceFinished && (
