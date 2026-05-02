@@ -15,11 +15,19 @@ export default function BottomNav() {
   const location = useLocation();
   const queryClient = useQueryClient();
 
-  // Tapping Races always lands on a freshly-refetched Races list — invalidate
-  // the cache so any new races, scratches, or status changes appear right away.
+  // Tapping Races always lands on a freshly-refetched Races list. When the
+  // user is already on the home route, navigate() is a no-op so we need to
+  // scroll to top and force a refetch ourselves to give visible feedback that
+  // the tap was registered.
   const goToRaces = () => {
     queryClient.invalidateQueries({ queryKey: ['races'] });
-    navigate('/');
+    if (location.pathname === '/') {
+      const scroller = document.querySelector('.page-content');
+      if (scroller) scroller.scrollTo({ top: 0, behavior: 'smooth' });
+      queryClient.refetchQueries({ queryKey: ['races'], type: 'active' });
+    } else {
+      navigate('/');
+    }
   };
 
   return (

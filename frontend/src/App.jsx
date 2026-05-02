@@ -69,11 +69,18 @@ function SideNav() {
   const queryClient = useQueryClient();
 
   // Tapping Races or the GateSmart logo always lands on a freshly-refetched
-  // Races list — invalidate the cache so any new races, scratches, or status
-  // changes appear immediately.
+  // Races list. When the user is already on the home route, navigate() is a
+  // no-op, so we scroll to top and force a refetch ourselves so the tap gives
+  // clear visual feedback that something happened.
   const goToRacesFresh = () => {
     queryClient.invalidateQueries({ queryKey: ['races'] });
-    navigate('/');
+    if (location.pathname === '/') {
+      const scroller = document.querySelector('.page-content');
+      if (scroller) scroller.scrollTo({ top: 0, behavior: 'smooth' });
+      queryClient.refetchQueries({ queryKey: ['races'], type: 'active' });
+    } else {
+      navigate('/');
+    }
   };
 
   const goTo = (path) => {
