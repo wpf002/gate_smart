@@ -312,6 +312,12 @@ async def _find_race_result(race_id: str) -> dict | None:
                                 or entry.get("finish_position")
                             )
                             position = str(explicit) if explicit else str(idx + 1)
+                            jockey = " ".join(filter(None, [
+                                entry.get("jockey_first_name"), entry.get("jockey_last_name")
+                            ])).strip()
+                            trainer = " ".join(filter(None, [
+                                entry.get("trainer_first_name"), entry.get("trainer_last_name")
+                            ])).strip()
                             runners.append({
                                 "horse_id": str(entry.get("registration_number", "")),
                                 "horse_name": entry.get("horse_name", ""),
@@ -319,12 +325,29 @@ async def _find_race_result(race_id: str) -> dict | None:
                                 "position": position,
                                 "sp": str(entry.get("final_odds") or entry.get("morning_line_odds", "SP")),
                                 "number": str(entry.get("program_number", "")),
+                                "jockey": jockey,
+                                "trainer": trainer,
+                                "win_payoff": entry.get("win_payoff"),
+                                "place_payoff": entry.get("place_payoff"),
+                                "show_payoff": entry.get("show_payoff"),
                             })
                         if runners:
                             return {
                                 "race_id": race_id,
                                 "runners": runners,
                                 "title": race.get("race_name", ""),
+                                # Rich post-race fields used by the deterministic debrief.
+                                "race_class": race.get("race_type_description") or race.get("race_class", ""),
+                                "distance_description": race.get("distance_description", ""),
+                                "surface_description": race.get("surface_description", ""),
+                                "track_condition_description": race.get("track_condition_description", ""),
+                                "track_name": race.get("track_name", ""),
+                                "total_purse": race.get("total_purse"),
+                                "winning_time": (race.get("fraction") or {}).get("winning_time", {}).get("time_in_hundredths"),
+                                "fractions_raw": race.get("fraction") or {},
+                                "payoffs": race.get("payoffs") or [],
+                                "also_ran": race.get("also_ran") or [],
+                                "scratches": race.get("scratches") or [],
                             }
             else:
                 # UK/IRE race

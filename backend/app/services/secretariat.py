@@ -1076,62 +1076,213 @@ async def score_race(race_data: dict) -> dict:
     return result
 
 
+FRACTION_LABELS = {
+    "fraction_1": "1/4",
+    "fraction_2": "1/2",
+    "fraction_3": "3/4",
+    "fraction_4": "Mile",
+}
+
+
+def _parse_fraction(fr: dict) -> float | None:
+    """Convert a fraction dict to total seconds.
+
+    The API gives us minutes, seconds, hundredths separately; combine into a
+    single float so we can subtract cumulatives to get split-by-split deltas.
+    """
+    if not isinstance(fr, dict):
+        return None
+    try:
+        m = int(fr.get("minutes") or 0)
+        s = int(fr.get("seconds") or 0)
+        h = int(fr.get("hundredths") or 0)
+        return m * 60 + s + h / 100
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_seconds(secs: float | None) -> str | None:
+    """Render a duration as M:SS.HH or :SS.HH."""
+    if secs is None:
+        return None
+    minutes = int(secs // 60)
+    rem = secs - minutes * 60
+    if minutes:
+        return f"{minutes}:{rem:05.2f}"
+    return f":{rem:05.2f}"
+
+
+def _format_money(amount, *, places: int = 2) -> str | None:
+    if amount in (None, "", 0, "0", "0.0", "0.00", "0.0000"):
+        return None
+    try:
+        n = float(amount)
+    except (TypeError, ValueError):
+        return None
+    if n <= 0:
+        return None
+    return f"${n:,.{places}f}"
+
+
+def _build_pace_table(fractions_raw: dict) -> tuple[list[dict], str | None]:
+    """Build the call-by-call splits + cumulatives, plus formatted winning time."""
+    if not isinstance(fractions_raw, dict):
+        return [], None
+
+    cumulatives = []
+    for key in ("fraction_1", "fraction_2", "fraction_3", "fraction_4"):
+        secs = _parse_fraction(fractions_raw.get(key))
+        cumulatives.append((FRACTION_LABELS[key], secs))
+
+    winning = _parse_fraction(fractions_raw.get("winning_time"))
+    table = []
+    prev = 0.0
+    for label, secs in cumulatives:
+        if secs is None:
+            continue
+        split = secs - prev
+        prev = secs
+        table.append({
+            "call": label,
+            "split": _format_seconds(split),
+            "cumulative": _format_seconds(secs),
+        })
+
+    if winning is not None and (not cumulatives or cumulatives[-1][1] is None or winning > cumulatives[-1][1]):
+        # The "Final" row is only meaningful if the winning time is past the
+        # last published call (e.g. 1 1/16 mi has fractions through 1 mi only).
+        last_cum = next((c for _, c in reversed(cumulatives) if c is not None), 0.0)
+        table.append({
+            "call": "Final",
+            "split": _format_seconds(winning - last_cum),
+            "cumulative": _format_seconds(winning),
+        })
+
+    return table, _format_seconds(winning)
+
+
+def _build_official_order(runners: list) -> list[dict]:
+    order = []
+    for r in runners:
+        order.append({
+            "position": r.get("position", ""),
+            "number": r.get("number") or r.get("program_number", ""),
+            "horse": r.get("horse_name") or r.get("horse", ""),
+            "jockey": r.get("jockey", ""),
+            "trainer": r.get("trainer", ""),
+            "win_payoff": _format_money(r.get("win_payoff")),
+            "place_payoff": _format_money(r.get("place_payoff")),
+            "show_payoff": _format_money(r.get("show_payoff")),
+        })
+    return order
+
+
+def _build_exotics(payoffs: list) -> list[dict]:
+    """Filter and format the wagering payouts. Skip Win/Place/Show (already
+    surfaced per-runner) and Odd/Even prop bets."""
+    skip = {"WIN", "PLACE", "SHOW", "ODD OR EVEN"}
+    out = []
+    for p in payoffs or []:
+        name = (p.get("wager_name") or "").strip()
+        if name.upper() in skip:
+            continue
+        payoff = _format_money(p.get("payoff_amount"))
+        if not payoff:
+            continue
+        out.append({
+            "wager": name,
+            "winning_numbers": p.get("winning_numbers", ""),
+            "base": _format_money(p.get("base_amount")),
+            "payoff": payoff,
+            "pool": _format_money(p.get("total_pool"), places=0),
+        })
+    return out
+
+
+def _build_prediction_check(prior_analysis: dict | None, runners: list) -> dict | None:
+    """Compare pre-race top contenders against actual finish positions.
+
+    Deterministic — just looks up where each predicted contender finished.
+    """
+    if not prior_analysis:
+        return None
+
+    finish_by_name = {
+        (r.get("horse_name") or r.get("horse") or "").strip().lower(): r.get("position", "")
+        for r in runners
+    }
+
+    contenders = prior_analysis.get("top_contenders") or []
+    if not contenders and prior_analysis.get("runners"):
+        # Some analyses use a ranked runners list instead.
+        contenders = [r.get("horse_name") for r in prior_analysis["runners"][:3] if r.get("horse_name")]
+
+    rows = []
+    for name in contenders[:5]:
+        if not name:
+            continue
+        pos = finish_by_name.get(str(name).strip().lower(), "")
+        rows.append({
+            "horse": name,
+            "actual_finish": pos or "Out of money",
+        })
+
+    if not rows:
+        return None
+
+    # Top pick (first contender) determines hit/miss for the headline badge.
+    top_pick_finish = rows[0]["actual_finish"]
+    if top_pick_finish == "1":
+        outcome = "hit"
+    elif top_pick_finish in ("2", "3"):
+        outcome = "partial"
+    else:
+        outcome = "miss"
+
+    return {"outcome": outcome, "contenders": rows}
+
+
 async def debrief_race(
     race_id: str,
     race_data: dict,
     results: dict,
     prior_analysis: dict = None,
 ) -> dict:
-    """Post-race debrief. Explains the result in plain English."""
-    prior_block = (
-        "Prior Analysis (what Secretariat predicted before the race):\n"
-        + json.dumps(prior_analysis, indent=2)
-        if prior_analysis
-        else "No prior analysis available."
-    )
+    """Post-race debrief — facts only.
 
-    prompt = f"""You are Secretariat. A race has just finished.
-Give a post-race debrief for users who may have bet on this race.
+    No LLM call. Builds a structured summary of finishing order, payoffs,
+    sectional splits, exotic results, also-rans, and (when available) a
+    deterministic comparison against the pre-race prediction. Every value
+    in the output is sourced from the racing API or computed arithmetically
+    from it — nothing is generated.
+    """
+    runners = results.get("runners") or []
 
-Race: {race_data.get('title', '')} at {race_data.get('course', '')}
-Distance: {race_data.get('distance', '')} | Going: {race_data.get('going', '')}
+    fractions, winning_time = _build_pace_table(results.get("fractions_raw") or {})
 
-Results:
-{json.dumps(results, indent=2)}
-
-{prior_block}
-
-Return a JSON object with EXACTLY this structure:
-{{
-  "winner": "horse name",
-  "winning_odds": "SP if available",
-  "headline": "One punchy sentence summarising the result",
-  "what_happened": "2-3 sentences explaining the race — pace, who led, how it unfolded",
-  "why_winner_won": "2 sentences on what made the winner successful today",
-  "prediction_accuracy": "hit/miss/partial — only if prior analysis exists, else null",
-  "prediction_notes": "1-2 sentences comparing prediction to result, null if no prior analysis",
-  "key_takeaway": "One lesson for bettors from this race result",
-  "notable_losers": [
-    {{
-      "horse": "name",
-      "note": "brief explanation of their run"
-    }}
-  ],
-  "beginner_lesson": "Plain English lesson a first-time bettor can learn from this race"
-}}"""
-
-    response = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=1500,
-        temperature=0.2,
-        system=SECRETARIAT_SYSTEM,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    result = _parse_json(response.content[0].text)
+    debrief = {
+        "race_id": race_id,
+        "race": {
+            "name": results.get("title") or race_data.get("title") or race_data.get("race_name") or "",
+            "track": results.get("track_name") or race_data.get("course") or "",
+            "class": results.get("race_class") or "",
+            "distance": results.get("distance_description") or race_data.get("distance") or "",
+            "surface": results.get("surface_description") or race_data.get("surface") or "",
+            "going": results.get("track_condition_description") or race_data.get("going") or "",
+            "purse": _format_money(results.get("total_purse"), places=0),
+        },
+        "official_order": _build_official_order(runners),
+        "also_ran": [name for name in (results.get("also_ran") or []) if name],
+        "scratches": [s if isinstance(s, str) else (s.get("horse_name") or "") for s in (results.get("scratches") or [])],
+        "winning_time": winning_time,
+        "fractions": fractions,
+        "exotics": _build_exotics(results.get("payoffs") or []),
+        "prediction_check": _build_prediction_check(prior_analysis, runners),
+    }
 
     from app.core.cache import cache_set
-    await cache_set(f"debrief:{race_id}", result, ex=86400)
-    return result
+    await cache_set(f"debrief:{race_id}", debrief, ex=86400)
+    return debrief
 
 
 async def extract_and_store_fair_prices(race_id: str, analysis: dict) -> None:
