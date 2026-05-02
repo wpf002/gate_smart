@@ -83,7 +83,15 @@ async def results_for_race(race_id: str):
                             }
                             for e in race.get("runners", [])
                         ]
-                        if runners:
+                        # Match the debrief endpoint: only return results once at
+                        # least one runner has a real finish position. Otherwise
+                        # the racing feed has flagged the race finished but not
+                        # synced positions, and we'd render an empty result card.
+                        has_positions = any(
+                            r["position"] and r["position"] not in ("0", "")
+                            for r in runners
+                        )
+                        if runners and has_positions:
                             return {"race_id": race_id, "title": race.get("race_name", ""), "runners": runners}
         except Exception:
             pass

@@ -555,6 +555,7 @@ function ResultsPanel({ results }) {
   const sorted = [...results.runners]
     .filter(r => r.position && !isNaN(parseInt(r.position)))
     .sort((a, b) => parseInt(a.position) - parseInt(b.position));
+  if (!sorted.length) return null;
   const posStyle = (pos) => {
     const n = parseInt(pos);
     if (n === 1) return { color: '#FFD700', fontWeight: 800 };

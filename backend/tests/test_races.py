@@ -134,3 +134,64 @@ async def test_results_today_not_captured_by_race_id_wildcard(client):
         await client.get("/api/races/results/today")
     results_mock.assert_called_once()
     race_mock.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# GET /races/results/race/{race_id} — empty-position guard
+# ---------------------------------------------------------------------------
+
+def _na_meet_results(runners_data: list, race_number: str = "8") -> dict:
+    return {
+        "races": [
+            {
+                "race_key": {"race_number": int(race_number)},
+                "race_name": "Test Race",
+                "runners": runners_data,
+            }
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_results_for_race_404_when_all_positions_blank(client):
+    """Racing feed flagged the race finished but hasn't synced positions —
+    return 404 so the frontend can show 'pending' instead of an empty card."""
+    runners = [
+        {"registration_number": "h1", "horse_name": "A", "program_number": "1"},
+        {"registration_number": "h2", "horse_name": "B", "program_number": "2"},
+    ]
+    with patch("app.api.routes.races.racing_api.get_na_meet_results",
+               new=AsyncMock(return_value=_na_meet_results(runners))), \
+         patch("app.api.routes.races.asyncio.sleep", new=AsyncMock()):
+        r = await client.get("/api/races/results/race/CD_meet-8")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_results_for_race_404_when_positions_zero_or_empty(client):
+    runners = [
+        {"registration_number": "h1", "horse_name": "A", "official_finish_position": ""},
+        {"registration_number": "h2", "horse_name": "B", "official_finish_position": "0"},
+        {"registration_number": "h3", "horse_name": "C", "finish_position": ""},
+    ]
+    with patch("app.api.routes.races.racing_api.get_na_meet_results",
+               new=AsyncMock(return_value=_na_meet_results(runners))), \
+         patch("app.api.routes.races.asyncio.sleep", new=AsyncMock()):
+        r = await client.get("/api/races/results/race/CD_meet-8")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_results_for_race_returns_runners_when_positions_present(client):
+    runners = [
+        {"registration_number": "h1", "horse_name": "Winner", "official_finish_position": "1", "program_number": "4"},
+        {"registration_number": "h2", "horse_name": "Second", "official_finish_position": "2", "program_number": "7"},
+        {"registration_number": "h3", "horse_name": "Scratch", "official_finish_position": ""},
+    ]
+    with patch("app.api.routes.races.racing_api.get_na_meet_results",
+               new=AsyncMock(return_value=_na_meet_results(runners))):
+        r = await client.get("/api/races/results/race/CD_meet-8")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["race_id"] == "CD_meet-8"
+    assert any(rn["position"] == "1" and rn["horse_name"] == "Winner" for rn in body["runners"])
