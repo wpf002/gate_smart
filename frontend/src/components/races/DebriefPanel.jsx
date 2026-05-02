@@ -187,7 +187,6 @@ export default function DebriefPanel({ debrief, loading }) {
                 <th style={headStyle}>NUMBERS</th>
                 <th style={{ ...headStyle, textAlign: 'right' }}>BASE</th>
                 <th style={{ ...headStyle, textAlign: 'right' }}>PAYOFF</th>
-                <th style={{ ...headStyle, textAlign: 'right' }}>POOL</th>
               </tr>
             </thead>
             <tbody>
@@ -197,7 +196,6 @@ export default function DebriefPanel({ debrief, loading }) {
                   <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)' }}>{e.winning_numbers}</td>
                   <td style={numStyle}>{e.base || '—'}</td>
                   <td style={{ ...numStyle, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>{e.payoff}</td>
-                  <td style={numStyle}>{e.pool || '—'}</td>
                 </tr>
               ))}
             </tbody>
