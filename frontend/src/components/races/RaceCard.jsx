@@ -46,8 +46,10 @@ export function formatPurse(race) {
  * Rules:
  * 1. Return true only when the API status field explicitly says "result",
  *    "resulted", "finished", "complete", "official", or "void".
- * 2. OR when off_dt (timezone-aware ISO string) is more than 10 minutes in
- *    the past.  The 10-minute buffer allows results to be processed.
+ * 2. OR when off_dt (timezone-aware ISO string) is more than 5 minutes in
+ *    the past.  The buffer gives upstream a head start before we begin
+ *    polling for results; backend already 404s gracefully if results
+ *    aren't ready.
  * 3. Never mark a race as finished from the scheduled post_time string alone —
  *    that is local track time with no timezone and will produce wrong results
  *    for NA races compared against the user's clock.
@@ -60,7 +62,7 @@ export function isRaceDefinitelyFinished(race) {
   if (race.off_dt) {
     const offTime = new Date(race.off_dt);
     if (!isNaN(offTime.getTime())) {
-      return (Date.now() - offTime.getTime()) > 10 * 60 * 1000;
+      return (Date.now() - offTime.getTime()) > 5 * 60 * 1000;
     }
   }
   return false;

@@ -500,15 +500,15 @@ function BetTypeCard({ bet }) {
           <div style={{
             marginTop: 10,
             padding: '8px 12px',
-            background: 'rgba(26,107,168,0.08)',
+            background: 'rgba(201,162,39,0.06)',
             borderRadius: 8,
-            borderLeft: '2px solid var(--accent-blue)',
+            borderLeft: '2px solid var(--accent-gold)',
             fontSize: 12,
             color: 'var(--text-secondary)',
             lineHeight: 1.5,
             display: 'flex', alignItems: 'flex-start', gap: 8,
           }}>
-            <Icon name="lightbulb" size={13} color="var(--accent-blue)" style={{ flexShrink: 0, marginTop: 1 }} />
+            <Icon name="lightbulb" size={13} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: 1 }} />
             <span>{bet.tip}</span>
           </div>
         </div>

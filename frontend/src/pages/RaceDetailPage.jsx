@@ -677,8 +677,9 @@ export default function RaceDetailPage() {
 
   // Poll for results once a race is finished. Upstream chart publish can take
   // anywhere from a few minutes (routine maidens) to 20+ minutes (stakes,
-  // photo finishes, inquiries). We retry every 60s until the API returns a
-  // result, then stop and let the cached data drive the UI.
+  // photo finishes, inquiries). We retry every 30s until the API returns a
+  // result, then stop and let the cached data drive the UI. 30s matches the
+  // backend cache TTL on empty/no-finishes responses.
   useEffect(() => {
     if (!race || !isRaceDefinitelyFinished(race) || raceResults) return;
     let cancelled = false;
@@ -689,7 +690,7 @@ export default function RaceDetailPage() {
           if (!cancelled) setRaceResults(data);
         })
         .catch(() => {
-          if (!cancelled) timer = setTimeout(tick, 60000);
+          if (!cancelled) timer = setTimeout(tick, 30000);
         });
     };
     tick();
