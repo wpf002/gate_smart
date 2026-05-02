@@ -72,7 +72,26 @@ export default function DebriefPanel({ debrief, loading }) {
     return 'var(--text-muted)';
   };
 
+  // Canonical display order for exotic wagers. Anything unrecognised falls to
+  // the end so unusual track-specific wagers still render, just last.
+  const wagerRank = (wager) => {
+    if (!wager) return 999;
+    const w = String(wager).toLowerCase().trim();
+    if (w.includes('exacta')) return 1;
+    if (w.includes('trifecta')) return 2;
+    if (w.includes('superfecta')) return 3;
+    if (w.includes('exact 5') || w.includes('exact five') || w.includes('super high') || w.includes('high 5') || w.includes('high five') || w.includes('hi-5') || w.includes('pentafecta')) return 4;
+    if (w.includes('daily double') || w === 'dd') return 5;
+    if (w.includes('pick 3') || w.includes('pick three')) return 6;
+    if (w.includes('pick 4') || w.includes('pick four')) return 7;
+    if (w.includes('pick 5') || w.includes('pick five')) return 8;
+    return 999;
+  };
+
   const race = debrief.race || {};
+  const sortedExotics = debrief.exotics
+    ? [...debrief.exotics].sort((a, b) => wagerRank(a.wager) - wagerRank(b.wager))
+    : [];
 
   return (
     <div style={{ padding: '0 0 8px' }}>
@@ -159,7 +178,7 @@ export default function DebriefPanel({ debrief, loading }) {
       )}
 
       {/* Exotic payoffs */}
-      {debrief.exotics?.length > 0 && (
+      {sortedExotics.length > 0 && (
         <Section label="EXOTIC PAYOFFS">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -172,7 +191,7 @@ export default function DebriefPanel({ debrief, loading }) {
               </tr>
             </thead>
             <tbody>
-              {debrief.exotics.map((e, i) => (
+              {sortedExotics.map((e, i) => (
                 <tr key={i}>
                   <td style={cellStyle}>{e.wager}</td>
                   <td style={{ ...cellStyle, fontFamily: 'var(--font-mono)' }}>{e.winning_numbers}</td>
