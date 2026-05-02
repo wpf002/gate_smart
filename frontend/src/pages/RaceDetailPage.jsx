@@ -887,17 +887,26 @@ export default function RaceDetailPage() {
           ].filter(i => i.text);
           return (
             <div className="race-meta-line" style={{ display: 'flex', gap: 0, marginBottom: 12, flexWrap: 'nowrap', overflowX: 'auto', alignItems: 'center', whiteSpace: 'nowrap' }}>
-              {items.map((item, i) => (
-                <span key={item.key} className={`race-meta-item race-meta-${item.key}`} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                  {i > 0 && <span className="race-meta-sep" style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>}
-                  {item.short && item.short !== item.text ? (
-                    <>
-                      <span className="race-meta-full">{item.text}</span>
-                      <span className="race-meta-short">{item.short}</span>
-                    </>
-                  ) : item.text}
-                </span>
-              ))}
+              {items.flatMap((item, i) => {
+                const span = (
+                  <span key={item.key} className={`race-meta-item race-meta-${item.key}`} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    {i > 0 && <span className="race-meta-sep" style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>}
+                    {item.short && item.short !== item.text ? (
+                      <>
+                        <span className="race-meta-full">{item.text}</span>
+                        <span className="race-meta-short">{item.short}</span>
+                      </>
+                    ) : item.text}
+                  </span>
+                );
+                if (item.key === 'purse') {
+                  return [
+                    <span key="race-meta-break" className="race-meta-break" aria-hidden="true" />,
+                    span,
+                  ];
+                }
+                return [span];
+              })}
               {raceFinished && (
                 <>
                   <span className="race-meta-sep" style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>

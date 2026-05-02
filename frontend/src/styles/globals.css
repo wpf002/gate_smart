@@ -542,7 +542,13 @@ input::placeholder, textarea::placeholder {
 /* ─── Race meta line — fit on a single mobile row without clipping ──────── */
 .race-meta-full { display: inline; }
 .race-meta-short { display: none; }
+.race-meta-break { display: none; }
 @media (max-width: 767px) {
+  .race-meta-line {
+    flex-wrap: wrap !important;
+    overflow-x: visible !important;
+    white-space: normal !important;
+  }
   .race-meta-item {
     font-size: 10px !important;
   }
@@ -554,6 +560,16 @@ input::placeholder, textarea::placeholder {
      the line off-screen. */
   .race-meta-full { display: none; }
   .race-meta-short { display: inline; }
+  /* Force a wrap so purse begins line 2 (full unabbreviated value) */
+  .race-meta-break {
+    display: block;
+    flex-basis: 100%;
+    height: 0;
+    margin: 2px 0 0;
+  }
+  .race-meta-purse > .race-meta-sep { display: none; }
+  .race-meta-purse .race-meta-full { display: inline; }
+  .race-meta-purse .race-meta-short { display: none; }
 }
 
 /* ─── Reset button — inline with Risk Tolerance on mobile, separate row on
