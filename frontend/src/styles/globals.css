@@ -570,6 +570,10 @@ input::placeholder, textarea::placeholder {
   .race-meta-purse > .race-meta-sep { display: none; }
   .race-meta-purse .race-meta-full { display: inline; }
   .race-meta-purse .race-meta-short { display: none; }
+  /* Class strings (e.g. "Allowance Optional Claiming ($125,000)") also show
+     the full unabbreviated value on mobile now that the meta line wraps. */
+  .race-meta-class .race-meta-full { display: inline; }
+  .race-meta-class .race-meta-short { display: none; }
 }
 
 /* ─── Reset button — inline with Risk Tolerance on mobile, separate row on
