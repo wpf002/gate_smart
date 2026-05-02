@@ -378,7 +378,10 @@ async def race_debrief(request: Request) -> JSONResponse:
 
     _validate_race_id(req.race_id)
 
-    cached = await cache_get(f"debrief:{req.race_id}")
+    # v2 cache key: schema changed from LLM-generated narrative to a
+    # deterministic facts-only chart. Bumping the prefix invalidates
+    # stale v1 entries instead of trying to migrate them.
+    cached = await cache_get(f"debrief:v2:{req.race_id}")
     if cached is not None:
         return JSONResponse(cached)
 

@@ -1281,7 +1281,7 @@ async def debrief_race(
     }
 
     from app.core.cache import cache_set
-    await cache_set(f"debrief:{race_id}", debrief, ex=86400)
+    await cache_set(f"debrief:v2:{race_id}", debrief, ex=86400)
     return debrief
 
 

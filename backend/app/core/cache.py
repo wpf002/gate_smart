@@ -5,7 +5,7 @@ Redis key schema:
   horse_search:{name}              TTL 3600s  — horse name search results
   ai_analysis:{race_id}:{mode}     TTL 300s   — cached Secretariat analysis
   scorecard:{race_id}              TTL 600s   — cached field scorecards
-  debrief:{race_id}                TTL 86400s — post-race AI debrief
+  debrief:v2:{race_id}             TTL 86400s — post-race deterministic chart
   alerts:fair:{race_id}:{horse_id} TTL 14400s — fair price per runner
   predictions:{race_id}            TTL 604800s — Secretariat prediction record
   accuracy:total                   no TTL     — total settled predictions counter
