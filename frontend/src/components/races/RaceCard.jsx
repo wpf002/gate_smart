@@ -9,8 +9,12 @@ import { useAppStore } from '../../store';
  * also compute the US equivalent so the user knows when to watch.
  * Returns { time, label, usTime, usLabel }
  */
-export function getDisplayTime(race, timezone = 'America/New_York') {
-  const opt = TIMEZONE_OPTIONS.find((o) => o.value === timezone);
+export function getDisplayTime(race, timezone = 'local') {
+  const useLocal = !timezone || timezone === 'local';
+  const lookupTz = useLocal
+    ? (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; } })()
+    : timezone;
+  const opt = TIMEZONE_OPTIONS.find((o) => o.value === lookupTz);
   const usLabel = opt?.abbr ?? 'ET';
 
   if (['USA', 'CAN'].includes((race.region || '').toUpperCase()) && race.off_dt) {

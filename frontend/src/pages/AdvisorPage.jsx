@@ -203,7 +203,7 @@ export default function AdvisorPage() {
   const showSuggestions = advisorMessages.length === 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div className="advisor-page" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <PageHeader
         title="SECRETARIAT"
         subtitle="YOUR AI RACING ADVISOR"

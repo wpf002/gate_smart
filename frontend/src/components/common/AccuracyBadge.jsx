@@ -34,11 +34,11 @@ function TrackAccuracyBadge({ trackCode, trackName, compact }) {
 
   if (noData) {
     return (
-      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0 }}>
+      <div className="accuracy-no-data" style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+        <span className="accuracy-no-data-title" style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
           SECRETARIAT AT {(displayName || '').toUpperCase()}
         </span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· No predictions recorded here yet — stats appear after races are analyzed and results posted</span>
+        <span className="accuracy-no-data-body" style={{ fontSize: 11, color: 'var(--text-muted)' }}>No predictions recorded here yet — stats appear after races are analyzed and results posted</span>
       </div>
     );
   }

@@ -165,15 +165,6 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Name */}
-        <SectionLabel>Display Name</SectionLabel>
-        <input
-          value={userProfile.name}
-          onChange={(e) => setUserProfile({ name: e.target.value })}
-          placeholder="Enter your name…"
-          style={{ width: '100%', padding: '10px 14px', fontSize: 14 }}
-        />
-
         {/* Risk tolerance */}
         <SectionLabel>Risk Tolerance</SectionLabel>
         <SegmentControl

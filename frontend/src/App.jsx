@@ -141,6 +141,16 @@ function BetSlipToast() {
   );
 }
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const scroller = document.querySelector('.page-content');
+    if (scroller) scroller.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [pathname]);
+  return null;
+}
+
 function AppShell() {
   const onboardingComplete = useAppStore((s) => s.onboardingComplete);
   const authToken = useAppStore((s) => s.authToken);
@@ -161,6 +171,7 @@ function AppShell() {
       {(!onboardingComplete || !authToken) && <OnboardingFlow />}
       <SideNav />
       <BetSlipToast />
+      <ScrollToTop />
       <div className="page-content">
         <ErrorBoundary>
           <Routes>

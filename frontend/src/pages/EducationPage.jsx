@@ -561,12 +561,12 @@ function AccordionCard({ title, emoji, icon, body, color }) {
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'bets',     label: 'Bet Types'     },
-  { id: 'odds',     label: 'Odds'          },
-  { id: 'handicap', label: 'Handicapping'  },
-  { id: 'form',     label: 'Reading Form'  },
-  { id: 'bankroll', label: 'Bankroll'      },
-  { id: 'glossary', label: 'Glossary'      },
+  { id: 'bets',     label: 'Bet Types',    short: 'Bets'     },
+  { id: 'odds',     label: 'Odds',         short: 'Odds'     },
+  { id: 'handicap', label: 'Handicapping', short: 'Handicap' },
+  { id: 'form',     label: 'Reading Form', short: 'Form'     },
+  { id: 'bankroll', label: 'Bankroll',     short: 'Bankroll' },
+  { id: 'glossary', label: 'Glossary',     short: 'Terms'    },
 ];
 
 // ─── Tab content ──────────────────────────────────────────────────────────────
@@ -861,20 +861,20 @@ export default function EducationPage() {
     <div>
       <PageHeader title="LEARN" subtitle="Master horse racing from zero to pro" />
 
-      {/* Tab bar */}
-      <div style={{
+      {/* Tab bar — single row on every viewport. On mobile, shortened labels
+          via .learn-tab-short keep all 6 categories visible without scrolling. */}
+      <div className="learn-tab-bar" style={{
         display: 'flex',
-        overflowX: 'auto',
         borderBottom: '1px solid var(--border-subtle)',
-        scrollbarWidth: 'none',
       }}>
-        {TABS.map(({ id, label }) => (
+        {TABS.map(({ id, label, short }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
+            className="learn-tab"
             style={{
-              flexShrink: 0,
-              padding: '10px 16px',
+              flex: '1 1 0',
+              padding: '10px 4px',
               background: 'none',
               border: 'none',
               borderBottom: activeTab === id ? '2px solid var(--accent-gold)' : '2px solid transparent',
@@ -885,9 +885,11 @@ export default function EducationPage() {
               fontFamily: 'var(--font-body)',
               whiteSpace: 'nowrap',
               transition: 'color 0.15s',
+              minWidth: 0,
             }}
           >
-            {label}
+            <span className="learn-tab-full">{label}</span>
+            <span className="learn-tab-short">{short}</span>
           </button>
         ))}
       </div>

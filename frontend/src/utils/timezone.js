@@ -4,13 +4,25 @@
  */
 
 export const TIMEZONE_OPTIONS = [
+  { value: 'local',               label: 'Auto — device timezone', abbr: null },
   { value: 'America/New_York',    label: 'Eastern (ET)',  abbr: 'ET' },
   { value: 'America/Chicago',     label: 'Central (CT)',  abbr: 'CT' },
   { value: 'America/Denver',      label: 'Mountain (MT)', abbr: 'MT' },
   { value: 'America/Los_Angeles', label: 'Pacific (PT)',  abbr: 'PT' },
   { value: 'Europe/London',       label: 'London (GMT/BST)', abbr: 'LON' },
-  { value: 'local',               label: 'Device local time', abbr: null },
 ];
+
+/**
+ * Resolve a stored timezone preference to a real IANA zone.
+ * 'local' (the Auto option) reads the device's current zone via the Intl API.
+ */
+export function resolveTimezone(tz) {
+  if (!tz || tz === 'local') {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined; }
+    catch { return undefined; }
+  }
+  return tz;
+}
 
 /**
  * Format an ISO datetime string into HH:MM am/pm in the given IANA timezone.
@@ -33,6 +45,9 @@ export function formatRaceTime(isoString, tz) {
     minute: '2-digit',
     hour12: true,
   });
-  const opt = TIMEZONE_OPTIONS.find((o) => o.value === tz);
+  // For Auto/'local', look up the abbreviation against the resolved IANA zone
+  // so the user still sees a sensible label like "CT" or "PT" rather than nothing.
+  const lookupTz = useLocal ? resolveTimezone(tz) : tz;
+  const opt = TIMEZONE_OPTIONS.find((o) => o.value === lookupTz);
   return { time, abbr: opt?.abbr ?? null };
 }

@@ -97,8 +97,8 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
   // centers — without it, the display-font SECRETARIAT label has more leading
   // than the badge and they read as misaligned.
   const PanelHeader = () => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div className="secretariat-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, lineHeight: 1, color: 'var(--accent-gold)' }}>
           SECRETARIAT
         </span>
@@ -110,7 +110,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
         </span>
       </div>
       {experienceLevel === 'advanced' && (
-        <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 16, padding: 2, gap: 2 }}>
+        <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 16, padding: 2, gap: 2, flexShrink: 0 }}>
           {['beginner', 'technical'].map(v => (
             <button key={v} onClick={() => setAdvancedViewMode(v)} style={{
               padding: '4px 10px', borderRadius: 14, border: 'none', fontSize: 11, fontWeight: 600,
@@ -246,7 +246,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
         const p = analysis.predicted_finish[pos];
         if (!p?.horse_name) return null;
         return (
-          <div key={pos} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+          <div key={pos} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 6 }}>
             <div style={{
               width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -254,6 +254,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
               border: `1px solid ${FINISH_POSITION[pos].border}`,
               color: FINISH_POSITION[pos].color,
               fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700,
+              marginTop: 2,
             }}>{FINISH_POSITION[pos].label}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold-bright)' }}>
@@ -310,52 +311,52 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           const raw = analysis.teller_script?.[type];
           const scriptText = raw?.replace(/^Say to teller:\s*/i, '').trim() || getFallbackScript(type, rec.selection);
           const isOpen = !!tellerOpenMap[`bet-${type}`];
+          const buttonGroup = !raceFinished ? (
+            <div style={{ display: 'flex', flexDirection: 'row', gap: 5 }}>
+              <button
+                onClick={() => toggleTeller(`bet-${type}`)}
+                style={{
+                  fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
+                  border: '1px solid var(--accent-gold)',
+                  background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                {isOpen ? 'Hide ▲' : 'Bet at Counter ▼'}
+              </button>
+              <button
+                onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
+                style={{
+                  fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
+                  border: '1px solid var(--accent-gold)',
+                  background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                Bet Online →
+              </button>
+            </div>
+          ) : null;
           return (
             <div key={type} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid var(--border-subtle)' }}>
-              {/* Two-column: content left, buttons right */}
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                {/* Left: bet info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)', marginBottom: 2 }}>
-                    {effectiveViewMode === 'beginner' ? (BET_LABELS[type] || type) : type.charAt(0).toUpperCase() + type.slice(1)}
-                    {rec.stake_suggestion && (
-                      <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>{rec.stake_suggestion}</span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>{rec.reasoning}</div>
-                  {rec.box_option && effectiveViewMode === 'technical' && (
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Box: {rec.box_option}</div>
+              {/* Desktop (≥768px): title + buttons inline in header row, then selection + reasoning.
+                  Mobile (<768px): only the title in the header; selection appears next, then
+                  the buttons (so the horse number/name sits ABOVE the buttons), then reasoning. */}
+              <div className="bet-rec-header">
+                <div className="bet-rec-title" style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-gold)' }}>
+                  {effectiveViewMode === 'beginner' ? (BET_LABELS[type] || type) : type.charAt(0).toUpperCase() + type.slice(1)}
+                  {rec.stake_suggestion && (
+                    <span style={{ fontSize: 11, color: 'var(--accent-gold-bright)', fontFamily: 'var(--font-mono)', marginLeft: 8 }}>{rec.stake_suggestion}</span>
                   )}
                 </div>
-                {/* Right: action buttons side by side */}
-                {!raceFinished && (
-                  <div style={{ display: 'flex', flexDirection: 'row', gap: 5, flexShrink: 0 }}>
-                    <button
-                      onClick={() => toggleTeller(`bet-${type}`)}
-                      style={{
-                        fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
-                        border: '1px solid var(--accent-gold)',
-                        background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                        cursor: 'pointer', whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {isOpen ? 'Hide ▲' : 'Bet at Counter ▼'}
-                    </button>
-                    <button
-                      onClick={() => openBetOnline(rec.selection, BET_LABELS[type] || type)}
-                      style={{
-                        fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 6,
-                        border: '1px solid var(--accent-gold)',
-                        background: 'rgba(201,162,39,0.12)', color: 'var(--accent-gold)',
-                        cursor: 'pointer', whiteSpace: 'nowrap',
-                      }}
-                    >
-                      Bet Online →
-                    </button>
-                  </div>
-                )}
+                <div className="bet-rec-buttons bet-rec-buttons-desktop">{buttonGroup}</div>
               </div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{rec.selection}</div>
+              <div className="bet-rec-buttons-mobile" style={{ marginBottom: 6 }}>{buttonGroup}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>{rec.reasoning}</div>
+              {rec.box_option && effectiveViewMode === 'technical' && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Box: {rec.box_option}</div>
+              )}
               {isOpen && (
                 <div style={{
                   marginTop: 8,
@@ -460,11 +461,11 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
         </div>
       )}
       {!wpDismissed && (raceType?.toLowerCase().includes('maiden') || analysis?.overall_summary?.toLowerCase().includes('maiden') || analysis?.overall_summary_beginner?.toLowerCase().includes('maiden')) && (
-        <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(201,168,76,0.7)', lineHeight: 1.6, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-          <span>Interested in horses like these?{' '}
+        <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(201,168,76,0.7)', lineHeight: 1.6, display: 'flex', alignItems: 'flex-start', gap: 6, textAlign: 'left' }}>
+          <span style={{ flex: 1, minWidth: 0 }}>Interested in horses like these?{' '}
             <button
               onClick={() => { trackEvent('partner_click', { partner: 'westpoint' }); window.open(PARTNERS.westpoint.url, '_blank', 'noopener,noreferrer'); sessionStorage.setItem('gs_wp_dismissed', '1'); setWpDismissed(true); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(201,168,76,0.85)', fontSize: 12, padding: 0, textDecoration: 'underline' }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(201,168,76,0.85)', fontSize: 12, padding: 0, textDecoration: 'underline', display: 'inline', textAlign: 'left' }}
             >
               West Point Thoroughbreds offers fractional ownership in top-level thoroughbreds. Learn more →
             </button>
@@ -777,12 +778,16 @@ export default function RaceDetailPage() {
   };
 
   const handleResetAnalysis = async () => {
-    try { await clearRaceAnalysis(raceId); } catch { /* ignore */ }
-    clearRaceAnalysisCache(raceId);
+    // Hide the Reset button and clear analysis state synchronously *before*
+    // awaiting the network call. Otherwise the button stays visible during
+    // clearRaceAnalysis(), and a slow request lets the user double-click and
+    // queue duplicate runs.
     setAnalysis(null);
     setScorecardData(null);
     setAnalyzeError(null);
     setActiveTab('analysis');
+    clearRaceAnalysisCache(raceId);
+    try { await clearRaceAnalysis(raceId); } catch { /* ignore */ }
     runAnalysisAndScore();
   };
 
@@ -855,32 +860,47 @@ export default function RaceDetailPage() {
       <div style={{ padding: '16px' }}>
         {/* ── Race meta ─────────────────────────────────────────────── */}
         {race && !isLoading && (() => {
-          const fmtClass = (cls) => {
+          // Title-case and pretty-print the embedded purse, e.g. "($125,000)"
+          const fmtClassFull = (cls) => {
             if (!cls) return null;
             return cls
               .replace(/\b\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
               .replace(/\(\$?([\d,]+)\)/g, (_, n) => ` ($${parseInt(n.replace(/,/g, ''), 10).toLocaleString()})`);
           };
+          // Mobile variant: collapse "$125,000" → "$125k" inside the class string
+          const compactMoney = (s) => s == null ? s : String(s).replace(/\$([\d,]+)/g, (_, n) => {
+            const v = parseInt(n.replace(/,/g, ''), 10);
+            return v >= 1000 ? `$${Math.round(v / 1000)}k` : `$${v}`;
+          });
+          const classFull = fmtClassFull(race.race_class);
+          const purseFull = formatPurse(race);
           const items = [
-            (race.distance || race.distance_f) ? formatDistance(race.distance, race.distance_f, race.region) : null,
-            race.surface || null,
-            race.going ? `Track: ${race.going}` : null,
-            fmtClass(race.race_class) || null,
-            formatPurse(race) || null,
-            race.runners?.length ? `${race.runners.length} runners` : null,
-          ].filter(Boolean);
+            { key: 'distance', text: (race.distance || race.distance_f) ? formatDistance(race.distance, race.distance_f, race.region) : null },
+            { key: 'surface',  text: race.surface || null },
+            // Drop the "Track:" prefix — surface conditions ("Fast", "Sloppy", "Good")
+            // are universally understood and the prefix only burns mobile width.
+            { key: 'going',    text: race.going || null },
+            { key: 'class',    text: classFull,  short: compactMoney(classFull) },
+            { key: 'purse',    text: purseFull,  short: compactMoney(purseFull) },
+            { key: 'runners',  text: race.runners?.length ? `${race.runners.length} Runners` : null },
+          ].filter(i => i.text);
           return (
-            <div style={{ display: 'flex', gap: 0, marginBottom: 12, flexWrap: 'nowrap', overflowX: 'auto', alignItems: 'center', whiteSpace: 'nowrap' }}>
+            <div className="race-meta-line" style={{ display: 'flex', gap: 0, marginBottom: 12, flexWrap: 'nowrap', overflowX: 'auto', alignItems: 'center', whiteSpace: 'nowrap' }}>
               {items.map((item, i) => (
-                <span key={i} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                  {i > 0 && <span style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>}
-                  {item}
+                <span key={item.key} className={`race-meta-item race-meta-${item.key}`} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {i > 0 && <span className="race-meta-sep" style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>}
+                  {item.short && item.short !== item.text ? (
+                    <>
+                      <span className="race-meta-full">{item.text}</span>
+                      <span className="race-meta-short">{item.short}</span>
+                    </>
+                  ) : item.text}
                 </span>
               ))}
               {raceFinished && (
                 <>
-                  <span style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>
-                  <span style={{ fontSize: 13, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>Finished</span>
+                  <span className="race-meta-sep" style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>
+                  <span className="race-meta-item" style={{ fontSize: 13, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>Finished</span>
                 </>
               )}
             </div>
@@ -912,7 +932,7 @@ export default function RaceDetailPage() {
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
               Risk Tolerance
             </span>
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', alignItems: 'center' }}>
               {MODES.map(m => (
                 <button key={m.id} onClick={() => handleModeChange(m.id)} style={{
                   flexShrink: 0, padding: '6px 12px', borderRadius: 20, border: '1px solid',
@@ -924,6 +944,16 @@ export default function RaceDetailPage() {
                   {m.label}
                 </button>
               ))}
+              {analysis && !analysisStreaming && !raceFinished && (
+                <button
+                  className="btn btn-primary reset-mobile-only"
+                  onClick={handleResetAnalysis}
+                  disabled={isLoading}
+                  style={{ flexShrink: 0, fontSize: 12, padding: '6px 12px' }}
+                >
+                  Reset
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -936,7 +966,7 @@ export default function RaceDetailPage() {
             </button>
           )}
           {analysis && !analysisStreaming && !raceFinished && (
-            <button className="btn btn-primary" onClick={handleResetAnalysis} disabled={isLoading} style={{ fontSize: 12, padding: '6px 12px' }}>
+            <button className="btn btn-primary reset-desktop-only" onClick={handleResetAnalysis} disabled={isLoading} style={{ fontSize: 12, padding: '6px 12px' }}>
               Reset
             </button>
           )}
@@ -996,10 +1026,10 @@ export default function RaceDetailPage() {
 
         {/* ── Runners ───────────────────────────────────────────────── */}
         <div style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+          <div className="runners-header">
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '0.04em' }}>RUNNERS</h3>
             {analysis && (
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              <span className="runners-legend" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 Colored circle = AI contender score (0–100, higher is stronger)
               </span>
             )}
@@ -1032,6 +1062,14 @@ export default function RaceDetailPage() {
             const jockeyMap = {};
             const ownerMap = {};
             sortedRunners.forEach(r => {
+              // Skip scratched/non-runner entries — otherwise the data source's
+              // "SCRATCHED" placeholder names show up as phantom #? rows in the
+              // Trainers & Jockeys panel.
+              const scratched = r.non_runner || r.scratched ||
+                ['scratched', 'non-runner', 'nr', 'withdrawn'].includes((r.status || '').toLowerCase()) ||
+                (r.trainer || '').trim().toUpperCase() === 'SCRATCHED' ||
+                (r.jockey || '').trim().toUpperCase() === 'SCRATCHED';
+              if (scratched) return;
               const num = r.program_number || r.cloth_number || '?';
               if (r.trainer) {
                 if (!trainerMap[r.trainer]) trainerMap[r.trainer] = { nums: [], winPct: r.trainer_14_day_percent };

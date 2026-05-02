@@ -427,35 +427,167 @@ input::placeholder, textarea::placeholder {
   }
 }
 
-/* ─── Bet recommendation row — stacked on mobile, side-by-side on desktop ── */
-.bet-rec-row {
+/* ─── Bet recommendation header — title only on mobile, title+buttons on desktop.
+       On mobile the buttons render in a separate slot below the selection so the
+       horse number/name appears above the buttons. ─────────────────────────── */
+.bet-rec-header {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
 }
-@media (min-width: 768px) {
-  .bet-rec-row {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
+.bet-rec-header .bet-rec-title {
+  flex: 1;
+  min-width: 0;
+}
+.bet-rec-header .bet-rec-buttons-desktop {
+  flex-shrink: 0;
+  display: block;
+}
+.bet-rec-buttons-mobile {
+  display: none;
+}
+@media (max-width: 767px) {
+  .bet-rec-header .bet-rec-buttons-desktop {
+    display: none;
   }
-  .bet-rec-row .bet-rec-buttons {
-    flex-shrink: 0;
-    padding-top: 2px;
+  .bet-rec-buttons-mobile {
+    display: block;
   }
 }
 
-/* ─── Horse radar — bigger and centered on desktop ──────────────────────── */
+/* ─── Accuracy "no data" banner — inline on desktop, stacked on mobile so the
+       explanation text fills the panel below the title row ──────────────────── */
+.accuracy-no-data {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.accuracy-no-data-title {
+  flex-shrink: 0;
+}
+.accuracy-no-data-body::before {
+  content: '· ';
+}
+@media (max-width: 767px) {
+  .accuracy-no-data {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .accuracy-no-data-body::before {
+    content: '';
+  }
+}
+
+/* ─── Search page tagline — keep on a single mobile row ──────────────────── */
+@media (max-width: 767px) {
+  .search-tagline {
+    font-size: 11px !important;
+    white-space: nowrap;
+  }
+}
+
+/* ─── Hide horse-card radar fingerprint on mobile — text already fills the
+       card and there's no room for the graphic ─────────────────────────────── */
+@media (max-width: 767px) {
+  .horse-radar-desktop {
+    display: none !important;
+  }
+}
+
+/* ─── Runners header — h3 + legend inline on desktop, stacked on mobile so the
+       "Colored circle = …" legend stays on a single line ───────────────────── */
+.runners-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+@media (max-width: 767px) {
+  .runners-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .runners-legend {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+}
+
+/* ─── Advisor page — input bar already sits at the bottom of the page; the
+       default .page-content bottom padding (which exists to keep regular pages
+       clear of the bottom-nav) shows up here as a dead gap between the input
+       and the nav. Drop the padding when the advisor page is rendered. ─────── */
+.page-content:has(.advisor-page) {
+  padding-bottom: 0 !important;
+}
+
+/* ─── Learn tab labels — full on desktop, shortened on mobile so all 6 fit ─ */
+.learn-tab-full { display: inline; }
+.learn-tab-short { display: none; }
+@media (max-width: 767px) {
+  .learn-tab-full { display: none; }
+  .learn-tab-short { display: inline; }
+  .learn-tab {
+    font-size: 11px !important;
+  }
+}
+
+/* ─── Race meta line — fit on a single mobile row without clipping ──────── */
+.race-meta-full { display: inline; }
+.race-meta-short { display: none; }
+@media (max-width: 767px) {
+  .race-meta-item {
+    font-size: 10px !important;
+  }
+  .race-meta-sep {
+    margin: 0 2px !important;
+  }
+  /* On mobile, swap to compact-money variants ("$125k" instead of "$125,000")
+     so long classes like "Allowance Optional Claiming ($125,000)" don't push
+     the line off-screen. */
+  .race-meta-full { display: none; }
+  .race-meta-short { display: inline; }
+}
+
+/* ─── Reset button — inline with Risk Tolerance on mobile, separate row on
+       desktop. Two render points; toggle visibility per breakpoint. ───────── */
+.reset-mobile-only { display: none; }
+.reset-desktop-only { display: inline-flex; }
+@media (max-width: 767px) {
+  .reset-mobile-only { display: inline-flex; }
+  .reset-desktop-only { display: none; }
+}
+
+/* ─── Secretariat panel header — keep title, confidence, and Plain/Technical
+       on a single row on mobile by tightening sizes ───────────────────────── */
+@media (max-width: 767px) {
+  .secretariat-header > div:first-child > span:first-child {
+    font-size: 14px;
+  }
+  .secretariat-header .badge {
+    font-size: 10px;
+    padding: 3px 7px;
+  }
+  .secretariat-header > div:last-child button {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+}
+
+/* ─── Horse radar — vertically centered on all viewports ─────────────────── */
 .horse-radar-desktop {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-@media (min-width: 768px) {
-  .horse-radar-desktop {
-    align-self: center;
-  }
+  align-self: center;
 }
 
 /* ─── Utility ────────────────────────────────────────────────────────────── */

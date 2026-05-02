@@ -34,14 +34,15 @@ export const useAppStore = create(
         set({ onboardingComplete: false });
       },
 
-      // User profile
+      // User profile. `timezone: 'local'` is the Auto option — race times always
+      // follow the device's current IANA zone (read at render time), so a user
+      // who travels sees correct times automatically without changing settings.
       userProfile: {
         bankroll: 500,
         riskTolerance: 'medium',
         experienceLevel: 'beginner',
         region: 'usa',
-        name: '',
-        timezone: 'America/New_York',
+        timezone: 'local',
       },
       setUserProfile: (updates) =>
         set((state) => ({
