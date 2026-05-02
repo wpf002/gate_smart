@@ -211,6 +211,30 @@ async def main(target_date: datetime.date, dry_run: bool):
     skipped = 0
     start_time = time.time()
 
+    # Run the FULL analyze_race at nightly time so the morning digest and the
+    # race-day live page show the IDENTICAL pick. The result is written to the
+    # same Redis cache key the live route checks (keyed by input fingerprint),
+    # so repeat clicks return the locked nightly analysis verbatim — no live
+    # LLM call unless inputs (scratch / jockey / ML) actually change.
+    from app.services.secretariat import analyze_race, compute_input_fingerprint
+    from app.core.cache import cache_set as _cache_set
+
+    # Mode used for the cached analysis. Frontend's default risk tolerance
+    # is "medium" (see RaceDetailPage MODES const), so caching under "medium"
+    # gives a first-click cache hit for users who haven't changed their
+    # default risk setting. Other modes fall through to live re-analysis.
+    LOCK_MODE = "medium"
+
+    def _name(d):
+        if isinstance(d, dict):
+            return d.get("horse_name") or d.get("name") or ""
+        return d or ""
+
+    def _num(d):
+        if isinstance(d, dict):
+            return str(d.get("number") or "").lstrip("#") or None
+        return None
+
     for i, (race, region) in enumerate(all_races):
         race_id = race.get("race_id") or race.get("id", "")
         race_name = race.get("race_name") or race.get("title", "")
@@ -224,81 +248,115 @@ async def main(target_date: datetime.date, dry_run: bool):
 
         print(f"  [{i+1}/{len(all_races)}] [{region.upper()}] {race_name or race_id}", end=" … ")
 
-        bucket_hint = _format_bucket_hint(track_code, race_type, surface, calibration)
-        pf = await predict_race(client, race, bucket_hint=bucket_hint)
-        if not pf:
-            print("skip (no prediction)")
-            skipped += 1
+        # Run the FULL analysis. Fall back to the lightweight Haiku prediction
+        # if analyze_race fails (e.g., oversized field), so we never lose a pick.
+        analysis = None
+        try:
+            analysis = await analyze_race({**race, "race_id": race_id}, mode=LOCK_MODE)
+        except Exception as e:
+            print(f"full analyze failed ({e}); fallback…", end=" ")
+
+        if analysis and analysis.get("predicted_finish"):
+            pf_full = analysis["predicted_finish"]
+            first = _name(pf_full.get("first"))
+            second = _name(pf_full.get("second"))
+            third = _name(pf_full.get("third"))
+            fourth = _name(pf_full.get("fourth"))
+            first_num = _num(pf_full.get("first"))
         else:
+            bucket_hint = _format_bucket_hint(track_code, race_type, surface, calibration)
+            pf = await predict_race(client, race, bucket_hint=bucket_hint)
+            if not pf:
+                print("skip (no prediction)")
+                skipped += 1
+                continue
             first = pf.get("first", "")
-            print(f"pick={first}")
+            second = pf.get("second")
+            third = pf.get("third")
+            fourth = pf.get("fourth")
+            first_num = None
 
-            if not dry_run:
-                # Extract HH:MM post time from off_dt (ISO) or time string
-                post_time_et = None
-                off_dt = race.get("off_dt") or race.get("off_time")
-                if off_dt:
-                    try:
-                        import re as _re
-                        m = _re.search(r'T(\d{2}:\d{2})', str(off_dt))
-                        if m:
-                            # Convert UTC hour to ET (subtract 4 for EDT)
-                            h, mn = map(int, m.group(1).split(":"))
-                            h_et = (h - 4) % 24
-                            post_time_et = f"{h_et:02d}:{mn:02d}"
-                    except Exception:
-                        pass
-                if not post_time_et:
-                    raw_time = race.get("time") or race.get("post_time") or ""
-                    if raw_time:
-                        post_time_et = str(raw_time)[:5]
+        print(f"pick={first}")
 
-                row = {
-                    "race_id": race_id,
-                    "race_date": target_date,
-                    "track_code": track_code,
-                    "race_name": race_name,
-                    "race_type": race_type,
-                    "surface": surface,
-                    "region": region,
-                    "analysis_mode": "auto_daily",
-                    "predicted_first": first,
-                    "predicted_second": pf.get("second"),
-                    "predicted_third": pf.get("third"),
-                    "predicted_fourth": pf.get("fourth"),
-                    "post_time_et": post_time_et,
-                }
-                from sqlalchemy import update as _update, or_ as _or_
-                async with _db._AsyncSessionLocal() as db:
-                    stmt = pg_insert(RacePrediction).values(**row)
-                    stmt = stmt.on_conflict_do_nothing(constraint="uq_race_prediction")
-                    await db.execute(stmt)
-                    # Backfill race_type on rows that already exist with an empty value.
-                    # ON CONFLICT DO NOTHING skips new inserts, so this ensures existing
-                    # rows are patched if the API now returns a type it didn't before.
-                    if race_type:
-                        await db.execute(
-                            _update(RacePrediction)
-                            .where(
-                                RacePrediction.race_id == race_id,
-                                RacePrediction.analysis_mode == "auto_daily",
-                                _or_(
-                                    RacePrediction.race_type.is_(None),
-                                    RacePrediction.race_type == "",
-                                ),
-                            )
-                            .values(race_type=race_type)
+        if not dry_run:
+            # Extract HH:MM post time from off_dt (ISO) or time string
+            post_time_et = None
+            off_dt = race.get("off_dt") or race.get("off_time")
+            if off_dt:
+                try:
+                    import re as _re
+                    m = _re.search(r'T(\d{2}:\d{2})', str(off_dt))
+                    if m:
+                        # Convert UTC hour to ET (subtract 4 for EDT)
+                        h, mn = map(int, m.group(1).split(":"))
+                        h_et = (h - 4) % 24
+                        post_time_et = f"{h_et:02d}:{mn:02d}"
+                except Exception:
+                    pass
+            if not post_time_et:
+                raw_time = race.get("time") or race.get("post_time") or ""
+                if raw_time:
+                    post_time_et = str(raw_time)[:5]
+
+            # Stamp lock metadata + populate the live cache so the race-day
+            # page serves THIS analysis verbatim. Same fingerprint logic as
+            # the live route — they share the cache.
+            if analysis:
+                fp = compute_input_fingerprint(race)
+                analysis["locked_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                analysis["input_fingerprint"] = fp
+                analysis["lock_source"] = "nightly"
+                cache_key = f"ai_analysis:{race_id}:{LOCK_MODE}:{fp}"
+                try:
+                    await _cache_set(cache_key, analysis, ex=86400)  # 24h
+                except Exception as e:
+                    print(f"  (cache write failed: {e})", end=" ")
+
+            row = {
+                "race_id": race_id,
+                "race_date": target_date,
+                "track_code": track_code,
+                "race_name": race_name,
+                "race_type": race_type,
+                "surface": surface,
+                "region": region,
+                "analysis_mode": "auto_daily",
+                "predicted_first": first,
+                "predicted_first_num": first_num,
+                "predicted_second": second,
+                "predicted_third": third,
+                "predicted_fourth": fourth,
+                "post_time_et": post_time_et,
+            }
+            from sqlalchemy import update as _update, or_ as _or_
+            async with _db._AsyncSessionLocal() as db:
+                stmt = pg_insert(RacePrediction).values(**row)
+                stmt = stmt.on_conflict_do_nothing(constraint="uq_race_prediction")
+                await db.execute(stmt)
+                # Backfill race_type on rows that already exist with an empty value.
+                if race_type:
+                    await db.execute(
+                        _update(RacePrediction)
+                        .where(
+                            RacePrediction.race_id == race_id,
+                            RacePrediction.analysis_mode == "auto_daily",
+                            _or_(
+                                RacePrediction.race_type.is_(None),
+                                RacePrediction.race_type == "",
+                            ),
                         )
-                    await db.commit()
+                        .values(race_type=race_type)
+                    )
+                await db.commit()
 
-            predicted += 1
-
+        predicted += 1
         await asyncio.sleep(1.0)
 
     elapsed = time.time() - start_time
-    cost_est = predicted * 0.001
+    # Full analyze_race is ~10x the lightweight call (~$0.011/race vs ~$0.001/race)
+    cost_est = predicted * 0.011
     print(f"\n✅ Done: {predicted} predicted ({len(na_races)} NA), {skipped} skipped in {elapsed:.0f}s")
-    print(f"   Estimated cost: ~${cost_est:.3f}")
+    print(f"   Estimated cost: ~${cost_est:.2f}")
     if dry_run:
         print("   [DRY RUN] No rows written.")
 
