@@ -504,12 +504,14 @@ def compute_input_fingerprint(race_data: dict) -> str:
 
     Used to lock Secretariat's analysis until inputs actually change — eliminates
     LLM-sampling drift between user clicks. Same race + same fingerprint = same
-    cached pick. Scratch, jockey change, weight change, ML revision, etc. =
-    new fingerprint = fresh analysis.
+    cached pick. Scratch, jockey change, weight change = new fingerprint =
+    fresh analysis.
 
-    Excludes fields that don't affect the pick (race_name, post_time, silk_url,
-    spotlight commentary) and fields that don't change for an upcoming race
-    (past performances, breeding, age).
+    Morning-line odds are deliberately excluded: they drift continuously as
+    the public reacts and would invalidate the cache on every click.
+    Secretariat's whole premise is an independent fair price, so the
+    public's number isn't a meaningful input — and the events that DO
+    matter (scratches) are captured separately by `non_runner`/`scratched`.
     """
     import hashlib
 
@@ -519,7 +521,7 @@ def compute_input_fingerprint(race_data: dict) -> str:
     runner_keys = (
         "horse_name", "cloth_number", "program_number", "jockey", "trainer",
         "weight", "headgear", "headgear_first_time", "claiming_price",
-        "non_runner", "scratched", "odds",
+        "non_runner", "scratched",
     )
     runners = []
     for r in race_data.get("runners") or []:
