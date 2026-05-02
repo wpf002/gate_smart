@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import Icon from './Icon';
-import { useAppStore } from '../../store';
 
 const NAV_ITEMS = [
   { path: '/',          icon: 'home',      label: 'Races'   },
@@ -13,15 +13,13 @@ const NAV_ITEMS = [
 export default function BottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
-  const lastRaceId = useAppStore(s => s.lastRaceId);
+  const queryClient = useQueryClient();
 
-  // Tapping Races from another section (Profile, Search, etc.) returns the
-  // user to the race they were last viewing — iOS-tab-bar style restore.
-  // Tapping Races while already inside the Races stack pops to the home list.
+  // Tapping Races always lands on a freshly-refetched Races list — invalidate
+  // the cache so any new races, scratches, or status changes appear right away.
   const goToRaces = () => {
-    const inRacesStack = location.pathname === '/' || location.pathname.startsWith('/race/');
-    if (!inRacesStack && lastRaceId) navigate(`/race/${lastRaceId}`);
-    else navigate('/');
+    queryClient.invalidateQueries({ queryKey: ['races'] });
+    navigate('/');
   };
 
   return (

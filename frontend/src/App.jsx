@@ -1,5 +1,6 @@
 import { Component, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import Icon from './components/common/Icon';
 import BottomNav from './components/common/BottomNav';
 import HomePage from './pages/HomePage';
@@ -65,19 +66,24 @@ const NAV_ITEMS = [
 function SideNav() {
   const navigate = useNavigate();
   const location = useLocation();
-  const lastRaceId = useAppStore(s => s.lastRaceId);
+  const queryClient = useQueryClient();
+
+  // Tapping Races or the GateSmart logo always lands on a freshly-refetched
+  // Races list — invalidate the cache so any new races, scratches, or status
+  // changes appear immediately.
+  const goToRacesFresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['races'] });
+    navigate('/');
+  };
 
   const goTo = (path) => {
-    if (path === '/') {
-      const inRacesStack = location.pathname === '/' || location.pathname.startsWith('/race/');
-      if (!inRacesStack && lastRaceId) return navigate(`/race/${lastRaceId}`);
-    }
+    if (path === '/') return goToRacesFresh();
     navigate(path);
   };
 
   return (
     <nav className="side-nav">
-      <div className="side-nav-logo" onClick={() => goTo('/')} style={{ cursor: 'pointer' }}>GATE<br />SMART</div>
+      <div className="side-nav-logo" onClick={goToRacesFresh} style={{ cursor: 'pointer' }}>GATE<br />SMART</div>
       {NAV_ITEMS.map(({ path, label }, idx) => {
         const active = location.pathname === path ||
           (path !== '/' && location.pathname.startsWith(path));
