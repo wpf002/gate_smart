@@ -126,6 +126,29 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     </div>
   );
 
+  // Lock indicator — picks are stable until inputs (scratches/jockey/ML)
+  // change. Tells the user *why* the same race always shows the same picks
+  // when they reopen it before post.
+  const LockIndicator = () => {
+    if (!analysis.locked_at) return null;
+    let lockedStr = '';
+    try {
+      lockedStr = new Date(analysis.locked_at).toLocaleTimeString([], {
+        hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+      });
+    } catch {
+      return null;
+    }
+    return (
+      <div style={{
+        fontSize: 10, color: 'var(--text-muted)', marginTop: -8, marginBottom: 10,
+        letterSpacing: '0.04em',
+      }}>
+        Locked {lockedStr} · refreshes only on scratch / jockey / ML change
+      </div>
+    );
+  };
+
   // Top pick hero (used prominently in BEGINNER layout)
   const topPick = analysis.predicted_finish?.first;
   const TopPickHero = () => topPick && (
@@ -494,6 +517,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     return (
       <div style={panelStyle}>
         <PanelHeader />
+        <LockIndicator />
         <TopPickHero />
         <SummarySection forceMode="beginner" />
         <ConfidenceSection />
@@ -536,6 +560,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
   return (
     <div style={panelStyle}>
       <PanelHeader />
+      <LockIndicator />
       <PaceSection />
       <PredictedFinishSection />
       <BetRecsSection />

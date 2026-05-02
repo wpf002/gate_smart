@@ -498,6 +498,41 @@ def _slim_horse_for_explain(horse_data: dict) -> dict:
             if k in _HORSE_EXPLAIN_KEEP and v not in (None, "", [])}
 
 
+def compute_input_fingerprint(race_data: dict) -> str:
+    """
+    Hash the race-data fields that should trigger a re-analysis if they change.
+
+    Used to lock Secretariat's analysis until inputs actually change — eliminates
+    LLM-sampling drift between user clicks. Same race + same fingerprint = same
+    cached pick. Scratch, jockey change, weight change, ML revision, etc. =
+    new fingerprint = fresh analysis.
+
+    Excludes fields that don't affect the pick (race_name, post_time, silk_url,
+    spotlight commentary) and fields that don't change for an upcoming race
+    (past performances, breeding, age).
+    """
+    import hashlib
+
+    race_keys = ("surface", "going", "distance", "race_type", "track_condition")
+    race_part = {k: race_data.get(k) for k in race_keys if race_data.get(k) not in (None, "")}
+
+    runner_keys = (
+        "horse_name", "cloth_number", "program_number", "jockey", "trainer",
+        "weight", "headgear", "headgear_first_time", "claiming_price",
+        "non_runner", "scratched", "odds",
+    )
+    runners = []
+    for r in race_data.get("runners") or []:
+        slim = {k: r.get(k) for k in runner_keys if r.get(k) not in (None, "", [])}
+        if slim:
+            runners.append(slim)
+    # Sort by program number so fingerprint is order-independent
+    runners.sort(key=lambda r: str(r.get("cloth_number") or r.get("program_number") or ""))
+
+    payload = json.dumps({"race": race_part, "runners": runners}, sort_keys=True, default=str)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
+
+
 def _slim_race_for_prompt(race_data: dict) -> dict:
     """Strip bulky fields that add tokens without helping Claude handicap."""
     _RUNNER_DROP = {

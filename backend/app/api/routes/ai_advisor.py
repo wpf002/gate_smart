@@ -66,17 +66,22 @@ async def analyze_race(request: Request) -> JSONResponse:
 
     _validate_race_id(req.race_id)
 
-    cache_key = f"ai_analysis:{req.race_id}:{req.mode}"
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return JSONResponse(cached)
-
+    # Fetch race data first so we can fingerprint inputs and lock the analysis
+    # against drift. Same fingerprint = same cached analysis (regardless of how
+    # many times the user clicks). Scratch / jockey change / ML revision = new
+    # fingerprint = fresh analysis. Eliminates LLM-sampling noise between clicks.
     try:
         race_data = await racing_api.get_race(req.race_id)
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=502, detail="Racing data unavailable")
+
+    fp = secretariat.compute_input_fingerprint(race_data)
+    cache_key = f"ai_analysis:{req.race_id}:{req.mode}:{fp}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return JSONResponse(cached)
 
     try:
         analysis = await secretariat.analyze_race(race_data, mode=req.mode, bankroll=req.bankroll)
@@ -109,7 +114,14 @@ async def analyze_race(request: Request) -> JSONResponse:
         else:
             raise HTTPException(status_code=502, detail="AI analysis unavailable")
 
-    await cache_set(cache_key, analysis, ex=300)
+    # Stamp lock metadata so the UI can show "locked at HH:MM" and the user
+    # knows picks are stable until inputs change.
+    from datetime import datetime, timezone
+    analysis["locked_at"] = datetime.now(timezone.utc).isoformat()
+    analysis["input_fingerprint"] = fp
+    # 6h TTL — long enough to outlast a race day, short enough that stale
+    # fingerprints get evicted instead of accumulating in Redis forever.
+    await cache_set(cache_key, analysis, ex=21600)
     await _store_prediction(race_data, analysis)
     return JSONResponse(analysis)
 
@@ -173,8 +185,6 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
 
     _validate_race_id(req.race_id)
 
-    cache_key = f"ai_analysis:{req.race_id}:{req.mode}"
-
     # Extract optional user_id from JWT for per-user prediction tracking
     _user_id = None
     try:
@@ -187,16 +197,23 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
 
     async def generate():
         try:
-            cached = await cache_get(cache_key)
-            if cached is not None:
-                yield f"data: {json.dumps({'result': cached})}\n\n"
-                yield "data: [DONE]\n\n"
-                return
-
+            # Fetch race data first so we can fingerprint inputs and lock the
+            # cached analysis to those inputs (eliminates LLM-sampling drift
+            # between clicks; only re-analyzes when scratches / jockey changes /
+            # ML revisions actually shift the inputs).
             try:
                 race_data = await racing_api.get_race(req.race_id)
             except Exception:
                 yield f"data: {json.dumps({'error': 'Racing data unavailable'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            fp = secretariat.compute_input_fingerprint(race_data)
+            cache_key = f"ai_analysis:{req.race_id}:{req.mode}:{fp}"
+
+            cached = await cache_get(cache_key)
+            if cached is not None:
+                yield f"data: {json.dumps({'result': cached})}\n\n"
                 yield "data: [DONE]\n\n"
                 return
 
@@ -211,7 +228,11 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
                     result = data
 
             if result:
-                await cache_set(cache_key, result, ex=300)
+                from datetime import datetime, timezone
+                result["locked_at"] = datetime.now(timezone.utc).isoformat()
+                result["input_fingerprint"] = fp
+                # 6h TTL — outlasts a race day, prevents stale-fingerprint Redis bloat
+                await cache_set(cache_key, result, ex=21600)
                 try:
                     await secretariat.extract_and_store_fair_prices(req.race_id, result)
                 except Exception:
