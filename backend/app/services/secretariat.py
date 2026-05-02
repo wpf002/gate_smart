@@ -1784,6 +1784,7 @@ async def generate_morning_line_email(
     predictions: list,
     report_date,
     runner_lookup: dict | None = None,
+    edge_board: list[dict] | None = None,
 ) -> dict:
     """Builds Secretariat's pre-race "Morning Line" email.
 
@@ -1795,6 +1796,10 @@ async def generate_morning_line_email(
     `runner_lookup`, when supplied, is `{race_id: {normalized_horse_name:
     program_number}}` and lets the email render program numbers for Place
     and Show picks too (the schema only stores `predicted_first_num`).
+
+    `edge_board`, when supplied and non-empty, renders a "Today's Edge
+    Board" block above the per-track tables — the top overlays Secretariat
+    found between its fair odds and the morning line.
 
     Returns { "subject": str, "html": str, "text": str }.
     """
@@ -1846,6 +1851,64 @@ async def generate_morning_line_email(
 
     text_chunks: list[str] = []
     html_track_blocks: list[str] = []
+
+    # ── Edge Board (overlay leaderboard) — only when there's something to show ──
+    edge_text_block = ""
+    edge_html_block = ""
+    if edge_board:
+        eb_lines = ["", "=" * 70, "  TODAY'S EDGE BOARD — top overlays vs. morning line", "=" * 70]
+        for e in edge_board:
+            track_full = TRACK_NAMES.get((e.get("track_code") or "").upper(), e.get("track_code") or "")
+            post = _format_post_time(e.get("post_time_et") or "")
+            num = e.get("program_num")
+            horse = f"({num}) {e['horse_name']}" if num else e["horse_name"]
+            eb_lines.append(
+                f"  +{e['value_percent']:.0f}% | {post} {track_full} — "
+                f"{horse} | fair {e['fair_odds']} vs ML {e['market_odds']}"
+            )
+        edge_text_block = "\n".join(eb_lines) + "\n"
+
+        eb_rows = []
+        for e in edge_board:
+            track_full = TRACK_NAMES.get((e.get("track_code") or "").upper(), e.get("track_code") or "")
+            post = _format_post_time(e.get("post_time_et") or "")
+            num = e.get("program_num")
+            horse = f"({num}) {e['horse_name']}" if num else e["horse_name"]
+            eb_rows.append(
+                f'<tr>'
+                f'<td style="{cell};font-weight:bold;color:#0a6b2e;text-align:right;font-variant-numeric:tabular-nums">+{e["value_percent"]:.0f}%</td>'
+                f'<td style="{cell};white-space:nowrap;font-variant-numeric:tabular-nums">{post}</td>'
+                f'<td style="{cell}">{track_full}</td>'
+                f'<td style="{cell}"><strong>{horse}</strong></td>'
+                f'<td style="{cell};color:#444;text-align:right">{e["fair_odds"]}</td>'
+                f'<td style="{cell};color:#444;text-align:right">{e["market_odds"]}</td>'
+                f'</tr>'
+            )
+        edge_html_block = (
+            f'<div style="margin:20px 0 28px 0">'
+            f'  <div style="padding:10px 12px;background:#0a6b2e;color:#fff;'
+            f'font-weight:bold;font-size:15px;border:2px solid #0a6b2e;'
+            f'border-bottom:none;letter-spacing:0.3px">'
+            f'    TODAY\'S EDGE BOARD &nbsp;·&nbsp; {len(edge_board)} overlays vs. morning line'
+            f'  </div>'
+            f'  <table style="border-collapse:collapse;width:100%;font-size:13px;'
+            f'border:2px solid #0a6b2e;border-top:none">'
+            f'    <tr>'
+            f'      <th style="{header_cell};text-align:right">Edge</th>'
+            f'      <th style="{header_cell}">Post</th>'
+            f'      <th style="{header_cell}">Track</th>'
+            f'      <th style="{header_cell}">Pick</th>'
+            f'      <th style="{header_cell};text-align:right">Fair</th>'
+            f'      <th style="{header_cell};text-align:right">ML</th>'
+            f'    </tr>'
+            f'    {"".join(eb_rows)}'
+            f'  </table>'
+            f'  <p style="font-size:11px;color:#666;margin:6px 2px 0;line-height:1.5">'
+            f'    Edge = how much longer the morning line is than Secretariat\'s fair price. '
+            f'    A +20% horse is offered at 20% better odds than it deserves on the analysis.'
+            f'  </p>'
+            f'</div>'
+        )
 
     for track, items in track_groups:
         track_full = TRACK_NAMES.get((track or "").upper(), track)
@@ -1916,6 +1979,7 @@ async def generate_morning_line_email(
         f"{'='*70}\n\n"
         f"  {total_picks} picks across {total_tracks} tracks\n"
         f"\n{legend_text}\n"
+        + edge_text_block
         + "\n".join(text_chunks)
         + "\n"
     )
@@ -1944,6 +2008,8 @@ async def generate_morning_line_email(
     <strong>S</strong> = Show pick (3rd-most-likely)<br>
     All post times shown in Eastern / Central.
   </p>
+
+  {edge_html_block}
 
   {"".join(html_track_blocks)}
 

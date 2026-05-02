@@ -46,13 +46,10 @@ def _norm_name(name: str) -> str:
     return (name or "").lower().strip().replace("'", "").replace("-", " ")
 
 
-async def _build_runner_lookup(target_date: datetime.date) -> dict:
-    """Fetch today's NA racecards and return {race_id: {normalized_horse_name: program_number}}.
-
-    Allows the morning line to show program numbers for Place and Show picks
-    too (the schema only stores predicted_first_num). Falls back gracefully
-    on API failure — the composer drops numbers it can't resolve.
-    """
+async def _fetch_racecards(target_date: datetime.date) -> list[dict]:
+    """Fetch today's NA racecards once. Used by both the runner lookup
+    (for program numbers) and the edge-board computation (needs market
+    odds per runner). Returns [] on failure so the email still sends."""
     today = datetime.date.today()
     day_param = (
         "today" if target_date == today
@@ -62,12 +59,18 @@ async def _build_runner_lookup(target_date: datetime.date) -> dict:
     try:
         from app.services.racing_api import get_na_racecards_full
         data = await get_na_racecards_full(day_param)
+        return data.get("racecards", []) or []
     except Exception as e:
-        print(f"  Runner lookup fetch failed ({e}) — proceeding without numbers for P/S")
-        return {}
+        print(f"  Racecard fetch failed ({e}) — proceeding without enrichment")
+        return []
 
+
+def _build_runner_lookup(racecards: list[dict]) -> dict:
+    """Build {race_id: {normalized_horse_name: program_number}} from fetched
+    racecards. Lets the email render program numbers for Place and Show picks
+    too (the schema only stores predicted_first_num)."""
     lookup: dict[str, dict[str, str]] = {}
-    for race in data.get("racecards", []):
+    for race in racecards:
         race_id = race.get("race_id") or race.get("id") or ""
         if not race_id:
             continue
@@ -111,10 +114,25 @@ async def main(target_date: datetime.date, dry_run: bool):
         print("No predictions for today — exiting (did nightly_predict_all run?).")
         return
 
-    runner_lookup = await _build_runner_lookup(target_date)
+    racecards = await _fetch_racecards(target_date)
+    runner_lookup = _build_runner_lookup(racecards)
     print(f"  Runner lookup: {len(runner_lookup)} races with program numbers")
 
-    email = await generate_morning_line_email(predictions, target_date, runner_lookup)
+    # Edge Board — top overlays where Secretariat's fair price beats the
+    # morning line. Reads only from the Redis cache populated by
+    # nightly_predict_all; no LLM call, no extra cost.
+    edge_board: list = []
+    if racecards:
+        try:
+            from app.services.edge_board import compute_edge_board
+            edge_board = await compute_edge_board(racecards)
+            print(f"  Edge board: {len(edge_board)} overlays surfaced")
+        except Exception as e:
+            print(f"  Edge board failed ({e}) — proceeding without it")
+
+    email = await generate_morning_line_email(
+        predictions, target_date, runner_lookup, edge_board=edge_board,
+    )
 
     if dry_run:
         print(f"\nSubject: {email['subject']}\n")

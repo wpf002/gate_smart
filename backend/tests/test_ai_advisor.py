@@ -89,6 +89,11 @@ async def test_analyze_calls_secretariat_with_mode_and_bankroll(client):
 
 @pytest.mark.asyncio
 async def test_analyze_stores_result_in_cache(client):
+    """Cache key includes the race-input fingerprint so analyses are
+    locked to inputs (not a 5-min wall clock), and TTL outlasts a race day."""
+    from app.services.secretariat import compute_input_fingerprint
+    expected_fp = compute_input_fingerprint(FAKE_RACE)
+
     cache_set_mock = AsyncMock()
     with patch("app.api.routes.ai_advisor.cache_get", new=AsyncMock(return_value=None)), \
          patch("app.api.routes.ai_advisor.cache_set", new=cache_set_mock), \
@@ -99,7 +104,14 @@ async def test_analyze_stores_result_in_cache(client):
         await client.post("/api/advisor/analyze",
                           content=_body({"race_id": "race-1", "mode": "balanced"}),
                           headers={"Content-Type": "application/json"})
-    cache_set_mock.assert_called_once_with("ai_analysis:race-1:balanced", FAKE_ANALYSIS, ex=300)
+    # Stored value gets locked_at + input_fingerprint mutated in by the route,
+    # so don't assert on the full dict — just key, TTL, and the new fields.
+    cache_set_mock.assert_called_once()
+    args, kwargs = cache_set_mock.call_args
+    assert args[0] == f"ai_analysis:race-1:balanced:{expected_fp}"
+    assert args[1]["input_fingerprint"] == expected_fp
+    assert "locked_at" in args[1]
+    assert kwargs == {"ex": 21600}
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +120,10 @@ async def test_analyze_stores_result_in_cache(client):
 
 @pytest.mark.asyncio
 async def test_analyze_returns_cached_result_without_calling_api(client):
+    """On cache hit, the LLM analysis must be skipped. get_race IS still
+    called — the route needs race_data to compute the fingerprint that
+    keys the cache. The point of the cache is to avoid the LLM cost,
+    not the (cheap) racing-API call."""
     race_mock = AsyncMock(return_value=FAKE_RACE)
     secretariat_mock = AsyncMock(return_value=FAKE_ANALYSIS)
     with patch("app.api.routes.ai_advisor.cache_get", new=AsyncMock(return_value=FAKE_ANALYSIS)), \
@@ -118,12 +134,16 @@ async def test_analyze_returns_cached_result_without_calling_api(client):
                               headers={"Content-Type": "application/json"})
     assert r.status_code == 200
     assert r.json() == FAKE_ANALYSIS
-    race_mock.assert_not_called()
     secretariat_mock.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_analyze_cache_key_includes_race_id_and_mode(client):
+    """Cache key is ai_analysis:{race_id}:{mode}:{fingerprint} — the
+    fingerprint suffix locks the analysis to the race's actual inputs."""
+    from app.services.secretariat import compute_input_fingerprint
+    expected_fp = compute_input_fingerprint(FAKE_RACE)
+
     cache_get_mock = AsyncMock(return_value=FAKE_ANALYSIS)
     with patch("app.api.routes.ai_advisor.cache_get", new=cache_get_mock), \
          patch("app.api.routes.ai_advisor.racing_api.get_race",
@@ -131,7 +151,7 @@ async def test_analyze_cache_key_includes_race_id_and_mode(client):
         await client.post("/api/advisor/analyze",
                           content=_body({"race_id": "race-99", "mode": "longshot"}),
                           headers={"Content-Type": "application/json"})
-    cache_get_mock.assert_called_once_with("ai_analysis:race-99:longshot")
+    cache_get_mock.assert_called_once_with(f"ai_analysis:race-99:longshot:{expected_fp}")
 
 
 # ---------------------------------------------------------------------------
