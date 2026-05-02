@@ -656,7 +656,7 @@ export default function RaceDetailPage() {
       } else {
         const detail = err?.response?.data?.detail || err.message || 'Unknown error';
         setDebriefError(detail.includes('not yet available')
-          ? 'Results not yet available — check back after the race.'
+          ? 'Official chart still being finalized upstream — stakes and photo-finish races can take 15–20+ minutes. Try again shortly.'
           : `Debrief failed: ${detail}`);
       }
     } finally {
@@ -675,11 +675,29 @@ export default function RaceDetailPage() {
     },
   });
 
+  // Poll for results once a race is finished. Upstream chart publish can take
+  // anywhere from a few minutes (routine maidens) to 20+ minutes (stakes,
+  // photo finishes, inquiries). We retry every 60s until the API returns a
+  // result, then stop and let the cached data drive the UI.
   useEffect(() => {
-    if (race && isRaceDefinitelyFinished(race) && !raceResults) {
-      getRaceResults(raceId).then(setRaceResults).catch(() => {});
-    }
-  }, [race, raceId]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!race || !isRaceDefinitelyFinished(race) || raceResults) return;
+    let cancelled = false;
+    let timer;
+    const tick = () => {
+      getRaceResults(raceId)
+        .then(data => {
+          if (!cancelled) setRaceResults(data);
+        })
+        .catch(() => {
+          if (!cancelled) timer = setTimeout(tick, 60000);
+        });
+    };
+    tick();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [race, raceId, raceResults]);
 
   const runAnalysisAndScore = (mode = analysisMode) => {
     const cached = raceAnalysisCache[raceId];
@@ -798,7 +816,11 @@ export default function RaceDetailPage() {
   const hasDebriefTab = !!(debrief || debriefLoading);
   const showTabs = hasAnalysisTab || hasDebriefTab;
   const showAnalyseBtn = !analysis && !analysisStreaming;
-  const showDebriefBtn = !debrief && !debriefLoading && !!race && isRaceDefinitelyFinished(race);
+  // Only surface the debrief button once the upstream results feed has actually
+  // published finish positions. Until then, the chart endpoint would return a
+  // "pending" state and burn the user's tap; better to wait until we know we
+  // have data to show.
+  const showDebriefBtn = !debrief && !debriefLoading && !!race && isRaceDefinitelyFinished(race) && !!raceResults;
   const raceFinished = !!race && isRaceDefinitelyFinished(race);
 
   const tabs = [
@@ -985,6 +1007,17 @@ export default function RaceDetailPage() {
             <button className="btn btn-secondary btn-full" onClick={runDebrief} disabled={isLoading} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <Icon name="clipboard" size={15} /> Post-Race Debrief
             </button>
+          )}
+          {raceFinished && !raceResults && !debrief && !debriefLoading && (
+            <div style={{
+              flex: 1, padding: '10px 14px',
+              background: 'rgba(201,162,39,0.06)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5,
+            }}>
+              Post-race chart pending — typically ready within 5–15 minutes of the wire, longer for stakes or photo finishes. We'll surface the Debrief button as soon as it arrives.
+            </div>
           )}
         </div>
 
