@@ -1572,47 +1572,35 @@ def _render_trends_html(trends: dict) -> str:
 
 # ── Morning Line Email ────────────────────────────────────────────────────────
 
-# Bucket history below this top-pick win rate (with at least PASS_MIN_N samples)
-# triggers a "Pass" tag in the morning line. Honest signal anchored in real
-# settled history — not a self-reported confidence.
-PASS_THRESHOLD = 0.20
-PASS_MIN_N = 5
 
+def _format_post_time(post_et: str) -> str:
+    """Convert stored 24-hour ET ("HH:MM") into a printable
+    "1:05 PM ET / 12:05 PM CT" string. Returns "—" when missing or malformed."""
+    if not post_et or len(post_et) < 4:
+        return "—"
+    try:
+        h, m = post_et.split(":")
+        h_et = int(h) % 24
+        m_int = int(m)
+    except ValueError:
+        return post_et
 
-def _bucket_signal(track: str, race_type: str, calibration) -> dict:
-    """Return the historical top-pick win rate for this (track, race_type)
-    bucket from rolling calibration. Falls back to track-only, then race-type
-    only. Returns {"rate": float, "wins": int, "n": int, "scope": str} or None
-    when we don't have enough data to say anything useful.
-    """
-    if not calibration:
-        return None
-    by_tt = calibration.win_rate_by_track_type or {}
-    by_t = calibration.win_rate_by_track or {}
-    by_rt = calibration.win_rate_by_type or {}
+    def _twelve(h24: int) -> str:
+        suffix = "AM" if h24 < 12 else "PM"
+        h12 = h24 % 12 or 12
+        return f"{h12}:{m_int:02d} {suffix}"
 
-    combo = by_tt.get(f"{track}/{race_type}") if track and race_type else None
-    if combo and combo.get("total", 0) >= PASS_MIN_N:
-        return {"rate": combo["win_rate"], "wins": combo["wins"], "n": combo["total"], "scope": f"{track}/{race_type}"}
-
-    t_data = by_t.get(track) if track else None
-    if t_data and t_data.get("total", 0) >= PASS_MIN_N:
-        return {"rate": t_data["win_rate"], "wins": t_data["wins"], "n": t_data["total"], "scope": track}
-
-    rt_data = by_rt.get(race_type) if race_type else None
-    if rt_data and rt_data.get("total", 0) >= PASS_MIN_N:
-        return {"rate": rt_data["win_rate"], "wins": rt_data["wins"], "n": rt_data["total"], "scope": race_type}
-
-    return None
+    h_ct = (h_et - 1) % 24
+    return f"{_twelve(h_et)} ET / {_twelve(h_ct)} CT"
 
 
 async def generate_morning_line_email(predictions: list, report_date) -> dict:
     """Builds Secretariat's pre-race "Morning Line" email.
 
-    For every NA race today, surfaces the Win / Place / Show picks and a
-    bucket-history signal. Bucket win rate below PASS_THRESHOLD with n>=PASS_MIN_N
-    gets a "Pass" tag rather than a forced bet. No LLM call — picks were already
-    written by nightly_predict_all.py earlier in the morning.
+    For every NA race today, surfaces the Win / Place / Show picks. No LLM
+    call — picks were already written by nightly_predict_all.py earlier in
+    the morning. Layout is print-friendly: per-track bordered tables with
+    visible dividers between sections.
 
     Returns { "subject": str, "html": str, "text": str }.
     """
@@ -1623,17 +1611,6 @@ async def generate_morning_line_email(predictions: list, report_date) -> dict:
         report_date.strftime("%A, %B %d, %Y") if report_date else str(datetime.date.today())
     )
     short_date = report_date.strftime("%a %b %-d") if report_date else ""
-
-    # Load calibration once for bucket signals
-    calibration = None
-    try:
-        from app.core.database import _AsyncSessionLocal
-        from app.models.accuracy import SecretariatCalibration
-        if _AsyncSessionLocal:
-            async with _AsyncSessionLocal() as db:
-                calibration = await db.get(SecretariatCalibration, 1)
-    except Exception:
-        calibration = None
 
     predictions = sorted(
         predictions,
@@ -1647,147 +1624,121 @@ async def generate_morning_line_email(predictions: list, report_date) -> dict:
     track_groups = [(t, list(items)) for t, items in groupby(predictions, key=lambda p: p.track_code or "?")]
     total_picks = len(predictions)
     total_tracks = len(track_groups)
-    pass_count = 0
+
+    # Cell border style reused throughout the print-friendly layout
+    cell = "padding:6px 8px;border:1px solid #888"
+    header_cell = "padding:8px;border:1px solid #222;background:#222;color:#fff;text-align:left"
+    track_banner = (
+        "padding:10px 12px;background:#c8a84b;color:#1a1a1a;"
+        "font-weight:bold;font-size:15px;border:2px solid #1a1a1a;"
+        "border-bottom:none;letter-spacing:0.3px"
+    )
 
     text_chunks: list[str] = []
-    html_chunks: list[str] = []
+    html_track_blocks: list[str] = []
 
-    for idx, (track, items) in enumerate(track_groups):
+    for track, items in track_groups:
         track_full = TRACK_NAMES.get((track or "").upper(), track)
         header = f"{track} — {track_full}" if track_full and track_full != track else track
+
         text_chunks.append("")
-        text_chunks.append(f"── {header} ({len(items)} races) ──")
+        text_chunks.append("=" * 70)
+        text_chunks.append(f"  {header}  ({len(items)} races)")
+        text_chunks.append("=" * 70)
 
-        if idx > 0:
-            html_chunks.append('<tr><td colspan="6" style="padding:0;height:12px;background:#fff"></td></tr>')
-        html_chunks.append(
-            f'<tr style="background:#c8a84b;color:#1a1a1a">'
-            f'<td colspan="6" style="padding:8px;font-weight:bold;font-size:14px">{header} — {len(items)} races</td>'
-            f'</tr>'
-        )
-
+        rows_html: list[str] = []
         for p in items:
-            sig = _bucket_signal(p.track_code, p.race_type, calibration)
-            is_pass = bool(sig and sig["rate"] < PASS_THRESHOLD)
-            if is_pass:
-                pass_count += 1
-
-            sig_text = (
-                f"{sig['scope']} {sig['wins']}/{sig['n']} ({sig['rate']:.0%})"
-                if sig else "no history yet"
-            )
-
             num = (p.predicted_first_num or "").lstrip("#").strip()
-            win_label = (
-                f"#{num} {p.predicted_first}"
-                if num else (p.predicted_first or "?")
-            )
+            win_label = f"#{num} {p.predicted_first}" if num else (p.predicted_first or "?")
             place_label = p.predicted_second or "—"
             show_label = p.predicted_third or "—"
-            post = (p.post_time_et or "—")
+            post = _format_post_time(p.post_time_et or "")
             type_label = p.race_type or p.surface or "—"
             race_label = p.race_name or p.race_id or ""
 
-            if is_pass:
-                text_chunks.append(
-                    f"  PASS {post} | {race_label} | {type_label} | "
-                    f"would-be W: {win_label} | history: {sig_text}"
-                )
-            else:
-                text_chunks.append(
-                    f"  {post} | {race_label} | {type_label} | "
-                    f"W: {win_label} | P: {place_label} | S: {show_label} | {sig_text}"
-                )
+            text_chunks.append(
+                f"  {post} | {race_label} | {type_label}\n"
+                f"      W: {win_label}\n"
+                f"      P: {place_label}\n"
+                f"      S: {show_label}"
+            )
 
-            bg = "#fff5f5" if is_pass else "#ffffff"
-            tag = (
-                '<span style="background:#a33;color:#fff;font-size:10px;'
-                'padding:2px 6px;border-radius:3px;margin-right:6px">PASS</span>'
-                if is_pass else ""
-            )
-            picks_cell = (
-                f"<em style='color:#888'>would-be {win_label}</em>"
-                if is_pass else
-                f"<strong>W:</strong> {win_label}<br>"
-                f"<strong>P:</strong> {place_label}<br>"
-                f"<strong>S:</strong> {show_label}"
-            )
-            html_chunks.append(
-                f'<tr style="background:{bg}">'
-                f'<td style="padding:6px 8px;white-space:nowrap;font-variant-numeric:tabular-nums">{post}</td>'
-                f'<td style="padding:6px 8px">{tag}{race_label}</td>'
-                f'<td style="padding:6px 8px;color:#666;font-size:12px">{type_label}</td>'
-                f'<td style="padding:6px 8px">{picks_cell}</td>'
-                f'<td style="padding:6px 8px;color:#666;font-size:12px">{sig_text}</td>'
+            rows_html.append(
+                f'<tr>'
+                f'<td style="{cell};white-space:nowrap;font-variant-numeric:tabular-nums">{post}</td>'
+                f'<td style="{cell}">{race_label}</td>'
+                f'<td style="{cell};color:#444;font-size:12px">{type_label}</td>'
+                f'<td style="{cell}"><strong>{win_label}</strong></td>'
+                f'<td style="{cell}">{place_label}</td>'
+                f'<td style="{cell}">{show_label}</td>'
                 f'</tr>'
             )
 
-    actionable = total_picks - pass_count
+        html_track_blocks.append(
+            f'<div style="margin:24px 0;page-break-inside:avoid">'
+            f'  <div style="{track_banner}">{header} &nbsp;·&nbsp; {len(items)} races</div>'
+            f'  <table style="border-collapse:collapse;width:100%;font-size:13px;'
+            f'border:2px solid #1a1a1a;border-top:none">'
+            f'    <tr>'
+            f'      <th style="{header_cell}">Post Time</th>'
+            f'      <th style="{header_cell}">Race</th>'
+            f'      <th style="{header_cell}">Type</th>'
+            f'      <th style="{header_cell}">Win</th>'
+            f'      <th style="{header_cell}">Place</th>'
+            f'      <th style="{header_cell}">Show</th>'
+            f'    </tr>'
+            f'    {"".join(rows_html)}'
+            f'  </table>'
+            f'</div>'
+        )
+
     subject = (
         f"🏇 Secretariat's Morning Line — {short_date} | "
-        f"{actionable} picks across {total_tracks} tracks"
+        f"{total_picks} picks across {total_tracks} tracks"
     )
 
     legend_text = (
-        "W = Win pick (top finisher) · P = Place pick (2nd-most-likely) · "
-        "S = Show pick (3rd-most-likely)\n"
-        f"PASS tag = bucket history below {int(PASS_THRESHOLD*100)}% over the last "
-        "30 days (n≥5). Picks are still listed but flagged."
+        "W = Win pick · P = Place pick (2nd-most-likely) · S = Show pick (3rd-most-likely)\n"
+        "All post times shown in Eastern / Central."
     )
 
     text_body = (
         f"SECRETARIAT'S MORNING LINE — {today_str.upper()}\n"
-        f"{'='*60}\n\n"
-        f"  {actionable} actionable picks across {total_tracks} tracks "
-        f"({pass_count} flagged Pass)\n"
+        f"{'='*70}\n\n"
+        f"  {total_picks} picks across {total_tracks} tracks\n"
         f"\n{legend_text}\n"
         + "\n".join(text_chunks)
         + "\n"
     )
 
-    html_table = (
-        '<table style="border-collapse:collapse;width:100%;font-size:13px">'
-        '<tr style="background:#222;color:#fff">'
-        '<th style="padding:6px 8px;text-align:left">Post</th>'
-        '<th style="padding:6px 8px;text-align:left">Race</th>'
-        '<th style="padding:6px 8px;text-align:left">Type</th>'
-        '<th style="padding:6px 8px;text-align:left">W / P / S</th>'
-        '<th style="padding:6px 8px;text-align:left">Bucket history</th>'
-        '</tr>'
-        + "\n".join(html_chunks)
-        + '</table>'
-    )
-
-    html_body = f"""<div style="font-family:Georgia,serif;max-width:880px;margin:auto;color:#1a1a1a">
-  <h1 style="border-bottom:3px solid #c8a84b;padding-bottom:8px">
+    html_body = f"""<div style="font-family:Georgia,serif;max-width:900px;margin:auto;color:#1a1a1a;padding:8px">
+  <h1 style="border-bottom:3px solid #c8a84b;padding-bottom:8px;margin-bottom:4px">
     🐎 Secretariat's Morning Line
   </h1>
-  <p style="color:#666;font-size:13px">{today_str}</p>
+  <p style="color:#666;font-size:13px;margin-top:0">{today_str}</p>
 
-  <table style="width:100%;background:#f8f4ec;border-radius:6px;padding:16px;margin:16px 0">
-    <tr>
-      <td style="font-size:24px;font-weight:bold;text-align:center">{actionable}</td>
-      <td style="font-size:24px;font-weight:bold;text-align:center">{pass_count}</td>
-      <td style="font-size:24px;font-weight:bold;text-align:center">{total_tracks}</td>
-    </tr>
-    <tr>
-      <td style="text-align:center;color:#666;font-size:11px">Actionable picks</td>
-      <td style="text-align:center;color:#666;font-size:11px">Pass races</td>
-      <td style="text-align:center;color:#666;font-size:11px">Tracks</td>
+  <table style="width:100%;border:2px solid #c8a84b;border-collapse:collapse;margin:16px 0">
+    <tr style="background:#f8f4ec">
+      <td style="padding:14px;text-align:center;border-right:1px solid #c8a84b">
+        <div style="font-size:26px;font-weight:bold">{total_picks}</div>
+        <div style="font-size:11px;color:#666">Picks</div>
+      </td>
+      <td style="padding:14px;text-align:center">
+        <div style="font-size:26px;font-weight:bold">{total_tracks}</div>
+        <div style="font-size:11px;color:#666">Tracks</div>
+      </td>
     </tr>
   </table>
 
-  <p style="background:#f8f4ec;padding:10px 14px;border-left:3px solid #c8a84b;font-size:12px;color:#444;line-height:1.5">
+  <p style="background:#f8f4ec;padding:10px 14px;border:1px solid #c8a84b;font-size:12px;color:#444;line-height:1.5;margin:16px 0">
     <strong>W</strong> = Win pick &nbsp;·&nbsp; <strong>P</strong> = Place pick (2nd-most-likely) &nbsp;·&nbsp;
     <strong>S</strong> = Show pick (3rd-most-likely)<br>
-    <span style="background:#a33;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px">PASS</span>
-    &nbsp;= bucket history below {int(PASS_THRESHOLD*100)}% over the last 30 days (n≥{PASS_MIN_N}).
-    Picks are still listed but flagged.
+    All post times shown in Eastern / Central.
   </p>
 
-  {html_table}
+  {"".join(html_track_blocks)}
 
-  <p style="font-size:11px;color:#999;margin-top:24px">
+  <p style="font-size:11px;color:#999;margin-top:24px;border-top:1px solid #ccc;padding-top:8px">
     Secretariat · GateSmart · {today_str} · pre-race picks generated at 11 AM ET
   </p>
 </div>"""
