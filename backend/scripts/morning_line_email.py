@@ -42,6 +42,48 @@ async def _ensure_columns(engine) -> None:
             await conn.execute(text(stmt))
 
 
+def _norm_name(name: str) -> str:
+    return (name or "").lower().strip().replace("'", "").replace("-", " ")
+
+
+async def _build_runner_lookup(target_date: datetime.date) -> dict:
+    """Fetch today's NA racecards and return {race_id: {normalized_horse_name: program_number}}.
+
+    Allows the morning line to show program numbers for Place and Show picks
+    too (the schema only stores predicted_first_num). Falls back gracefully
+    on API failure — the composer drops numbers it can't resolve.
+    """
+    today = datetime.date.today()
+    day_param = (
+        "today" if target_date == today
+        else "tomorrow" if target_date == today + datetime.timedelta(days=1)
+        else target_date.isoformat()
+    )
+    try:
+        from app.services.racing_api import get_na_racecards_full
+        data = await get_na_racecards_full(day_param)
+    except Exception as e:
+        print(f"  Runner lookup fetch failed ({e}) — proceeding without numbers for P/S")
+        return {}
+
+    lookup: dict[str, dict[str, str]] = {}
+    for race in data.get("racecards", []):
+        race_id = race.get("race_id") or race.get("id") or ""
+        if not race_id:
+            continue
+        runners = {}
+        for r in race.get("runners", []):
+            name = r.get("horse") or r.get("horse_name") or ""
+            num = (
+                r.get("number") or r.get("program_number") or r.get("cloth_number") or ""
+            )
+            if name and num:
+                runners[_norm_name(name)] = str(num).lstrip("#").strip()
+        if runners:
+            lookup[race_id] = runners
+    return lookup
+
+
 async def main(target_date: datetime.date, dry_run: bool):
     from app.core import database as _db
     from app.models.accuracy import RacePrediction
@@ -69,7 +111,10 @@ async def main(target_date: datetime.date, dry_run: bool):
         print("No predictions for today — exiting (did nightly_predict_all run?).")
         return
 
-    email = await generate_morning_line_email(predictions, target_date)
+    runner_lookup = await _build_runner_lookup(target_date)
+    print(f"  Runner lookup: {len(runner_lookup)} races with program numbers")
+
+    email = await generate_morning_line_email(predictions, target_date, runner_lookup)
 
     if dry_run:
         print(f"\nSubject: {email['subject']}\n")

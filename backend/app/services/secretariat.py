@@ -1594,13 +1594,21 @@ def _format_post_time(post_et: str) -> str:
     return f"{_twelve(h_et)} ET / {_twelve(h_ct)} CT"
 
 
-async def generate_morning_line_email(predictions: list, report_date) -> dict:
+async def generate_morning_line_email(
+    predictions: list,
+    report_date,
+    runner_lookup: dict | None = None,
+) -> dict:
     """Builds Secretariat's pre-race "Morning Line" email.
 
     For every NA race today, surfaces the Win / Place / Show picks. No LLM
     call — picks were already written by nightly_predict_all.py earlier in
     the morning. Layout is print-friendly: per-track bordered tables with
     visible dividers between sections.
+
+    `runner_lookup`, when supplied, is `{race_id: {normalized_horse_name:
+    program_number}}` and lets the email render program numbers for Place
+    and Show picks too (the schema only stores `predicted_first_num`).
 
     Returns { "subject": str, "html": str, "text": str }.
     """
@@ -1611,6 +1619,22 @@ async def generate_morning_line_email(predictions: list, report_date) -> dict:
         report_date.strftime("%A, %B %d, %Y") if report_date else str(datetime.date.today())
     )
     short_date = report_date.strftime("%a %b %-d") if report_date else ""
+
+    runner_lookup = runner_lookup or {}
+
+    def _norm(name: str) -> str:
+        return (name or "").lower().strip().replace("'", "").replace("-", " ")
+
+    def _label(race_id: str, horse_name: str | None, fallback_num: str | None = None) -> str:
+        """Format a pick as '(N) Name'. Falls back to '(fallback_num) Name'
+        when the runner lookup misses, then to bare 'Name', then to '—'."""
+        if not horse_name:
+            return "—"
+        runners = runner_lookup.get(race_id, {})
+        num = runners.get(_norm(horse_name))
+        if not num and fallback_num:
+            num = fallback_num.lstrip("#").strip() or None
+        return f"({num}) {horse_name}" if num else horse_name
 
     predictions = sorted(
         predictions,
@@ -1648,10 +1672,9 @@ async def generate_morning_line_email(predictions: list, report_date) -> dict:
 
         rows_html: list[str] = []
         for p in items:
-            num = (p.predicted_first_num or "").lstrip("#").strip()
-            win_label = f"#{num} {p.predicted_first}" if num else (p.predicted_first or "?")
-            place_label = p.predicted_second or "—"
-            show_label = p.predicted_third or "—"
+            win_label = _label(p.race_id, p.predicted_first, p.predicted_first_num)
+            place_label = _label(p.race_id, p.predicted_second)
+            show_label = _label(p.race_id, p.predicted_third)
             post = _format_post_time(p.post_time_et or "")
             type_label = p.race_type or p.surface or "—"
             race_label = p.race_name or p.race_id or ""
