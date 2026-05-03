@@ -576,15 +576,6 @@ input::placeholder, textarea::placeholder {
   .race-meta-class .race-meta-short { display: none; }
 }
 
-/* ─── Reset button — inline with Risk Tolerance on mobile, separate row on
-       desktop. Two render points; toggle visibility per breakpoint. ───────── */
-.reset-mobile-only { display: none; }
-.reset-desktop-only { display: inline-flex; }
-@media (max-width: 767px) {
-  .reset-mobile-only { display: inline-flex; }
-  .reset-desktop-only { display: none; }
-}
-
 /* ─── Secretariat panel header — keep title, confidence, and Plain/Technical
        on a single row on mobile by tightening sizes ───────────────────────── */
 @media (max-width: 767px) {

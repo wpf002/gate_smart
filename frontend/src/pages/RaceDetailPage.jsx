@@ -1006,7 +1006,7 @@ export default function RaceDetailPage() {
             </div>
             {analysis && !analysisStreaming && !raceFinished && (
               <button
-                className="btn btn-primary reset-mobile-only"
+                className="btn btn-primary"
                 onClick={handleResetAnalysis}
                 disabled={isLoading}
                 style={{ flexShrink: 0, fontSize: 12, padding: '6px 12px', marginLeft: 'auto' }}
@@ -1022,11 +1022,6 @@ export default function RaceDetailPage() {
           {showAnalyseBtn && !raceFinished && (
             <button className="btn btn-primary btn-full" onClick={() => analyzeMutation.mutate()} disabled={isLoading}>
               Analyze with Secretariat
-            </button>
-          )}
-          {analysis && !analysisStreaming && !raceFinished && (
-            <button className="btn btn-primary reset-desktop-only" onClick={handleResetAnalysis} disabled={isLoading} style={{ fontSize: 12, padding: '6px 12px' }}>
-              Reset
             </button>
           )}
           {showDebriefBtn && (
