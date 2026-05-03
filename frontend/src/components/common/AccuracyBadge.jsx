@@ -168,8 +168,15 @@ function GlobalAccuracyBadge() {
         }}>
           SECRETARIAT · LAST {data.total_predictions}
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.3, display: 'flex', gap: 10 }}>
-          {stats.map(s => <Stat key={s.label} {...s} />)}
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.3, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {stats.map((s, i) => (
+            <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              {i > 0 && (
+                <span style={{ color: 'var(--border-medium)', userSelect: 'none' }}>·</span>
+              )}
+              <Stat {...s} />
+            </span>
+          ))}
         </div>
       </div>
     </div>

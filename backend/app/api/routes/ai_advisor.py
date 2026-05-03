@@ -646,6 +646,114 @@ async def secretariat_accuracy() -> JSONResponse:
     return JSONResponse(payload)
 
 
+@router.get("/accuracy/verify")
+async def secretariat_accuracy_verify() -> JSONResponse:
+    """Diagnostic endpoint — returns the raw last-100 rows so we can audit
+    that the win/place/show/itm flags are actually consistent with the
+    stored actual_first/_second/_third finishers. Compares stored flags
+    against re-derived flags and reports any mismatches.
+    """
+    from app.core import database as _db
+    from app.models.accuracy import RacePrediction
+    from sqlalchemy import select
+
+    def _norm(name):
+        return (name or "").lower().strip().replace("'", "").replace("-", " ")
+
+    async with _db._AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(RacePrediction)
+            .where(
+                RacePrediction.result_fetched.is_(True),
+                RacePrediction.user_id.is_(None),
+                RacePrediction.analysis_mode == "auto_daily",
+                RacePrediction.top_pick_correct.is_not(None),
+            )
+            .order_by(RacePrediction.settled_at.desc().nulls_last())
+            .limit(100)
+        )
+        rows = list(result.scalars().all())
+
+    mismatches = []
+    samples = []
+    for r in rows[:15]:
+        a1, a2, a3 = _norm(r.actual_first), _norm(r.actual_second), _norm(r.actual_third)
+        p1, p2, p3 = _norm(r.predicted_first), _norm(r.predicted_second), _norm(r.predicted_third)
+        top_should = bool(p1 and p1 == a1)
+        itm_should = bool(p1 and p1 in {a1, a2, a3})
+        place_should = bool(p2 and p2 in {a1, a2})
+        show_should = bool(p3 and p3 in {a1, a2, a3})
+        samples.append({
+            "race_id": r.race_id,
+            "race_date": str(r.race_date) if r.race_date else None,
+            "predicted_first": r.predicted_first,
+            "predicted_second": r.predicted_second,
+            "predicted_third": r.predicted_third,
+            "actual_first": r.actual_first,
+            "actual_second": r.actual_second,
+            "actual_third": r.actual_third,
+            "stored": {
+                "top_pick_correct": r.top_pick_correct,
+                "place_pick_correct": r.place_pick_correct,
+                "show_pick_correct": r.show_pick_correct,
+                "in_the_money": r.in_the_money,
+            },
+            "rederived": {
+                "top_pick_correct": top_should,
+                "place_pick_correct": place_should,
+                "show_pick_correct": show_should,
+                "in_the_money": itm_should,
+            },
+        })
+
+    # Full-100 mismatch scan: compare stored flag to re-derived
+    flag_mismatch_counts = {"top": 0, "place": 0, "show": 0, "itm": 0}
+    null_counts = {"top": 0, "place": 0, "show": 0, "itm": 0}
+    for r in rows:
+        a1, a2, a3 = _norm(r.actual_first), _norm(r.actual_second), _norm(r.actual_third)
+        p1, p2, p3 = _norm(r.predicted_first), _norm(r.predicted_second), _norm(r.predicted_third)
+        if r.top_pick_correct is None:
+            null_counts["top"] += 1
+        elif r.top_pick_correct != bool(p1 and p1 == a1):
+            flag_mismatch_counts["top"] += 1
+        if r.place_pick_correct is None:
+            null_counts["place"] += 1
+        elif r.place_pick_correct != bool(p2 and p2 in {a1, a2}):
+            flag_mismatch_counts["place"] += 1
+        if r.show_pick_correct is None:
+            null_counts["show"] += 1
+        elif r.show_pick_correct != bool(p3 and p3 in {a1, a2, a3}):
+            flag_mismatch_counts["show"] += 1
+        if r.in_the_money is None:
+            null_counts["itm"] += 1
+        elif r.in_the_money != bool(p1 and p1 in {a1, a2, a3}):
+            flag_mismatch_counts["itm"] += 1
+
+    # Re-derived totals straight from raw fields (independent of stored flags)
+    rederived = {"top": 0, "place": 0, "show": 0, "itm": 0}
+    for r in rows:
+        a1, a2, a3 = _norm(r.actual_first), _norm(r.actual_second), _norm(r.actual_third)
+        p1, p2, p3 = _norm(r.predicted_first), _norm(r.predicted_second), _norm(r.predicted_third)
+        if p1 and p1 == a1: rederived["top"] += 1
+        if p2 and p2 in {a1, a2}: rederived["place"] += 1
+        if p3 and p3 in {a1, a2, a3}: rederived["show"] += 1
+        if p1 and p1 in {a1, a2, a3}: rederived["itm"] += 1
+
+    return JSONResponse({
+        "total_rows": len(rows),
+        "stored_flag_counts": {
+            "top_pick_correct": sum(1 for r in rows if r.top_pick_correct),
+            "place_pick_correct": sum(1 for r in rows if r.place_pick_correct),
+            "show_pick_correct": sum(1 for r in rows if r.show_pick_correct),
+            "in_the_money": sum(1 for r in rows if r.in_the_money),
+        },
+        "rederived_from_actuals": rederived,
+        "flag_null_counts": null_counts,
+        "flag_mismatch_counts": flag_mismatch_counts,
+        "sample_rows": samples,
+    })
+
+
 async def _store_prediction(race_data: dict, analysis: dict) -> None:
     """Store the top pick from an analysis for later accuracy tracking."""
     try:
