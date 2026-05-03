@@ -170,7 +170,18 @@ export default function AdvisorPage() {
   const bottomRef = useRef(null);
 
   const askMutation = useMutation({
-    mutationFn: (question) => askAdvisor(question),
+    mutationFn: (question) => {
+      // Pull live state from the store — by the time mutate() runs, the new
+      // user turn has already been appended via addAdvisorMessage. Drop it
+      // (it goes in `question`) and send the last 4 prior turns as history.
+      const all = useAppStore.getState().advisorMessages;
+      const history = all
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .slice(0, -1)
+        .slice(-4)
+        .map(m => ({ role: m.role, content: m.content }));
+      return askAdvisor(question, null, history.length ? history : null);
+    },
     onSuccess: (data) => {
       addAdvisorMessage({ role: 'assistant', content: data.answer || data });
     },

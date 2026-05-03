@@ -42,6 +42,7 @@ class RecommendRequest(msgspec.Struct):
 class AskRequest(msgspec.Struct):
     question: str
     context: Optional[dict] = None
+    history: Optional[list[dict]] = None
 
 
 class ExplainFormRequest(msgspec.Struct):
@@ -170,7 +171,7 @@ async def ask(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail="Question too long (max 500 characters)")
 
     try:
-        answer = await secretariat.answer_betting_question(req.question, req.context)
+        answer = await secretariat.answer_betting_question(req.question, req.context, req.history)
     except Exception:
         raise HTTPException(status_code=502, detail="AI analysis unavailable")
 

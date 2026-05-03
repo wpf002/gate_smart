@@ -1341,7 +1341,7 @@ def _needs_web_search(question: str) -> bool:
     return any(kw in q for kw in _LIVE_RACING_KEYWORDS)
 
 
-async def answer_betting_question(question: str, context: dict = None) -> str:
+async def answer_betting_question(question: str, context: dict = None, history: list[dict] = None) -> str:
     """Free-form Q&A — Secretariat answers any horse-racing question.
 
     Cost-tiered routing:
@@ -1403,6 +1403,18 @@ Question: {question}
 
 Reply with the markdown answer directly — no JSON wrapper, no preface, no meta-commentary about your tools."""
 
+    # Multi-turn: prepend caller-supplied history (capped at last 4 messages by
+    # the frontend, defensively re-capped here). Each message is also clipped
+    # to ~6000 chars to bound input cost from runaway-long prior assistant turns.
+    msgs: list[dict] = []
+    if history:
+        for h in history[-4:]:
+            role = h.get("role") if isinstance(h, dict) else None
+            content = h.get("content") if isinstance(h, dict) else None
+            if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+                msgs.append({"role": role, "content": content[:6000]})
+    msgs.append({"role": "user", "content": prompt})
+
     if use_search:
         # Live-racing intent: pay for Sonnet + web search (≈$0.07/call)
         create_args = dict(
@@ -1410,7 +1422,7 @@ Reply with the markdown answer directly — no JSON wrapper, no preface, no meta
             max_tokens=2000,
             temperature=0.3,
             system=SECRETARIAT_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
+            messages=msgs,
         )
         web_search_tool = [{
             "type": "web_search_20250305",
@@ -1437,7 +1449,7 @@ Reply with the markdown answer directly — no JSON wrapper, no preface, no meta
         max_tokens=1500,
         temperature=0.3,
         system=SECRETARIAT_SYSTEM,
-        messages=[{"role": "user", "content": prompt}],
+        messages=msgs,
     )
     return _extract_text(response)
 
