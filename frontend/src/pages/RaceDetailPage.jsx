@@ -890,20 +890,18 @@ export default function RaceDetailPage() {
         })()}
 
         {/* ── Secretariat's track record + Morning Line — side by side ──
-            Track record is pre-race context only; Morning Line shows in
-            every state (pre-race, in-progress, finished) so the original
-            picks remain visible alongside results. */}
+            Both panels render in every race state (pre-race, in-progress,
+            finished) so users see the historical track context and the
+            original morning-line picks even after the race runs. */}
         {race && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
-            {!raceFinished && (
-              <div style={{ flex: '1 1 280px', minWidth: 0 }}>
-                <AccuracyBadge
-                  trackCode={race.track_code || race.course_id || race.course}
-                  trackName={race.course || race.track}
-                  compact={false}
-                />
-              </div>
-            )}
+            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+              <AccuracyBadge
+                trackCode={race.track_code || race.course_id || race.course}
+                trackName={race.course || race.track}
+                compact={false}
+              />
+            </div>
             <div style={{ flex: '1 1 280px', minWidth: 0 }}>
               <MorningLineBadge raceId={raceId} />
             </div>
