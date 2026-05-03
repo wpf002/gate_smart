@@ -81,7 +81,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
   if (!analysis) return null;
 
-  const modeLabel = MODES.find(m => m.id === mode)?.label || mode;
   const winTellerScript = analysis.teller_script?.win;
 
   // ── Shared section builders ───────────────────────────────────────────────

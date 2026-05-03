@@ -221,25 +221,6 @@ export default function ProfilePage() {
         <SectionLabel>Secretariat Performance</SectionLabel>
         <AccuracyBadge />
 
-        {/* Profile summary */}
-        <div style={{
-          marginTop: 24,
-          padding: 16,
-          background: 'rgba(201,162,39,0.08)',
-          border: '1px solid var(--border-gold)',
-          borderRadius: 'var(--radius-md)',
-        }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--accent-gold)', marginBottom: 10 }}>
-            YOUR BETTING PROFILE
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Icon name="learn" size={14} color="var(--accent-gold)" />
-              Level: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.experienceLevel}</strong>
-            </div>
-          </div>
-        </div>
-
         <div style={{
           marginTop: 16,
           padding: '10px 14px',
