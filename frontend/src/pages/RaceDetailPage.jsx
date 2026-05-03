@@ -879,12 +879,17 @@ export default function RaceDetailPage() {
                 }
                 return [span];
               })}
-              {raceFinished && (
+              {raceFinished ? (
                 <>
                   <span className="race-meta-sep" style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>
                   <span className="race-meta-item" style={{ fontSize: 13, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>Finished</span>
                 </>
-              )}
+              ) : isPastPostTime ? (
+                <>
+                  <span className="race-meta-sep" style={{ color: 'var(--accent-gold-dim)', margin: '0 6px' }}>·</span>
+                  <span className="race-meta-item" style={{ fontSize: 13, color: 'var(--accent-gold-bright)', fontWeight: 600 }}>In Progress</span>
+                </>
+              ) : null}
             </div>
           );
         })()}
