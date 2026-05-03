@@ -667,7 +667,7 @@ Return this JSON exactly:
             client,
             endpoint="analyze_race",
             model="claude-haiku-4-5-20251001",
-            max_tokens=4000,
+            max_tokens=5000,
             temperature=0.2,
             system=SECRETARIAT_SYSTEM,
             messages=[{"role": "user", "content": prompt}]
@@ -772,7 +772,7 @@ Return this JSON exactly:
     final_message = None
     async with client.messages.stream(
         model="claude-haiku-4-5-20251001",
-        max_tokens=4000,
+        max_tokens=5000,
         temperature=0.2,
         system=SECRETARIAT_SYSTEM,
         messages=[{"role": "user", "content": prompt}]
