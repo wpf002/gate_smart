@@ -127,10 +127,9 @@ function GlobalAccuracyBadge() {
   }
 
   const stats = [
-    { label: 'W',   value: data.win_rate_percent },
-    { label: 'P',   value: data.place_rate_percent },
-    { label: 'S',   value: data.show_rate_percent },
-    { label: 'ITM', value: data.itm_rate_percent },
+    { label: 'W', value: data.win_rate_percent },
+    { label: 'P', value: data.place_rate_percent },
+    { label: 'S', value: data.show_rate_percent },
   ];
 
   const Stat = ({ label, value }) => (
