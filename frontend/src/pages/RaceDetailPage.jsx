@@ -842,15 +842,17 @@ export default function RaceDetailPage() {
             </div>
           );
         })()}
-        {/* NotificationBell — top-right of header */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-          <NotificationBell raceId={raceId} raceName={race?.title || race?.race_name || ''} onSubscribe={setBellSubscribed} />
-          {race && (
+        {/* NotificationBell — top-right of header. Hidden once the race
+            is at/past post time — alerts ahead of post are the only
+            useful state; once running or finished the bell is dead UI. */}
+        {race && !raceFinished && !isPastPostTime && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+            <NotificationBell raceId={raceId} raceName={race?.title || race?.race_name || ''} onSubscribe={setBellSubscribed} />
             <span style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: -2, whiteSpace: 'nowrap', display: 'block' }}>
               Alerts
             </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div style={{ padding: '16px' }}>

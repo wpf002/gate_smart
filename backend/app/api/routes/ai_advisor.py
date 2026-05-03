@@ -714,54 +714,72 @@ async def secretariat_accuracy_audit() -> JSONResponse:
                     "rederived": derived[key],
                 })
 
-    # Cross-check N most-recent rows against the live racing API.
-    # If our stored actual_first matches what the API says now, our
-    # data fetch and persistence are correct.
+    # Cross-check N most-recent rows against the live racing API using the
+    # SAME fetch path nightly_accuracy.py uses (get_na_results_full +
+    # _finisher) so we're comparing apples to apples. If a row's stored
+    # actuals match what get_na_results_full says today, we know the
+    # settle-time fetch persisted correctly.
     SAMPLE_SIZE = 10
     live_check = []
+
+    # Group rows by race_date so we make one get_na_results_full call per date
+    from collections import defaultdict
+    rows_by_date = defaultdict(list)
     for r in rows[:SAMPLE_SIZE]:
+        if r.race_date:
+            rows_by_date[r.race_date].append(r)
+
+    def _finisher(runners, pos):
+        for rr in runners:
+            p = rr.get("position") or rr.get("finish_position") or rr.get("place")
+            try:
+                if int(str(p).strip()) == pos:
+                    return rr.get("horse") or rr.get("horse_name", "")
+            except (ValueError, TypeError):
+                pass
+        return None
+
+    from app.services.racing_api import get_na_results_full
+
+    for race_date, date_rows in rows_by_date.items():
         try:
-            if "-" in r.race_id:
-                meet_id, race_number = r.race_id.rsplit("-", 1)
-                from app.services import racing_api
-                meet_results = await racing_api.get_na_meet_results(meet_id)
-                api_actual_first = api_actual_second = api_actual_third = None
-                for race in meet_results.get("races", []):
-                    rk = race.get("race_key") or {}
-                    rnum = str(rk.get("race_number", "")) if isinstance(rk, dict) else ""
-                    if rnum == str(race_number):
-                        for runner in race.get("runners", []):
-                            pos = (
-                                runner.get("official_finish_position")
-                                or runner.get("finish_position")
-                                or runner.get("position")
-                            )
-                            try: pos = int(str(pos).strip())
-                            except (ValueError, TypeError): continue
-                            name = runner.get("horse") or runner.get("horse_name") or ""
-                            if pos == 1: api_actual_first = name
-                            elif pos == 2: api_actual_second = name
-                            elif pos == 3: api_actual_third = name
-                        break
+            api_data = await get_na_results_full(race_date.isoformat())
+            results_by_id = {x.get("race_id"): x for x in api_data.get("results", []) if x.get("race_id")}
+        except Exception as e:
+            for r in date_rows:
+                live_check.append({"race_id": r.race_id, "error": f"results fetch: {e}"})
+            continue
+
+        for r in date_rows:
+            api_race = results_by_id.get(r.race_id)
+            if not api_race:
                 live_check.append({
                     "race_id": r.race_id,
-                    "race_date": str(r.race_date) if r.race_date else None,
-                    "stored": {
-                        "actual_first": r.actual_first,
-                        "actual_second": r.actual_second,
-                        "actual_third": r.actual_third,
-                    },
-                    "live_api": {
-                        "actual_first": api_actual_first,
-                        "actual_second": api_actual_second,
-                        "actual_third": api_actual_third,
-                    },
-                    "match_first":  _norm(r.actual_first)  == _norm(api_actual_first),
-                    "match_second": _norm(r.actual_second) == _norm(api_actual_second),
-                    "match_third":  _norm(r.actual_third)  == _norm(api_actual_third),
+                    "race_date": str(r.race_date),
+                    "error": "no api result for this race_id",
                 })
-        except Exception as e:
-            live_check.append({"race_id": r.race_id, "error": str(e)})
+                continue
+            runners = api_race.get("runners", [])
+            api_first = _finisher(runners, 1)
+            api_second = _finisher(runners, 2)
+            api_third = _finisher(runners, 3)
+            live_check.append({
+                "race_id": r.race_id,
+                "race_date": str(r.race_date),
+                "stored": {
+                    "actual_first": r.actual_first,
+                    "actual_second": r.actual_second,
+                    "actual_third": r.actual_third,
+                },
+                "live_api": {
+                    "actual_first": api_first,
+                    "actual_second": api_second,
+                    "actual_third": api_third,
+                },
+                "match_first":  _norm(r.actual_first)  == _norm(api_first),
+                "match_second": _norm(r.actual_second) == _norm(api_second),
+                "match_third":  _norm(r.actual_third)  == _norm(api_third),
+            })
 
     return JSONResponse({
         "total_rows": len(rows),
