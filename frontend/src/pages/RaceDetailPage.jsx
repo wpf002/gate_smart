@@ -912,18 +912,18 @@ export default function RaceDetailPage() {
           );
         })()}
 
-        {/* ── Morning Line + Secretariat's track record — side by side ── */}
+        {/* ── Secretariat's track record + Morning Line — side by side ── */}
         {race && !raceFinished && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
-            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
-              <MorningLineBadge raceId={raceId} />
-            </div>
             <div style={{ flex: '1 1 280px', minWidth: 0 }}>
               <AccuracyBadge
                 trackCode={race.track_code || race.course_id || race.course}
                 trackName={race.course || race.track}
                 compact={false}
               />
+            </div>
+            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+              <MorningLineBadge raceId={raceId} />
             </div>
           </div>
         )}
