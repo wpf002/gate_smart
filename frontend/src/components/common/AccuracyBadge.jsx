@@ -113,7 +113,7 @@ export function MorningLineBadge({ raceId }) {
   );
 }
 
-// ── Global accuracy badge (no trackCode — used on ProfilePage) ────────────────
+// ── Global accuracy strip — 4 stats horizontally (Win / Place / Show / ITM) ──
 function GlobalAccuracyBadge() {
   const { data } = useQuery({
     queryKey: ['secretariat-accuracy'],
@@ -126,56 +126,52 @@ function GlobalAccuracyBadge() {
     return null;
   }
 
-  const { win_rate_percent, place_rate_percent, show_rate_percent } = data;
-
-  const trend =
-    win_rate_percent >= 35
-      ? { icon: '↑', color: 'var(--accent-green-bright)' }
-      : win_rate_percent >= 25
-      ? { icon: '→', color: 'var(--accent-gold-bright)' }
-      : { icon: '↓', color: 'var(--accent-red-bright)' };
-
-  const Stat = ({ label, value }) => (
-    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3 }}>
-      <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>{label}</span>
-      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{value}%</span>
-    </span>
-  );
+  const stats = [
+    { label: 'Win Rate',   value: data.win_rate_percent },
+    { label: 'Place Pick', value: data.place_rate_percent },
+    { label: 'Show Pick',  value: data.show_rate_percent },
+    { label: 'Win Pick ITM', value: data.itm_rate_percent },
+  ];
 
   return (
     <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      padding: '6px 10px',
+      padding: '14px 18px 16px',
       background: 'var(--bg-card)',
       border: '1px solid var(--border-gold)',
       borderRadius: 'var(--radius-md)',
+      marginTop: 12,
+      marginBottom: 12,
     }}>
       <div style={{
-        width: 24, height: 24, borderRadius: '50%',
-        background: 'var(--accent-gold)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'var(--font-display)', fontSize: 14, color: '#000', flexShrink: 0,
+        fontFamily: 'var(--font-display)', fontSize: 10,
+        color: 'var(--accent-gold)', letterSpacing: '0.08em',
+        marginBottom: 10,
       }}>
-        S
+        SECRETARIAT · LAST {data.total_predictions} RACES
       </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{
-          fontFamily: 'var(--font-display)', fontSize: 9,
-          color: 'var(--accent-gold)', letterSpacing: '0.06em',
-          display: 'block', lineHeight: 1.2,
-        }}>
-          SECRETARIAT · LAST 100
-        </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.3, display: 'flex', gap: 10 }}>
-          <Stat label="W" value={win_rate_percent} />
-          <Stat label="P" value={place_rate_percent ?? '—'} />
-          <Stat label="S" value={show_rate_percent ?? '—'} />
-        </div>
-      </div>
-      <div style={{ fontSize: 16, color: trend.color, fontWeight: 700, lineHeight: 1, flexShrink: 0 }}>
-        {trend.icon}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+        {stats.map(({ label, value }) => (
+          <div key={label} style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+            <div style={{
+              fontFamily: 'var(--font-display, serif)',
+              fontSize: 28,
+              fontWeight: 700,
+              color: 'var(--accent-gold-bright)',
+              lineHeight: 1.1,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {value == null ? '—' : `${value}%`}
+            </div>
+            <div style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              marginTop: 4,
+              letterSpacing: '0.02em',
+            }}>
+              {label}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

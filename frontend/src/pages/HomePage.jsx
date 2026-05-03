@@ -178,8 +178,11 @@ export default function HomePage() {
       <PageHeader
         title="GATESMART"
         subtitle="AI-POWERED RACING INTELLIGENCE"
-        right={<AccuracyBadge />}
       />
+
+      <div style={{ padding: '0 16px' }}>
+        <AccuracyBadge />
+      </div>
 
       <SecretariatReportCard />
 

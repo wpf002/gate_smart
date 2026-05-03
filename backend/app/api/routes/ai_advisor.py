@@ -569,16 +569,17 @@ async def clear_race_analysis(race_id: str) -> JSONResponse:
 
 @router.get("/accuracy")
 async def secretariat_accuracy() -> JSONResponse:
-    """Top-pick win/place/show rates over the last 100 settled races.
+    """Secretariat performance over the last 100 settled races.
 
-    Win  = top pick finished 1st (top_pick_correct flag).
-    Show = top pick finished top 3 (in_the_money flag).
-    Place = top pick finished top 2 — not stored as a flag, so we
-    compute it on the fly by comparing predicted_first to actual_first
-    and actual_second using the same normalization the settler uses.
+    Returns the same four metrics the daily brief shows:
+      win_rate_percent   — top pick finished 1st         (top_pick_correct)
+      place_rate_percent — predicted_second finished top 2 (place_pick_correct)
+      show_rate_percent  — predicted_third finished top 3  (show_pick_correct)
+      itm_rate_percent   — top pick finished top 3        (in_the_money)
 
-    Rolling window — older races age out as new ones settle. Cached 1h;
-    underlying data refreshes once a day via nightly_accuracy.py.
+    Rolling 100-race window — older races age out as new ones settle.
+    Cached 1h; underlying data refreshes once a day via
+    nightly_accuracy.py.
     """
     cache_key = "accuracy:rolling100"
     cached = await cache_get(cache_key)
@@ -589,17 +590,13 @@ async def secretariat_accuracy() -> JSONResponse:
     from app.models.accuracy import RacePrediction
     from sqlalchemy import select
 
-    def _norm(name: str | None) -> str:
-        return (name or "").lower().strip().replace("'", "").replace("-", " ")
-
     async with _db._AsyncSessionLocal() as db:
         result = await db.execute(
             select(
                 RacePrediction.top_pick_correct,
+                RacePrediction.place_pick_correct,
+                RacePrediction.show_pick_correct,
                 RacePrediction.in_the_money,
-                RacePrediction.predicted_first,
-                RacePrediction.actual_first,
-                RacePrediction.actual_second,
             )
             .where(
                 RacePrediction.result_fetched.is_(True),
@@ -613,13 +610,12 @@ async def secretariat_accuracy() -> JSONResponse:
         rows = result.all()
 
     total = len(rows)
+    # Treat NULL as false — older rows pre-date the place/show columns; counting
+    # them as not-correct slightly underestimates but is honest about the data.
     wins = sum(1 for r in rows if r.top_pick_correct)
-    shows = sum(1 for r in rows if r.in_the_money)
-    places = 0
-    for r in rows:
-        pred = _norm(r.predicted_first)
-        if pred and pred in {_norm(r.actual_first), _norm(r.actual_second)}:
-            places += 1
+    places = sum(1 for r in rows if r.place_pick_correct)
+    shows = sum(1 for r in rows if r.show_pick_correct)
+    itm = sum(1 for r in rows if r.in_the_money)
 
     if total == 0:
         payload = {
@@ -628,6 +624,7 @@ async def secretariat_accuracy() -> JSONResponse:
             "win_rate_percent": None,
             "place_rate_percent": None,
             "show_rate_percent": None,
+            "itm_rate_percent": None,
             "sample_size_note": "No settled races yet",
             "last_updated": None,
         }
@@ -638,6 +635,7 @@ async def secretariat_accuracy() -> JSONResponse:
             "win_rate_percent": round((wins / total) * 100, 1),
             "place_rate_percent": round((places / total) * 100, 1),
             "show_rate_percent": round((shows / total) * 100, 1),
+            "itm_rate_percent": round((itm / total) * 100, 1),
             "sample_size_note": f"Last {total} settled races",
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }

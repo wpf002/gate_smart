@@ -91,7 +91,11 @@ function SideNav() {
 
   return (
     <nav className="side-nav">
-      <div className="side-nav-logo" onClick={goToRacesFresh} style={{ cursor: 'pointer' }}>
+      <div
+        className="side-nav-logo"
+        onClick={goToRacesFresh}
+        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+      >
         <GateSmartMark size={56} />
       </div>
       {NAV_ITEMS.map(({ path, label }, idx) => {
