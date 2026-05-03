@@ -651,6 +651,140 @@ async def secretariat_accuracy() -> JSONResponse:
     return JSONResponse(payload)
 
 
+@router.get("/accuracy/independence")
+async def secretariat_independence_check() -> JSONResponse:
+    """One-shot empirical check — does Secretariat actually pick
+    independently from the morning line, or is it just chalk-following?
+
+    For each of the last 100 settled races: fetch the racecard, find the
+    morning-line favorite (lowest odds), compare to Secretariat's
+    predicted_first, and report the agreement rate.
+
+    Interpretation:
+      >=95%  — chalk-tracking; prompt isn't working
+      50-70% — independent handicapper that often agrees on favorites
+      <40%   — strongly independent (probably overweighting longshots)
+    """
+    from app.core import database as _db
+    from app.models.accuracy import RacePrediction
+    from app.services.racing_api import get_na_racecards_full
+    from sqlalchemy import select
+    from collections import defaultdict
+
+    def _norm(name):
+        return (name or "").lower().strip().replace("'", "").replace("-", " ")
+
+    def _parse_odds(s):
+        if s is None: return float('inf')
+        s = str(s).upper().strip()
+        if not s or s in ('SCR', 'SCRATCHED', 'NR', '-'): return float('inf')
+        if s in ('EVEN', 'EVENS', 'EV'): return 1.0
+        try:
+            if '/' in s:
+                n, d = s.split('/')
+                return float(n) / float(d)
+            if '-' in s and not s.startswith('-'):
+                n, d = s.split('-')
+                return float(n) / float(d)
+            return float(s)
+        except Exception:
+            return float('inf')
+
+    async with _db._AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(RacePrediction)
+            .where(
+                RacePrediction.result_fetched.is_(True),
+                RacePrediction.user_id.is_(None),
+                RacePrediction.analysis_mode == "auto_daily",
+                RacePrediction.top_pick_correct.is_not(None),
+            )
+            .order_by(RacePrediction.settled_at.desc().nulls_last())
+            .limit(100)
+        )
+        rows = list(result.scalars().all())
+
+    rows_by_date = defaultdict(list)
+    for r in rows:
+        if r.race_date:
+            rows_by_date[r.race_date].append(r)
+
+    matched = 0
+    checked = 0
+    fav_won = 0
+    secretariat_won = 0
+    samples = []
+    errors = 0
+
+    for race_date, date_rows in rows_by_date.items():
+        try:
+            data = await get_na_racecards_full(race_date.isoformat())
+        except Exception:
+            errors += len(date_rows)
+            continue
+        racecards_by_id = {rc.get("race_id"): rc for rc in (data.get("racecards") or [])}
+
+        for r in date_rows:
+            rc = racecards_by_id.get(r.race_id)
+            if not rc:
+                errors += 1
+                continue
+            runners = rc.get("runners") or []
+            if not runners:
+                errors += 1
+                continue
+
+            # Find morning-line favorite — lowest parsed odds
+            best_odds = float('inf')
+            ml_fav_name = None
+            for run in runners:
+                odds = _parse_odds(run.get("odds") or run.get("ml") or run.get("morning_line"))
+                if odds < best_odds:
+                    best_odds = odds
+                    ml_fav_name = run.get("horse") or run.get("horse_name")
+            if not ml_fav_name:
+                errors += 1
+                continue
+
+            checked += 1
+            is_match = _norm(ml_fav_name) == _norm(r.predicted_first)
+            if is_match:
+                matched += 1
+            if r.top_pick_correct:
+                secretariat_won += 1
+            # Did the ML favorite win?
+            if _norm(ml_fav_name) == _norm(r.actual_first):
+                fav_won += 1
+
+            if len(samples) < 15:
+                samples.append({
+                    "race_id": r.race_id,
+                    "race_date": str(r.race_date),
+                    "secretariat_pick": r.predicted_first,
+                    "ml_favorite": ml_fav_name,
+                    "match": is_match,
+                    "actual_winner": r.actual_first,
+                    "secretariat_won": bool(r.top_pick_correct),
+                    "favorite_won": _norm(ml_fav_name) == _norm(r.actual_first),
+                })
+
+    return JSONResponse({
+        "rows_in_sample": len(rows),
+        "checked": checked,
+        "errors_no_racecard_or_odds": errors,
+        "secretariat_picked_ml_favorite": matched,
+        "agreement_rate_percent": round((matched / checked) * 100, 1) if checked else None,
+        "secretariat_win_rate_percent": round((secretariat_won / checked) * 100, 1) if checked else None,
+        "ml_favorite_win_rate_percent": round((fav_won / checked) * 100, 1) if checked else None,
+        "interpretation_guide": {
+            ">=95%": "chalk-tracking, prompt not enforcing independence",
+            "50-70%": "independent handicapper, often agrees on favorites",
+            "<40%": "strongly independent, possibly overweighting longshots",
+        },
+        "sample_rows": samples,
+    })
+
+
 async def _store_prediction(race_data: dict, analysis: dict) -> None:
     """Store the top pick from an analysis for later accuracy tracking."""
     try:
