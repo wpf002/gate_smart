@@ -126,7 +126,7 @@ function GlobalAccuracyBadge() {
     return null;
   }
 
-  const { win_rate_percent } = data;
+  const { win_rate_percent, place_rate_percent, show_rate_percent } = data;
 
   const trend =
     win_rate_percent >= 35
@@ -134,6 +134,13 @@ function GlobalAccuracyBadge() {
       : win_rate_percent >= 25
       ? { icon: '→', color: 'var(--accent-gold-bright)' }
       : { icon: '↓', color: 'var(--accent-red-bright)' };
+
+  const Stat = ({ label, value }) => (
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3 }}>
+      <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>{label}</span>
+      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{value}%</span>
+    </span>
+  );
 
   return (
     <div style={{
@@ -161,8 +168,10 @@ function GlobalAccuracyBadge() {
         }}>
           SECRETARIAT · LAST 100
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.3 }}>
-          {win_rate_percent}% Top Pick Win Rate
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.3, display: 'flex', gap: 10 }}>
+          <Stat label="W" value={win_rate_percent} />
+          <Stat label="P" value={place_rate_percent ?? '—'} />
+          <Stat label="S" value={show_rate_percent ?? '—'} />
         </div>
       </div>
       <div style={{ fontSize: 16, color: trend.color, fontWeight: 700, lineHeight: 1, flexShrink: 0 }}>

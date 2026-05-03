@@ -569,12 +569,16 @@ async def clear_race_analysis(race_id: str) -> JSONResponse:
 
 @router.get("/accuracy")
 async def secretariat_accuracy() -> JSONResponse:
-    """Top-pick win rate over the last 100 settled races.
+    """Top-pick win/place/show rates over the last 100 settled races.
 
-    Uses a rolling window — older races age out as new ones settle, so the
-    badge tracks recent performance instead of all-time history. Cached
-    for 1 hour since the underlying data only refreshes once a day from
-    nightly_accuracy.py.
+    Win  = top pick finished 1st (top_pick_correct flag).
+    Show = top pick finished top 3 (in_the_money flag).
+    Place = top pick finished top 2 — not stored as a flag, so we
+    compute it on the fly by comparing predicted_first to actual_first
+    and actual_second using the same normalization the settler uses.
+
+    Rolling window — older races age out as new ones settle. Cached 1h;
+    underlying data refreshes once a day via nightly_accuracy.py.
     """
     cache_key = "accuracy:rolling100"
     cached = await cache_get(cache_key)
@@ -585,9 +589,18 @@ async def secretariat_accuracy() -> JSONResponse:
     from app.models.accuracy import RacePrediction
     from sqlalchemy import select
 
+    def _norm(name: str | None) -> str:
+        return (name or "").lower().strip().replace("'", "").replace("-", " ")
+
     async with _db._AsyncSessionLocal() as db:
         result = await db.execute(
-            select(RacePrediction.top_pick_correct)
+            select(
+                RacePrediction.top_pick_correct,
+                RacePrediction.in_the_money,
+                RacePrediction.predicted_first,
+                RacePrediction.actual_first,
+                RacePrediction.actual_second,
+            )
             .where(
                 RacePrediction.result_fetched.is_(True),
                 RacePrediction.user_id.is_(None),
@@ -597,24 +610,34 @@ async def secretariat_accuracy() -> JSONResponse:
             .order_by(RacePrediction.settled_at.desc().nulls_last())
             .limit(100)
         )
-        outcomes = [row[0] for row in result.all()]
+        rows = result.all()
 
-    total = len(outcomes)
-    correct = sum(1 for o in outcomes if o)
+    total = len(rows)
+    wins = sum(1 for r in rows if r.top_pick_correct)
+    shows = sum(1 for r in rows if r.in_the_money)
+    places = 0
+    for r in rows:
+        pred = _norm(r.predicted_first)
+        if pred and pred in {_norm(r.actual_first), _norm(r.actual_second)}:
+            places += 1
 
     if total == 0:
         payload = {
             "total_predictions": 0,
             "correct_predictions": 0,
             "win_rate_percent": None,
+            "place_rate_percent": None,
+            "show_rate_percent": None,
             "sample_size_note": "No settled races yet",
             "last_updated": None,
         }
     else:
         payload = {
             "total_predictions": total,
-            "correct_predictions": correct,
-            "win_rate_percent": round((correct / total) * 100, 1),
+            "correct_predictions": wins,
+            "win_rate_percent": round((wins / total) * 100, 1),
+            "place_rate_percent": round((places / total) * 100, 1),
+            "show_rate_percent": round((shows / total) * 100, 1),
             "sample_size_note": f"Last {total} settled races",
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
