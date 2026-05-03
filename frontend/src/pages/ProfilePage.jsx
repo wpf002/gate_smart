@@ -7,7 +7,6 @@ import Icon from '../components/common/Icon';
 import { authUpdateProfile, authLogout } from '../utils/api';
 import { TIMEZONE_OPTIONS } from '../utils/timezone';
 
-const RISK_OPTIONS = ['low', 'medium', 'high'];
 const EXPERIENCE_OPTIONS = ['beginner', 'advanced'];
 
 function SegmentControl({ options, value, onChange }) {
@@ -83,7 +82,6 @@ export default function ProfilePage() {
     if (isLoggedIn) {
       // Map local keys to server keys
       const serverUpdates = {};
-      if (updates.riskTolerance !== undefined) serverUpdates.risk_tolerance = updates.riskTolerance;
       if (updates.experienceLevel !== undefined) serverUpdates.experience_level = updates.experienceLevel;
       if (updates.bankroll !== undefined) serverUpdates.bankroll = updates.bankroll;
       if (updates.region !== undefined) serverUpdates.region = updates.region;
@@ -165,21 +163,6 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Risk tolerance */}
-        <SectionLabel>Risk Tolerance</SectionLabel>
-        <SegmentControl
-          options={RISK_OPTIONS}
-          value={userProfile.riskTolerance}
-          onChange={(v) => handleProfileChange({ riskTolerance: v })}
-        />
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
-          {{
-            low:    'Secretariat will favour short-priced favourites and each-way bets. Stake sizes will be conservative (1–2% of bankroll).',
-            medium: 'Secretariat will balance value and safety. Stakes will be moderate (2–4% of bankroll).',
-            high:   'Secretariat will target overlays and longer shots. Stakes can be aggressive (3–6% of bankroll).',
-          }[userProfile.riskTolerance]}
-        </div>
-
         {/* Timezone */}
         <SectionLabel>Race Time Display</SectionLabel>
         <select
@@ -250,10 +233,6 @@ export default function ProfilePage() {
             YOUR BETTING PROFILE
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Icon name="lightning" size={14} color="var(--accent-gold)" />
-              Risk: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.riskTolerance}</strong>
-            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Icon name="learn" size={14} color="var(--accent-gold)" />
               Level: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{userProfile.experienceLevel}</strong>

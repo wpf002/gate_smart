@@ -11,14 +11,8 @@ import { useAppStore } from '../store';
 import AffiliateDrawer from '../components/common/AffiliateDrawer';
 import { PARTNERS } from '../utils/affiliates';
 import Icon from '../components/common/Icon';
-import AccuracyBadge from '../components/common/AccuracyBadge';
+import AccuracyBadge, { MorningLineBadge } from '../components/common/AccuracyBadge';
 import NotificationBell from '../components/common/NotificationBell';
-
-const MODES = [
-  { id: 'low',    label: 'Low',    desc: 'Favorites and safe bets'    },
-  { id: 'medium', label: 'Medium', desc: 'Balanced value and safety'  },
-  { id: 'high',   label: 'High',   desc: 'Overlays and longshots'     },
-];
 
 const FINISH_POSITION = {
   first:  { label: '1', color: 'var(--accent-gold-bright)',   bg: 'rgba(201,162,39,0.2)',  border: 'rgba(201,162,39,0.5)'  },
@@ -625,7 +619,7 @@ function TabBar({ tabs, active, onChange }) {
 export default function RaceDetailPage() {
   const { raceId } = useParams();
   const navigate = useNavigate();
-  const { userProfile, setUserProfile, raceAnalysisCache, setRaceAnalysisCache, clearRaceAnalysisCache, setLastRaceId } = useAppStore();
+  const { userProfile, raceAnalysisCache, setRaceAnalysisCache, clearRaceAnalysisCache, setLastRaceId } = useAppStore();
 
   useEffect(() => {
     if (raceId) setLastRaceId(raceId);
@@ -635,17 +629,7 @@ export default function RaceDetailPage() {
   const CACHE_TTL = 5 * 60 * 1000;
   const validCache = cached && (Date.now() - cached.cachedAt) < CACHE_TTL ? cached : null;
 
-  const [analysisMode, setAnalysisMode] = useState(validCache?.mode || userProfile.riskTolerance || 'medium');
-
-  // Reactive sync: if the user changes Risk Tolerance elsewhere (Profile page,
-  // another tab, deep link), reflect it on this page. Cached analysis is kept
-  // — the user can re-run when they want analysis at the new mode.
-  useEffect(() => {
-    if (userProfile.riskTolerance && userProfile.riskTolerance !== analysisMode) {
-      setAnalysisMode(userProfile.riskTolerance);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile.riskTolerance]);
+  const analysisMode = 'medium';
   const [analysis, setAnalysis] = useState(validCache?.analysis || null);
   const [analysisStreaming, setAnalysisStreaming] = useState(false);
   const [scorecardData, setScorecardData] = useState(validCache?.scorecardData || null);
@@ -656,7 +640,6 @@ export default function RaceDetailPage() {
   const [debriefError, setDebriefError] = useState(null);
   const [debriefPending, setDebriefPending] = useState(false);
   const [raceResults, setRaceResults] = useState(null);
-  const [pendingMode, setPendingMode] = useState(null);
   const [bellSubscribed, setBellSubscribed] = useState(() => typeof localStorage !== 'undefined' && localStorage.getItem(`sub:${raceId}`) === 'true');
   const [scorecardOpen, setScorecardOpen] = useState(false);
   const abortRef = useRef(null);
@@ -796,30 +779,11 @@ export default function RaceDetailPage() {
           ? 'Secretariat needs Anthropic API credits. Add credits at console.anthropic.com.'
           : status === 503 || status === 502
           ? 'Secretariat is temporarily unavailable — try again in a moment.'
-          : 'Analysis failed — tap Reset and try again.'
+          : 'Analysis failed — Try Again.'
       );
     }).finally(() => {
       setAnalysisStreaming(false);
     });
-  };
-
-  const handleModeChange = (newMode) => {
-    if (analysis && newMode !== analysisMode) {
-      setPendingMode(newMode);
-    } else {
-      setAnalysisMode(newMode);
-      setUserProfile({ riskTolerance: newMode });
-    }
-  };
-
-  const confirmModeSwitch = () => {
-    const mode = pendingMode;
-    setPendingMode(null);
-    setAnalysisMode(mode);
-    setUserProfile({ riskTolerance: mode });
-    setAnalysis(null);
-    setScorecardData(null);
-    runAnalysisAndScore(mode);
   };
 
   const handleResetAnalysis = async () => {
@@ -841,13 +805,15 @@ export default function RaceDetailPage() {
   const hasAnalysisTab = !!(analysis || analysisStreaming);
   const hasDebriefTab = !!(debrief || debriefLoading);
   const showTabs = hasAnalysisTab || hasDebriefTab;
-  const showAnalyseBtn = !analysis && !analysisStreaming;
   // Only surface the debrief button once the upstream results feed has actually
   // published finish positions. Until then, the chart endpoint would return a
   // "pending" state and burn the user's tap; better to wait until we know we
   // have data to show.
   const showDebriefBtn = !debrief && !debriefLoading && !!race && isRaceDefinitelyFinished(race) && !!raceResults;
   const raceFinished = !!race && isRaceDefinitelyFinished(race);
+  // Lock analysis at post time — Secretariat's pick is most accurate at the
+  // morning line and degrades as the race goes on.
+  const isPastPostTime = !!race?.off_dt && Date.now() >= new Date(race.off_dt).getTime();
 
   const tabs = [
     ...(hasAnalysisTab ? [{ id: 'analysis', label: 'ANALYSIS' }] : []),
@@ -857,24 +823,6 @@ export default function RaceDetailPage() {
 
   return (
     <div>
-      {/* ── Mode-switch confirm modal ─────────────────────────────── */}
-      {pendingMode && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: 24, maxWidth: 340, width: '100%', border: '1px solid var(--border-gold)' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)', marginBottom: 12 }}>
-              Re-run analysis in {MODES.find(m => m.id === pendingMode)?.label} mode?
-            </div>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
-              This will clear the current analysis and scorecard.
-            </p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setPendingMode(null)}>Cancel</button>
-              <button className="btn btn-primary" style={{ flex: 1 }} onClick={confirmModeSwitch}>Re-run</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Sticky header ─────────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px',
@@ -965,13 +913,20 @@ export default function RaceDetailPage() {
           );
         })()}
 
-        {/* ── AccuracyBadge — Secretariat's track record (PART 1C) ── */}
+        {/* ── Morning Line + Secretariat's track record — side by side ── */}
         {race && !raceFinished && (
-          <AccuracyBadge
-            trackCode={race.track_code || race.course_id || race.course}
-            trackName={race.course || race.track}
-            compact={false}
-          />
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
+            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+              <MorningLineBadge raceId={raceId} />
+            </div>
+            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+              <AccuracyBadge
+                trackCode={race.track_code || race.course_id || race.course}
+                trackName={race.course || race.track}
+                compact={false}
+              />
+            </div>
+          </div>
         )}
 
         {/* ── Notification subscription note ────────────────────────── */}
@@ -985,43 +940,19 @@ export default function RaceDetailPage() {
         {/* Hidden once debrief is loaded — the debrief card supersedes it. */}
         {raceFinished && raceResults && !debrief && <ResultsPanel results={raceResults} />}
 
-        {/* ── Mode selector ──────────────────────────────────────────── */}
-        {!raceFinished && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
-              Risk Tolerance
-            </span>
-            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', alignItems: 'center' }}>
-              {MODES.map(m => (
-                <button key={m.id} onClick={() => handleModeChange(m.id)} style={{
-                  flexShrink: 0, padding: '6px 12px', borderRadius: 20, border: '1px solid',
-                  borderColor: analysisMode === m.id ? 'var(--accent-gold)' : 'var(--border-subtle)',
-                  background: analysisMode === m.id ? 'rgba(201,162,39,0.12)' : 'transparent',
-                  color: analysisMode === m.id ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
-                  fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                }}>
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            {analysis && !analysisStreaming && !raceFinished && (
-              <button
-                className="btn btn-primary"
-                onClick={handleResetAnalysis}
-                disabled={isLoading}
-                style={{ flexShrink: 0, fontSize: 12, padding: '6px 12px', marginLeft: 'auto' }}
-              >
-                Reset
-              </button>
-            )}
-          </div>
-        )}
-
         {/* ── Action buttons ─────────────────────────────────────────── */}
         <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {showAnalyseBtn && !raceFinished && (
-            <button className="btn btn-primary btn-full" onClick={() => analyzeMutation.mutate()} disabled={isLoading}>
-              Analyze with Secretariat
+          {!raceFinished && !isPastPostTime && (
+            <button
+              className="btn btn-primary btn-full"
+              onClick={() => (analysis ? handleResetAnalysis() : analyzeMutation.mutate())}
+              disabled={isLoading || analysisStreaming}
+            >
+              {analysisStreaming
+                ? 'Analyzing…'
+                : analysis
+                ? 'Re-run Secretariat Analysis'
+                : 'Analyze with Secretariat'}
             </button>
           )}
           {showDebriefBtn && (
@@ -1053,11 +984,10 @@ export default function RaceDetailPage() {
           const minsToPost = postMs ? Math.floor((postMs - Date.now()) / 60000) : null;
           if (minsToPost !== null && (minsToPost > 90 || minsToPost < 0)) return null;
           return (
-            <div style={{ padding: '10px 14px', marginBottom: 12, background: 'rgba(201,162,39,0.08)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ padding: '10px 14px', marginBottom: 12, background: 'rgba(201,162,39,0.08)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)' }}>
               <span style={{ fontSize: 12, color: 'var(--accent-gold-bright)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="warning" size={14} /> Analysis is {ageMin} min old — odds may have shifted. Re-run for fresh picks.
+                <Icon name="warning" size={14} /> Analysis is {ageMin} min old — odds may have shifted. Tap "Re-run Secretariat Analysis" above for fresh picks.
               </span>
-              <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px', flexShrink: 0 }} onClick={handleResetAnalysis}>Re-run</button>
             </div>
           );
         })()}

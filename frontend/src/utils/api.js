@@ -73,6 +73,9 @@ export const askAdvisor = (question, context = null, history = null) =>
 export const getScoreCard = (raceId) =>
   api.post('/advisor/scorecard', { race_id: raceId }).then((r) => r.data);
 
+export const getMorningLine = (raceId) =>
+  api.get(`/advisor/morning-line/${raceId}`).then((r) => r.data);
+
 // ── Education ────────────────────────────────────────────────────────────────
 export const getGlossary = () =>
   api.get('/education/glossary').then((r) => r.data);

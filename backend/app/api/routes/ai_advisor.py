@@ -311,6 +311,70 @@ async def explain_form(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+@router.get("/morning-line/{race_id}")
+async def morning_line(race_id: str) -> JSONResponse:
+    """Returns Secretariat's pre-race top-4 picks (predicted finish order) for
+    the given race as program numbers — populated nightly by
+    nightly_predict_all.py. The on-card "SECRETARIAT'S MORNING LINE" panel
+    reads this; no LLM call (data is already in the DB)."""
+    _validate_race_id(race_id)
+
+    from app.core import database as _db
+    from app.models.accuracy import RacePrediction
+    from sqlalchemy import select
+
+    async with _db._AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(RacePrediction).where(
+                RacePrediction.race_id == race_id,
+                RacePrediction.user_id == None,  # noqa: E711  global auto-prediction row
+                RacePrediction.analysis_mode == "auto_daily",
+            ).limit(1)
+        )
+        prediction = result.scalar_one_or_none()
+
+    if prediction is None:
+        return JSONResponse({"picks": None, "available": False})
+
+    # Only `predicted_first_num` is stored as a program number; the others
+    # are stored as horse names. Cross-reference with the racecard to map
+    # names → program numbers for the N-N-N-N display.
+    try:
+        race_data = await racing_api.get_race(race_id)
+    except Exception:
+        race_data = {"runners": []}
+
+    def _norm(name: str) -> str:
+        return (name or "").lower().strip().replace("'", "").replace("-", " ")
+
+    runner_lookup: dict[str, str] = {}
+    for r in race_data.get("runners") or []:
+        name = r.get("horse") or r.get("horse_name") or ""
+        num = r.get("number") or r.get("program_number") or r.get("cloth_number") or ""
+        if name and num:
+            runner_lookup[_norm(name)] = str(num).lstrip("#").strip()
+
+    def _num_for(name: str | None, fallback: str | None = None) -> str | None:
+        if not name:
+            return fallback.lstrip("#").strip() if fallback else None
+        return runner_lookup.get(_norm(name)) or (
+            fallback.lstrip("#").strip() if fallback else None
+        )
+
+    picks = [
+        _num_for(prediction.predicted_first, prediction.predicted_first_num),
+        _num_for(prediction.predicted_second),
+        _num_for(prediction.predicted_third),
+        _num_for(prediction.predicted_fourth),
+    ]
+
+    return JSONResponse({
+        "picks": picks,
+        "available": any(p is not None for p in picks),
+        "post_time_et": prediction.post_time_et,
+    })
+
+
 async def _find_race_result(race_id: str) -> dict | None:
     """
     Find results for a race by ID, handling both UK/IRE and NA races.

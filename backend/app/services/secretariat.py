@@ -586,6 +586,50 @@ def _experience_level_block(experience_level: str | None) -> str:
     return ""
 
 
+def _stake_sizing_block(bankroll: float | None) -> str:
+    """Conservative stake-sizing rules for the analyze_race prompt.
+
+    Top-pick win rate runs ~30%, so 5-race losing streaks are statistically
+    normal. Without explicit caps, the model invents $20–$40 stakes that
+    wipe a small bankroll in a single afternoon. These rules keep total
+    single-race exposure at 5% of bankroll and respect track minimums.
+    """
+    bk = bankroll if bankroll and bankroll > 0 else 100.0
+
+    def _fmt(amount: float, floor: float, step: float = 1.0) -> str:
+        rounded = round(amount / step) * step
+        final = max(rounded, floor)
+        return f"${final:.2f}" if step < 1 else f"${int(final)}"
+
+    win = _fmt(bk * 0.015, 2.0)
+    place = _fmt(bk * 0.010, 2.0)
+    show = _fmt(bk * 0.005, 2.0)
+    exa = _fmt(bk * 0.010, 1.0)
+    tri = _fmt(bk * 0.005, 0.50, step=0.50)
+    sup = _fmt(bk * 0.001, 0.10, step=0.10)
+    cap = bk * 0.05
+
+    return (
+        "STAKE SIZING RULES — NON-NEGOTIABLE:\n"
+        f"User's bankroll is ${bk:.2f}. Top-pick win rate is ~30%, so "
+        "conservative sizing is required to survive normal losing streaks.\n"
+        "Use these stake_suggestion values as baseline targets:\n"
+        f"  - Win:        {win}   (1.5% of bankroll, $2 minimum)\n"
+        f"  - Place:      {place}   (1.0% of bankroll, $2 minimum)\n"
+        f"  - Show:       {show}   (0.5% of bankroll, $2 minimum)\n"
+        f"  - Exacta:     {exa}   (1.0% of bankroll, $1 minimum)\n"
+        f"  - Trifecta:   {tri} (0.5% of bankroll, $0.50 minimum)\n"
+        f"  - Superfecta: {sup} (0.1% of bankroll, $0.10 minimum)\n"
+        f"TOTAL exposure across all bet_recommendations for this race "
+        f"MUST NOT EXCEED ${cap:.2f} (5% of bankroll). If the sum exceeds "
+        "the cap, drop the lowest-confidence bets first (typically "
+        "superfecta, then trifecta) until total is at or below the cap.\n"
+        "The beginner_tip field, if it suggests a dollar amount, MUST use "
+        "the same conservative sizing — never recommend a larger stake "
+        "than the rules above.\n"
+    )
+
+
 async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, experience_level: str = None) -> dict:
     """
     Full race analysis — Secretariat's core function.
@@ -602,13 +646,15 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
     cal_block = f"{cal_context}\n\n---\n\n" if cal_context else ""
 
     exp_block = _experience_level_block(experience_level)
+    stake_block = _stake_sizing_block(bankroll)
     prompt = f"""{cal_block}{exp_block}Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
 
-Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else 'unspecified'}
+Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else '$100.00 (default)'}
 
+{stake_block}
 Return this JSON exactly:
 {{
   "race_summary": "one sentence",
@@ -643,12 +689,12 @@ Return this JSON exactly:
     "odds": "current odds"
   }},
   "bet_recommendations": {{
-    "win":       {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
-    "place":     {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
-    "show":      {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
-    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "e.g. $2", "box_option": "Box #N-#M for $X more" }},
-    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "e.g. $1", "wheel_option": "optional wheel description" }},
-    "superfecta":{{ "selection": "#N/#M/#K/#J", "reasoning": "one sentence", "stake_suggestion": "e.g. $0.10" }}
+    "win":       {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
+    "place":     {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
+    "show":      {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
+    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above", "box_option": "Box #N-#M for $X more" }},
+    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above", "wheel_option": "optional wheel description" }},
+    "superfecta":{{ "selection": "#N/#M/#K/#J", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }}
   }},
   "teller_script": {{
     "win":       "Say to teller: '$X to Win on number N, race R'",
@@ -658,7 +704,7 @@ Return this JSON exactly:
   }},
   "overall_summary": "2-3 sentences — technical, for experienced bettors. Complete sentences, do not cut off mid-thought.",
   "overall_summary_beginner": "2-3 sentences — plain English, no jargon, for first-time racegoers. Complete sentences.",
-  "beginner_tip": "one concrete action a first-time bettor can take today",
+  "beginner_tip": "one concrete action a first-time bettor can take today — any stake mentioned must follow STAKE SIZING RULES",
   "confidence": "low/medium/high"
 }}"""
 
@@ -701,6 +747,7 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
     cal_block = f"{cal_context}\n\n---\n\n" if cal_context else ""
 
     exp_block = _experience_level_block(experience_level)
+    stake_block = _stake_sizing_block(bankroll)
     prompt = (
         f"RACE ID: {race_data.get('race_id', 'unknown')} | "
         f"MODE: {mode} | "
@@ -712,8 +759,9 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
 
-Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else 'unspecified'}
+Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else '$100.00 (default)'}
 
+{stake_block}
 Return this JSON exactly:
 {{
   "race_summary": "one sentence",
@@ -748,12 +796,12 @@ Return this JSON exactly:
     "odds": "current odds"
   }},
   "bet_recommendations": {{
-    "win":       {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
-    "place":     {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
-    "show":      {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "e.g. $10" }},
-    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "e.g. $2", "box_option": "Box #N-#M for $X more" }},
-    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "e.g. $1", "wheel_option": "optional wheel description" }},
-    "superfecta":{{ "selection": "#N/#M/#K/#J", "reasoning": "one sentence", "stake_suggestion": "e.g. $0.10" }}
+    "win":       {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
+    "place":     {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
+    "show":      {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
+    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above", "box_option": "Box #N-#M for $X more" }},
+    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above", "wheel_option": "optional wheel description" }},
+    "superfecta":{{ "selection": "#N/#M/#K/#J", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }}
   }},
   "teller_script": {{
     "win":       "Say to teller: '$X to Win on number N, race R'",
@@ -763,7 +811,7 @@ Return this JSON exactly:
   }},
   "overall_summary": "2-3 sentences — technical, for experienced bettors. Complete sentences, do not cut off mid-thought.",
   "overall_summary_beginner": "2-3 sentences — plain English, no jargon, for first-time racegoers. Complete sentences.",
-  "beginner_tip": "one concrete action a first-time bettor can take today",
+  "beginner_tip": "one concrete action a first-time bettor can take today — any stake mentioned must follow STAKE SIZING RULES",
   "confidence": "low/medium/high"
 }}"""
     )
@@ -1764,247 +1812,6 @@ def _format_post_time(post_et: str) -> str:
 
     h_ct = (h_et - 1) % 24
     return f"{_twelve(h_et)} ET / {_twelve(h_ct)} CT"
-
-
-async def generate_morning_line_email(
-    predictions: list,
-    report_date,
-    runner_lookup: dict | None = None,
-    edge_board: list[dict] | None = None,
-) -> dict:
-    """Builds Secretariat's pre-race "Morning Line" email.
-
-    For every NA race today, surfaces the Win / Place / Show picks. No LLM
-    call — picks were already written by nightly_predict_all.py earlier in
-    the morning. Layout is print-friendly: per-track bordered tables with
-    visible dividers between sections.
-
-    `runner_lookup`, when supplied, is `{race_id: {normalized_horse_name:
-    program_number}}` and lets the email render program numbers for Place
-    and Show picks too (the schema only stores `predicted_first_num`).
-
-    `edge_board`, when supplied and non-empty, renders a "Today's Edge
-    Board" block above the per-track tables — the top overlays Secretariat
-    found between its fair odds and the morning line.
-
-    Returns { "subject": str, "html": str, "text": str }.
-    """
-    import datetime
-    from itertools import groupby
-
-    today_str = (
-        report_date.strftime("%A, %B %d, %Y") if report_date else str(datetime.date.today())
-    )
-    short_date = report_date.strftime("%a %b %-d") if report_date else ""
-
-    runner_lookup = runner_lookup or {}
-
-    def _norm(name: str) -> str:
-        return (name or "").lower().strip().replace("'", "").replace("-", " ")
-
-    def _label(race_id: str, horse_name: str | None, fallback_num: str | None = None) -> str:
-        """Format a pick as '(N) Name'. Falls back to '(fallback_num) Name'
-        when the runner lookup misses, then to bare 'Name', then to '—'."""
-        if not horse_name:
-            return "—"
-        runners = runner_lookup.get(race_id, {})
-        num = runners.get(_norm(horse_name))
-        if not num and fallback_num:
-            num = fallback_num.lstrip("#").strip() or None
-        return f"({num}) {horse_name}" if num else horse_name
-
-    predictions = sorted(
-        predictions,
-        key=lambda p: (
-            p.track_code or "ZZZ",
-            getattr(p, "post_time_et", None) or "99:99",
-            p.race_name or "",
-        ),
-    )
-
-    track_groups = [(t, list(items)) for t, items in groupby(predictions, key=lambda p: p.track_code or "?")]
-    total_picks = len(predictions)
-    total_tracks = len(track_groups)
-
-    # Cell border style reused throughout the print-friendly layout
-    cell = "padding:6px 8px;border:1px solid #888"
-    header_cell = "padding:8px;border:1px solid #222;background:#222;color:#fff;text-align:left"
-    track_banner = (
-        "padding:10px 12px;background:#c8a84b;color:#1a1a1a;"
-        "font-weight:bold;font-size:15px;border:2px solid #1a1a1a;"
-        "border-bottom:none;letter-spacing:0.3px"
-    )
-
-    text_chunks: list[str] = []
-    html_track_blocks: list[str] = []
-
-    # ── Edge Board (overlay leaderboard) — only when there's something to show ──
-    edge_text_block = ""
-    edge_html_block = ""
-    if edge_board:
-        eb_lines = ["", "=" * 70, "  TODAY'S EDGE BOARD — top overlays vs. morning line", "=" * 70]
-        for e in edge_board:
-            track_full = TRACK_NAMES.get((e.get("track_code") or "").upper(), e.get("track_code") or "")
-            post = _format_post_time(e.get("post_time_et") or "")
-            num = e.get("program_num")
-            horse = f"({num}) {e['horse_name']}" if num else e["horse_name"]
-            eb_lines.append(
-                f"  +{e['value_percent']:.0f}% | {post} {track_full} — "
-                f"{horse} | fair {e['fair_odds']} vs ML {e['market_odds']}"
-            )
-        edge_text_block = "\n".join(eb_lines) + "\n"
-
-        eb_rows = []
-        for e in edge_board:
-            track_full = TRACK_NAMES.get((e.get("track_code") or "").upper(), e.get("track_code") or "")
-            post = _format_post_time(e.get("post_time_et") or "")
-            num = e.get("program_num")
-            horse = f"({num}) {e['horse_name']}" if num else e["horse_name"]
-            eb_rows.append(
-                f'<tr>'
-                f'<td style="{cell};font-weight:bold;color:#0a6b2e;text-align:right;font-variant-numeric:tabular-nums">+{e["value_percent"]:.0f}%</td>'
-                f'<td style="{cell};white-space:nowrap;font-variant-numeric:tabular-nums">{post}</td>'
-                f'<td style="{cell}">{track_full}</td>'
-                f'<td style="{cell}"><strong>{horse}</strong></td>'
-                f'<td style="{cell};color:#444;text-align:right">{e["fair_odds"]}</td>'
-                f'<td style="{cell};color:#444;text-align:right">{e["market_odds"]}</td>'
-                f'</tr>'
-            )
-        edge_html_block = (
-            f'<div style="margin:20px 0 28px 0">'
-            f'  <div style="padding:10px 12px;background:#0a6b2e;color:#fff;'
-            f'font-weight:bold;font-size:15px;border:2px solid #0a6b2e;'
-            f'border-bottom:none;letter-spacing:0.3px">'
-            f'    TODAY\'S EDGE BOARD &nbsp;·&nbsp; {len(edge_board)} overlays vs. morning line'
-            f'  </div>'
-            f'  <table style="border-collapse:collapse;width:100%;font-size:13px;'
-            f'border:2px solid #0a6b2e;border-top:none">'
-            f'    <tr>'
-            f'      <th style="{header_cell};text-align:right">Edge</th>'
-            f'      <th style="{header_cell}">Post</th>'
-            f'      <th style="{header_cell}">Track</th>'
-            f'      <th style="{header_cell}">Pick</th>'
-            f'      <th style="{header_cell};text-align:right">Fair</th>'
-            f'      <th style="{header_cell};text-align:right">ML</th>'
-            f'    </tr>'
-            f'    {"".join(eb_rows)}'
-            f'  </table>'
-            f'  <p style="font-size:11px;color:#666;margin:6px 2px 0;line-height:1.5">'
-            f'    Edge = how much longer the morning line is than Secretariat\'s fair price. '
-            f'    A +20% horse is offered at 20% better odds than it deserves on the analysis.'
-            f'  </p>'
-            f'</div>'
-        )
-
-    for track, items in track_groups:
-        track_full = TRACK_NAMES.get((track or "").upper(), track)
-        header = f"{track} — {track_full}" if track_full and track_full != track else track
-
-        text_chunks.append("")
-        text_chunks.append("=" * 70)
-        text_chunks.append(f"  {header}  ({len(items)} races)")
-        text_chunks.append("=" * 70)
-
-        rows_html: list[str] = []
-        for p in items:
-            win_label = _label(p.race_id, p.predicted_first, p.predicted_first_num)
-            place_label = _label(p.race_id, p.predicted_second)
-            show_label = _label(p.race_id, p.predicted_third)
-            post = _format_post_time(p.post_time_et or "")
-            type_label = p.race_type or p.surface or "—"
-            race_label = p.race_name or p.race_id or ""
-
-            text_chunks.append(
-                f"  {post} | {race_label} | {type_label}\n"
-                f"      W: {win_label}\n"
-                f"      P: {place_label}\n"
-                f"      S: {show_label}"
-            )
-
-            rows_html.append(
-                f'<tr>'
-                f'<td style="{cell};white-space:nowrap;font-variant-numeric:tabular-nums">{post}</td>'
-                f'<td style="{cell}">{race_label}</td>'
-                f'<td style="{cell};color:#444;font-size:12px">{type_label}</td>'
-                f'<td style="{cell}"><strong>{win_label}</strong></td>'
-                f'<td style="{cell}">{place_label}</td>'
-                f'<td style="{cell}">{show_label}</td>'
-                f'</tr>'
-            )
-
-        html_track_blocks.append(
-            f'<div style="margin:24px 0;page-break-inside:avoid">'
-            f'  <div style="{track_banner}">{header} &nbsp;·&nbsp; {len(items)} races</div>'
-            f'  <table style="border-collapse:collapse;width:100%;font-size:13px;'
-            f'border:2px solid #1a1a1a;border-top:none">'
-            f'    <tr>'
-            f'      <th style="{header_cell}">Post Time</th>'
-            f'      <th style="{header_cell}">Race</th>'
-            f'      <th style="{header_cell}">Type</th>'
-            f'      <th style="{header_cell}">Win</th>'
-            f'      <th style="{header_cell}">Place</th>'
-            f'      <th style="{header_cell}">Show</th>'
-            f'    </tr>'
-            f'    {"".join(rows_html)}'
-            f'  </table>'
-            f'</div>'
-        )
-
-    subject = (
-        f"🏇 Secretariat's Morning Line — {short_date} | "
-        f"{total_picks} picks across {total_tracks} tracks"
-    )
-
-    legend_text = (
-        "W = Win pick · P = Place pick (2nd-most-likely) · S = Show pick (3rd-most-likely)\n"
-        "All post times shown in Eastern / Central."
-    )
-
-    text_body = (
-        f"SECRETARIAT'S MORNING LINE — {today_str.upper()}\n"
-        f"{'='*70}\n\n"
-        f"  {total_picks} picks across {total_tracks} tracks\n"
-        f"\n{legend_text}\n"
-        + edge_text_block
-        + "\n".join(text_chunks)
-        + "\n"
-    )
-
-    html_body = f"""<div style="font-family:Georgia,serif;max-width:900px;margin:auto;color:#1a1a1a;padding:8px">
-  <h1 style="border-bottom:3px solid #c8a84b;padding-bottom:8px;margin-bottom:4px">
-    🐎 Secretariat's Morning Line
-  </h1>
-  <p style="color:#666;font-size:13px;margin-top:0">{today_str}</p>
-
-  <table style="width:100%;border:2px solid #c8a84b;border-collapse:collapse;margin:16px 0">
-    <tr style="background:#f8f4ec">
-      <td style="padding:14px;text-align:center;border-right:1px solid #c8a84b">
-        <div style="font-size:26px;font-weight:bold">{total_picks}</div>
-        <div style="font-size:11px;color:#666">Picks</div>
-      </td>
-      <td style="padding:14px;text-align:center">
-        <div style="font-size:26px;font-weight:bold">{total_tracks}</div>
-        <div style="font-size:11px;color:#666">Tracks</div>
-      </td>
-    </tr>
-  </table>
-
-  <p style="background:#f8f4ec;padding:10px 14px;border:1px solid #c8a84b;font-size:12px;color:#444;line-height:1.5;margin:16px 0">
-    <strong>W</strong> = Win pick &nbsp;·&nbsp; <strong>P</strong> = Place pick (2nd-most-likely) &nbsp;·&nbsp;
-    <strong>S</strong> = Show pick (3rd-most-likely)<br>
-    All post times shown in Eastern / Central.
-  </p>
-
-  {edge_html_block}
-
-  {"".join(html_track_blocks)}
-
-  <p style="font-size:11px;color:#999;margin-top:24px;border-top:1px solid #ccc;padding-top:8px">
-    Secretariat · GateSmart · {today_str} · pre-race picks generated at 11 AM ET
-  </p>
-</div>"""
-
-    return {"subject": subject, "html": html_body, "text": text_body}
 
 
 async def generate_daily_email_report(report, predictions: list) -> dict:

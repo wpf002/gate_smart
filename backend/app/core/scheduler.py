@@ -3,7 +3,6 @@ Nightly job scheduler — runs automatically when the FastAPI server starts.
 
 Schedule (all UTC, summer EDT = UTC-4):
   15:00  nightly_predict_all.py    — 11:00 AM ET, pre-race haiku predictions
-  15:30  morning_line_email.py     — 11:30 AM ET, Secretariat's Morning Line email
   15:35  substack_draft_email.py   — 11:35 AM ET, Substack-ready draft email
   10:00  nightly_accuracy.py       — 6:00 AM ET next morning, settle + email digest
   03:30  nightly_recalibration.py  — 11:30 PM ET, recalibrate prompt weights
@@ -54,10 +53,6 @@ async def job_predict_all() -> None:
     await _run_script("nightly_predict_all.py")
 
 
-async def job_morning_line() -> None:
-    await _run_script("morning_line_email.py")
-
-
 async def job_substack_draft() -> None:
     await _run_script("substack_draft_email.py")
 
@@ -86,7 +81,6 @@ def create_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
 
     scheduler.add_job(job_predict_all,  CronTrigger(hour=15, minute=0),  id="predict_all",  name="Morning predictions (11 AM ET)")
-    scheduler.add_job(job_morning_line, CronTrigger(hour=15, minute=30), id="morning_line", name="Secretariat's Morning Line email (11:30 AM ET)")
     scheduler.add_job(job_substack_draft, CronTrigger(hour=15, minute=35), id="substack_draft", name="Substack draft email (11:35 AM ET)")
     scheduler.add_job(job_accuracy,     CronTrigger(hour=10, minute=0),  id="accuracy",     name="Morning accuracy + email (6 AM ET)")
     scheduler.add_job(job_recalibration,CronTrigger(hour=3,  minute=30), id="recalibration",name="Prompt recalibration (11:30 PM ET)")

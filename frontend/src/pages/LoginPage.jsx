@@ -34,7 +34,6 @@ export default function LoginPage() {
     mutationFn: () =>
       authRegister(email.trim().toLowerCase(), password, {
         bankroll: userProfile.bankroll,
-        risk_tolerance: userProfile.riskTolerance,
         experience_level: userProfile.experienceLevel,
         region: userProfile.region,
       }),

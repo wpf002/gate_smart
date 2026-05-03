@@ -38,8 +38,7 @@ export const useAppStore = create(
       // follow the device's current IANA zone (read at render time), so a user
       // who travels sees correct times automatically without changing settings.
       userProfile: {
-        bankroll: 500,
-        riskTolerance: 'medium',
+        bankroll: 100,
         experienceLevel: 'beginner',
         region: 'usa',
         timezone: 'local',

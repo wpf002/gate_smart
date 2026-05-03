@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getSecretariatAccuracy, getTrackStats } from '../../utils/api';
+import { getSecretariatAccuracy, getTrackStats, getMorningLine } from '../../utils/api';
 
 // ── Track-specific badge ──────────────────────────────────────────────────────
 function TrackAccuracyBadge({ trackCode, trackName, compact }) {
@@ -70,11 +70,45 @@ function TrackAccuracyBadge({ trackCode, trackName, compact }) {
           · {data.total_predictions} races
         </span>
       </div>
-      {data?.sample_size_note && (
-        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
-          {data.sample_size_note}
-        </div>
-      )}
+    </div>
+  );
+}
+
+// ── Morning Line badge — pre-race top-4 picks (N-N-N-N) ───────────────────────
+export function MorningLineBadge({ raceId }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['morning-line', raceId],
+    queryFn: () => getMorningLine(raceId),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    enabled: !!raceId,
+  });
+
+  if (isLoading || !data || !data.available || !data.picks) return null;
+
+  const formatted = data.picks.map((p) => p ?? '?').join('-');
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, rgba(201,162,39,0.08) 0%, var(--bg-secondary) 100%)',
+      border: '1px solid var(--border-gold)',
+      borderRadius: 'var(--radius-md)',
+      padding: '12px 14px',
+      marginBottom: 12,
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-display)', fontSize: 11,
+        color: 'var(--accent-gold)', letterSpacing: '0.08em',
+        marginBottom: 4,
+      }}>
+        SECRETARIAT'S MORNING LINE
+      </div>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700,
+        color: 'var(--accent-gold)', letterSpacing: '0.04em',
+      }}>
+        {formatted}
+      </div>
     </div>
   );
 }
@@ -92,7 +126,7 @@ function GlobalAccuracyBadge() {
     return null;
   }
 
-  const { win_rate_percent, total_predictions } = data;
+  const { win_rate_percent } = data;
 
   const trend =
     win_rate_percent >= 35
@@ -129,10 +163,7 @@ function GlobalAccuracyBadge() {
           SECRETARIAT
         </div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.3 }}>
-          {win_rate_percent}% top pick win rate
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-          {total_predictions} races called
+          {win_rate_percent}% Top Pick Win Rate
         </div>
       </div>
       <div style={{ fontSize: 20, color: trend.color, fontWeight: 700, lineHeight: 1, flexShrink: 0 }}>

@@ -2,17 +2,11 @@ import { useState } from 'react';
 import { useAppStore } from '../../store';
 import { authLogin, authRegister } from '../../utils/api';
 
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 2;
 
 const EXPERIENCE_OPTIONS = [
   { value: 'beginner', label: 'Beginner', desc: "New to horse racing — plain English explanations, key pick highlighted" },
   { value: 'advanced', label: 'Advanced', desc: "Experienced bettor — full technical data, all bet types, pace analysis" },
-];
-
-const RISK_OPTIONS = [
-  { value: 'low',    label: 'Play It Safe',    desc: 'Favorites and low-risk bets' },
-  { value: 'medium', label: 'Balanced',         desc: 'Mix of value and safety' },
-  { value: 'high',   label: 'Go For Value',    desc: 'Overlays and longshots' },
 ];
 
 function ProgressDots({ step }) {
@@ -208,13 +202,11 @@ export default function OnboardingFlow() {
 
   const [step, setStep] = useState(0);
   const [experience, setExperience] = useState('beginner');
-  const [risk, setRisk] = useState('medium');
 
   const advance = () => setStep((s) => s + 1);
-  const back = () => setStep((s) => s - 1);
 
-  const save = () => {
-    setUserProfile({ bankroll: 500, riskTolerance: risk, experienceLevel: experience, region: 'usa' });
+  const save = (exp = experience) => {
+    setUserProfile({ bankroll: 100, experienceLevel: exp, region: 'usa' });
     completeOnboarding();
   };
 
@@ -223,8 +215,7 @@ export default function OnboardingFlow() {
   const handleAuthSuccess = (user, mode) => {
     if (mode === 'login') {
       setUserProfile({
-        bankroll: user?.bankroll || 500,
-        riskTolerance: user?.risk_tolerance || 'medium',
+        bankroll: user?.bankroll || 100,
         experienceLevel: user?.experience_level || 'beginner',
         region: 'usa',
       });
@@ -236,12 +227,7 @@ export default function OnboardingFlow() {
 
   const selectExperience = (val) => {
     setExperience(val);
-    setTimeout(advance, 400);
-  };
-
-  const selectRisk = (val) => {
-    setRisk(val);
-    setTimeout(save, 400);
+    setTimeout(() => save(val), 400);
   };
 
   return (
@@ -294,27 +280,6 @@ export default function OnboardingFlow() {
                 {...opt}
                 selected={experience === opt.value}
                 onClick={() => selectExperience(opt.value)}
-              />
-            ))}
-          </StepWrapper>
-        )}
-
-        {/* ── Step 2: Risk ───────────────────────────────────────────── */}
-        {step === 2 && (
-          <StepWrapper>
-            <button onClick={back} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 4 }}>← Back</button>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--accent-gold)', marginBottom: 6 }}>
-              How do you like to bet?
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              This shapes how GateSmart tailors recommendations to you.
-            </div>
-            {RISK_OPTIONS.map((opt) => (
-              <OptionCard
-                key={opt.value}
-                {...opt}
-                selected={risk === opt.value}
-                onClick={() => selectRisk(opt.value)}
               />
             ))}
           </StepWrapper>
