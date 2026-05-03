@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Optional
@@ -7,6 +8,8 @@ from typing import Optional
 import msgspec
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+
+log = logging.getLogger(__name__)
 
 from app.core.cache import cache_get, cache_set, cache_incr
 from app.core.limiter import limiter
@@ -244,6 +247,7 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
                 yield f"data: {json.dumps({'result': result})}\n\n"
 
         except Exception:
+            log.exception("analyze_race_stream failed for race_id=%s mode=%s", req.race_id, req.mode)
             yield f"data: {json.dumps({'error': 'An unexpected error occurred'})}\n\n"
 
         yield "data: [DONE]\n\n"
