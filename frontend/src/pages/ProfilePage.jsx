@@ -2,7 +2,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
-import AccuracyBadge from '../components/common/AccuracyBadge';
 import Icon from '../components/common/Icon';
 import { authUpdateProfile, authLogout } from '../utils/api';
 import { TIMEZONE_OPTIONS } from '../utils/timezone';
@@ -216,10 +215,6 @@ export default function ProfilePage() {
             );
           })}
         </div>
-
-        {/* Secretariat accuracy stats */}
-        <SectionLabel>Secretariat Performance</SectionLabel>
-        <AccuracyBadge />
 
         <div style={{
           marginTop: 16,

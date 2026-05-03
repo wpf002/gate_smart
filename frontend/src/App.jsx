@@ -2,6 +2,7 @@ import { Component, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import Icon from './components/common/Icon';
+import { GateSmartLogo } from './components/common/Logo';
 import BottomNav from './components/common/BottomNav';
 import HomePage from './pages/HomePage';
 import RaceDetailPage from './pages/RaceDetailPage';
@@ -90,7 +91,9 @@ function SideNav() {
 
   return (
     <nav className="side-nav">
-      <div className="side-nav-logo" onClick={goToRacesFresh} style={{ cursor: 'pointer' }}>GATE<br />SMART</div>
+      <div className="side-nav-logo" onClick={goToRacesFresh} style={{ cursor: 'pointer' }}>
+        <GateSmartLogo size={44} />
+      </div>
       {NAV_ITEMS.map(({ path, label }, idx) => {
         const active = location.pathname === path ||
           (path !== '/' && location.pathname.startsWith(path));

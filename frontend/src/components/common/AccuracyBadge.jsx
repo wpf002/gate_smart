@@ -139,34 +139,33 @@ function GlobalAccuracyBadge() {
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: 10,
-      padding: '8px 14px',
+      gap: 8,
+      padding: '6px 10px',
       background: 'var(--bg-card)',
       border: '1px solid var(--border-gold)',
       borderRadius: 'var(--radius-md)',
-      marginBottom: 16,
     }}>
       <div style={{
-        width: 28, height: 28, borderRadius: '50%',
+        width: 24, height: 24, borderRadius: '50%',
         background: 'var(--accent-gold)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'var(--font-display)', fontSize: 16, color: '#000', flexShrink: 0,
+        fontFamily: 'var(--font-display)', fontSize: 14, color: '#000', flexShrink: 0,
       }}>
         S
       </div>
-      <div style={{ flex: 1 }}>
+      <div style={{ minWidth: 0 }}>
         <div style={{
-          fontFamily: 'var(--font-display)', fontSize: 11,
+          fontFamily: 'var(--font-display)', fontSize: 9,
           color: 'var(--accent-gold)', letterSpacing: '0.06em',
           display: 'block', lineHeight: 1.2,
         }}>
-          SECRETARIAT
+          SECRETARIAT · LAST 100
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.3 }}>
           {win_rate_percent}% Top Pick Win Rate
         </div>
       </div>
-      <div style={{ fontSize: 20, color: trend.color, fontWeight: 700, lineHeight: 1, flexShrink: 0 }}>
+      <div style={{ fontSize: 16, color: trend.color, fontWeight: 700, lineHeight: 1, flexShrink: 0 }}>
         {trend.icon}
       </div>
     </div>

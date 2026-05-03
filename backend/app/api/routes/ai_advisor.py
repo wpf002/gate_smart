@@ -569,26 +569,58 @@ async def clear_race_analysis(race_id: str) -> JSONResponse:
 
 @router.get("/accuracy")
 async def secretariat_accuracy() -> JSONResponse:
-    total = int(await cache_get("accuracy:total") or 0)
-    correct = int(await cache_get("accuracy:correct") or 0)
+    """Top-pick win rate over the last 100 settled races.
+
+    Uses a rolling window — older races age out as new ones settle, so the
+    badge tracks recent performance instead of all-time history. Cached
+    for 1 hour since the underlying data only refreshes once a day from
+    nightly_accuracy.py.
+    """
+    cache_key = "accuracy:rolling100"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return JSONResponse(cached)
+
+    from app.core import database as _db
+    from app.models.accuracy import RacePrediction
+    from sqlalchemy import select
+
+    async with _db._AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(RacePrediction.top_pick_correct)
+            .where(
+                RacePrediction.result_fetched.is_(True),
+                RacePrediction.user_id.is_(None),
+                RacePrediction.analysis_mode == "auto_daily",
+                RacePrediction.top_pick_correct.is_not(None),
+            )
+            .order_by(RacePrediction.settled_at.desc().nulls_last())
+            .limit(100)
+        )
+        outcomes = [row[0] for row in result.all()]
+
+    total = len(outcomes)
+    correct = sum(1 for o in outcomes if o)
 
     if total == 0:
-        return JSONResponse({
+        payload = {
             "total_predictions": 0,
             "correct_predictions": 0,
             "win_rate_percent": None,
             "sample_size_note": "No settled races yet",
             "last_updated": None,
-        })
+        }
+    else:
+        payload = {
+            "total_predictions": total,
+            "correct_predictions": correct,
+            "win_rate_percent": round((correct / total) * 100, 1),
+            "sample_size_note": f"Last {total} settled races",
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
 
-    win_rate = round((correct / total) * 100, 1)
-    return JSONResponse({
-        "total_predictions": total,
-        "correct_predictions": correct,
-        "win_rate_percent": win_rate,
-        "sample_size_note": "Based on settled races since launch",
-        "last_updated": datetime.now(timezone.utc).isoformat(),
-    })
+    await cache_set(cache_key, payload, ex=3600)
+    return JSONResponse(payload)
 
 
 async def _store_prediction(race_data: dict, analysis: dict) -> None:

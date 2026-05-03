@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getRacesToday, getRacesByDate, getDailyAccuracy } from '../utils/api';
 import { RaceCard, RaceCardSkeleton } from '../components/races/RaceCard';
 import PageHeader from '../components/common/PageHeader';
+import AccuracyBadge from '../components/common/AccuracyBadge';
 import Icon from '../components/common/Icon';
 
 const DATE_TABS = [
@@ -177,6 +178,7 @@ export default function HomePage() {
       <PageHeader
         title="GATESMART"
         subtitle="AI-POWERED RACING INTELLIGENCE"
+        right={<AccuracyBadge />}
       />
 
       <SecretariatReportCard />
