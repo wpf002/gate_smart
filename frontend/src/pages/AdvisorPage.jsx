@@ -95,13 +95,15 @@ function MarkdownContent({ text }) {
       continue;
     }
 
-    flushList();
-
-    // Blank line
+    // Blank line — inside a list this is a loose-list separator (don't flush);
+    // outside a list it's a paragraph break.
     if (!line.trim()) {
+      if (listType) continue;
       elements.push(<div key={key++} style={{ height: 8 }} />);
       continue;
     }
+
+    flushList();
 
     // Normal paragraph line
     elements.push(
