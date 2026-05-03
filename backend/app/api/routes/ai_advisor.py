@@ -581,7 +581,9 @@ async def secretariat_accuracy() -> JSONResponse:
     Cached 1h; underlying data refreshes once a day via
     nightly_accuracy.py.
     """
-    cache_key = "accuracy:rolling100"
+    # Bump the suffix when the payload schema changes so prior deploys'
+    # cached payloads can't shadow new fields (e.g. itm_rate_percent).
+    cache_key = "accuracy:rolling100:v2"
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
