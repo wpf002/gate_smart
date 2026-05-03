@@ -21,19 +21,35 @@ async def get_daily_accuracy(
     date: str = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Return DailyAccuracyReport for a given date (defaults to today)."""
+    """Return DailyAccuracyReport.
+
+    With no date param, returns the most recent settled day's report —
+    typically yesterday, since today's morning-line picks aren't settled
+    until tomorrow at 6 AM ET. Asking for today by default returned a
+    "pending" stub all day and the home-page card silently rendered
+    nothing.
+
+    With an explicit date, returns that date's report or pending if
+    not yet generated.
+    """
     if date:
         try:
             target = datetime.date.fromisoformat(date)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format — use YYYY-MM-DD")
+        result = await db.execute(
+            select(DailyAccuracyReport).where(DailyAccuracyReport.report_date == target)
+        )
+        report = result.scalar_one_or_none()
     else:
-        target = datetime.date.today()
-
-    result = await db.execute(
-        select(DailyAccuracyReport).where(DailyAccuracyReport.report_date == target)
-    )
-    report = result.scalar_one_or_none()
+        # Latest settled report (most recent report_date that exists in the DB)
+        result = await db.execute(
+            select(DailyAccuracyReport)
+            .order_by(desc(DailyAccuracyReport.report_date))
+            .limit(1)
+        )
+        report = result.scalar_one_or_none()
+        target = report.report_date if report else datetime.date.today()
 
     if not report:
         return {

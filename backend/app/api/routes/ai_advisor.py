@@ -651,6 +651,133 @@ async def secretariat_accuracy() -> JSONResponse:
     return JSONResponse(payload)
 
 
+@router.get("/accuracy/audit")
+async def secretariat_accuracy_audit() -> JSONResponse:
+    """Deep audit — for each row in the last-100 sample we compute three
+    independent views of the same outcome and surface any disagreement:
+
+      stored_flag  — what nightly_accuracy.py wrote at settle time
+      rederived    — recomputed from stored actual_first/_second/_third
+      live_api     — fetched fresh from the racing API right now
+
+    Stored == rederived means the math at settle time was right. Stored
+    == live_api means the actuals we stored match the source of truth.
+    Both equal stored == this metric is honest.
+    """
+    from app.core import database as _db
+    from app.models.accuracy import RacePrediction
+    from sqlalchemy import select
+
+    def _norm(name):
+        return (name or "").lower().strip().replace("'", "").replace("-", " ")
+
+    async with _db._AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(RacePrediction)
+            .where(
+                RacePrediction.result_fetched.is_(True),
+                RacePrediction.user_id.is_(None),
+                RacePrediction.analysis_mode == "auto_daily",
+                RacePrediction.top_pick_correct.is_not(None),
+            )
+            .order_by(RacePrediction.settled_at.desc().nulls_last())
+            .limit(100)
+        )
+        rows = list(result.scalars().all())
+
+    # Re-derive flags from stored actuals — does nightly_accuracy's math hold up?
+    stored_match_rederived = {"top": 0, "place": 0, "show": 0, "itm": 0}
+    stored_disagreement = []
+    for r in rows:
+        a1, a2, a3 = _norm(r.actual_first), _norm(r.actual_second), _norm(r.actual_third)
+        p1, p2, p3 = _norm(r.predicted_first), _norm(r.predicted_second), _norm(r.predicted_third)
+        derived = {
+            "top": bool(p1 and p1 == a1),
+            "place": bool(p2 and p2 in {a1, a2}),
+            "show": bool(p3 and p3 in {a1, a2, a3}),
+            "itm": bool(p1 and p1 in {a1, a2, a3}),
+        }
+        stored_flags = {
+            "top": r.top_pick_correct,
+            "place": r.place_pick_correct,
+            "show": r.show_pick_correct,
+            "itm": r.in_the_money,
+        }
+        for key in ("top", "place", "show", "itm"):
+            if stored_flags[key] == derived[key]:
+                stored_match_rederived[key] += 1
+            else:
+                stored_disagreement.append({
+                    "race_id": r.race_id,
+                    "key": key,
+                    "stored": stored_flags[key],
+                    "rederived": derived[key],
+                })
+
+    # Cross-check N most-recent rows against the live racing API.
+    # If our stored actual_first matches what the API says now, our
+    # data fetch and persistence are correct.
+    SAMPLE_SIZE = 10
+    live_check = []
+    for r in rows[:SAMPLE_SIZE]:
+        try:
+            if "-" in r.race_id:
+                meet_id, race_number = r.race_id.rsplit("-", 1)
+                from app.services import racing_api
+                meet_results = await racing_api.get_na_meet_results(meet_id)
+                api_actual_first = api_actual_second = api_actual_third = None
+                for race in meet_results.get("races", []):
+                    rk = race.get("race_key") or {}
+                    rnum = str(rk.get("race_number", "")) if isinstance(rk, dict) else ""
+                    if rnum == str(race_number):
+                        for runner in race.get("runners", []):
+                            pos = (
+                                runner.get("official_finish_position")
+                                or runner.get("finish_position")
+                                or runner.get("position")
+                            )
+                            try: pos = int(str(pos).strip())
+                            except (ValueError, TypeError): continue
+                            name = runner.get("horse") or runner.get("horse_name") or ""
+                            if pos == 1: api_actual_first = name
+                            elif pos == 2: api_actual_second = name
+                            elif pos == 3: api_actual_third = name
+                        break
+                live_check.append({
+                    "race_id": r.race_id,
+                    "race_date": str(r.race_date) if r.race_date else None,
+                    "stored": {
+                        "actual_first": r.actual_first,
+                        "actual_second": r.actual_second,
+                        "actual_third": r.actual_third,
+                    },
+                    "live_api": {
+                        "actual_first": api_actual_first,
+                        "actual_second": api_actual_second,
+                        "actual_third": api_actual_third,
+                    },
+                    "match_first":  _norm(r.actual_first)  == _norm(api_actual_first),
+                    "match_second": _norm(r.actual_second) == _norm(api_actual_second),
+                    "match_third":  _norm(r.actual_third)  == _norm(api_actual_third),
+                })
+        except Exception as e:
+            live_check.append({"race_id": r.race_id, "error": str(e)})
+
+    return JSONResponse({
+        "total_rows": len(rows),
+        "stored_vs_rederived_matches": stored_match_rederived,  # out of total_rows
+        "stored_vs_rederived_disagreements": stored_disagreement[:20],
+        "live_api_cross_check": live_check,
+        "live_api_summary": {
+            "checked": sum(1 for x in live_check if "error" not in x),
+            "first_matches": sum(1 for x in live_check if x.get("match_first")),
+            "second_matches": sum(1 for x in live_check if x.get("match_second")),
+            "third_matches": sum(1 for x in live_check if x.get("match_third")),
+            "errors": sum(1 for x in live_check if "error" in x),
+        },
+    })
+
+
 async def _store_prediction(race_data: dict, analysis: dict) -> None:
     """Store the top pick from an analysis for later accuracy tracking."""
     try:
