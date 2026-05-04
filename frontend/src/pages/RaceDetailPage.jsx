@@ -975,7 +975,7 @@ export default function RaceDetailPage() {
             finished) so users see the historical track context and the
             original morning-line picks even after the race runs. */}
         {race && (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'stretch', marginBottom: 12 }}>
             <div style={{ flex: hasMorningLine ? '1 1 280px' : '1 1 100%', minWidth: 0 }}>
               <AccuracyBadge
                 trackCode={race.track_code || race.course_id || race.course}
