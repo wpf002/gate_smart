@@ -23,13 +23,13 @@ export function GateSmartMark({ size = 48 }) {
       <rect x="0" y="0" width="64" height="64" rx="10" ry="10" fill={GOLD} />
       <text
         x="32"
-        y="44"
+        y="32"
         textAnchor="middle"
+        dominantBaseline="central"
         fontFamily="var(--font-display, sans-serif)"
         fontSize="32"
         fontWeight="700"
         fill={BLACK}
-        letterSpacing="-1"
       >
         GS
       </text>

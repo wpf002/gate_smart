@@ -138,7 +138,7 @@ input, textarea, select {
   font-size: 26px;
   color: var(--accent-gold);
   letter-spacing: 0.06em;
-  padding: 0 8px 16px;
+  padding: 0 0 16px;
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 12px;
 }
