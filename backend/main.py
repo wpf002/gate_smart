@@ -25,6 +25,19 @@ async def lifespan(app: FastAPI):
         import logging
         logging.getLogger(__name__).warning(f"Database init failed (non-fatal): {e}")
 
+    # Lightweight column migrations — Base.metadata.create_all only creates
+    # new tables, not new columns on existing tables. Keep these idempotent.
+    try:
+        from app.core import database as _db
+        from sqlalchemy import text as _text
+        async with _db._engine.begin() as _conn:
+            await _conn.execute(_text(
+                "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lock_source VARCHAR(30)"
+            ))
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Column migration failed (non-fatal): {e}")
+
     scheduler = create_scheduler()
     scheduler.start()
     print("[scheduler] Nightly jobs scheduled and running", flush=True)

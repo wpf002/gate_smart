@@ -87,6 +87,10 @@ export function MorningLineBadge({ raceId }) {
   if (isLoading || !data || !data.available || !data.picks) return null;
 
   const formatted = data.picks.map((p) => p ?? '?').join('-');
+  // "nightly_fallback" = lightweight 100-token pick used when the full nightly
+  // analyze_race failed (e.g. oversized field). Surface it so the user knows
+  // clicking Analyze will run the full reasoning rather than agreeing with this.
+  const isQuickPick = data.lock_source === 'nightly_fallback';
 
   return (
     <div style={{
@@ -100,8 +104,25 @@ export function MorningLineBadge({ raceId }) {
         fontFamily: 'var(--font-display)', fontSize: 11,
         color: 'var(--accent-gold)', letterSpacing: '0.08em',
         marginBottom: 4,
+        display: 'flex', alignItems: 'center', gap: 8,
       }}>
-        SECRETARIAT'S MORNING LINE
+        <span>SECRETARIAT'S MORNING LINE</span>
+        {isQuickPick && (
+          <span
+            title="Lightweight pick — the full nightly analysis didn't run on this race. Click Analyze for Secretariat's full reasoning."
+            style={{
+              fontSize: 9,
+              padding: '1px 6px',
+              borderRadius: 4,
+              background: 'rgba(201,162,39,0.15)',
+              color: 'var(--accent-gold)',
+              border: '1px solid var(--border-gold)',
+              letterSpacing: '0.06em',
+            }}
+          >
+            QUICK PICK
+          </span>
+        )}
       </div>
       <div style={{
         fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700,

@@ -171,6 +171,7 @@ async def main(target_date: datetime.date, dry_run: bool):
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS region VARCHAR(10)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS alert_sent BOOLEAN DEFAULT FALSE"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS post_time_et VARCHAR(10)"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lock_source VARCHAR(30)"))
 
     ssl_ctx = ssl.create_default_context()
     client = anthropic.AsyncAnthropic(
@@ -266,6 +267,7 @@ async def main(target_date: datetime.date, dry_run: bool):
             third = _name(pf_full.get("third"))
             fourth = _name(pf_full.get("fourth"))
             first_num = _num(pf_full.get("first"))
+            lock_source = "nightly"
         else:
             bucket_hint = _format_bucket_hint(track_code, race_type, surface, calibration)
             pf = await predict_race(client, race, bucket_hint=bucket_hint)
@@ -278,6 +280,7 @@ async def main(target_date: datetime.date, dry_run: bool):
             third = pf.get("third")
             fourth = pf.get("fourth")
             first_num = None
+            lock_source = "nightly_fallback"
 
         print(f"pick={first}")
 
@@ -330,6 +333,7 @@ async def main(target_date: datetime.date, dry_run: bool):
                 "predicted_third": third,
                 "predicted_fourth": fourth,
                 "post_time_et": post_time_et,
+                "lock_source": lock_source,
             }
             from sqlalchemy import update as _update, or_ as _or_
             async with _db._AsyncSessionLocal() as db:

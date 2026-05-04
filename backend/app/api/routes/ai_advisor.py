@@ -372,6 +372,7 @@ async def morning_line(race_id: str) -> JSONResponse:
         "picks": picks,
         "available": any(p is not None for p in picks),
         "post_time_et": prediction.post_time_et,
+        "lock_source": prediction.lock_source,
     })
 
 

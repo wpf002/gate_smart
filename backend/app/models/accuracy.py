@@ -67,6 +67,10 @@ class RacePrediction(Base):
 
     alert_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     post_time_et: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    # "nightly" = full analyze_race; "nightly_fallback" = lightweight 100-token
+    # predict_race (used when full analysis fails). Lets the UI flag fallback
+    # picks as "Quick pick" instead of presenting them as full analyses.
+    lock_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
