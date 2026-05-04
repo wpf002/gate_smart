@@ -517,38 +517,41 @@ async def get_na_racecards_full(date: str = None) -> dict:
         _re.IGNORECASE,
     )
 
-    # Recovery: scan today's RacePrediction rows for any meet_ids that
-    # nightly_predict_all knew about this morning but are now missing from
-    # the live /meets response. Upstream prunes finished meets aggressively;
-    # this brings them back so the home page reflects every track that
-    # actually ran today, not just the ones still upcoming.
+    # Recovery: nightly_predict_all writes a RacePrediction row for every
+    # NA race at 11 AM ET, so the DB has a complete record of which tracks
+    # ran today even after upstream prunes them from /meets and /entries.
+    # Bring those back as stubs so the home page reflects every track
+    # that actually ran today, not just the ones still upcoming.
+    db_recovered_predictions: list = []
     if target_date == datetime.now(eastern).date():
         try:
             from app.core import database as _db
             from app.models.accuracy import RacePrediction
-            from sqlalchemy import select, distinct
+            from sqlalchemy import select
 
             live_meet_ids = {m.get("meet_id") for m in meets if m.get("meet_id")}
             async with _db._AsyncSessionLocal() as db:
                 result = await db.execute(
-                    select(distinct(RacePrediction.race_id))
+                    select(RacePrediction)
                     .where(
                         RacePrediction.race_date == target_date,
                         RacePrediction.user_id.is_(None),
                         RacePrediction.analysis_mode == "auto_daily",
                     )
                 )
-                race_ids_today = [row[0] for row in result.all() if row[0]]
+                preds = list(result.scalars().all())
 
             recovered_meet_ids = set()
-            for rid in race_ids_today:
-                if "-" in rid:
-                    meet_id = rid.rsplit("-", 1)[0]
-                    if meet_id and meet_id not in live_meet_ids:
-                        recovered_meet_ids.add(meet_id)
+            for p in preds:
+                if not p.race_id or "-" not in p.race_id:
+                    continue
+                meet_id = p.race_id.rsplit("-", 1)[0]
+                if meet_id and meet_id not in live_meet_ids:
+                    recovered_meet_ids.add(meet_id)
+                    db_recovered_predictions.append(p)
 
             for meet_id in recovered_meet_ids:
-                meets.append({"meet_id": meet_id})
+                meets.append({"meet_id": meet_id, "_recovered_from_db": True})
         except Exception:
             pass
 
@@ -596,6 +599,45 @@ async def get_na_racecards_full(date: str = None) -> dict:
                 all_races.append(normalized)
         except Exception:
             continue
+
+    # If a recovered meet's entries also failed (upstream purged everything,
+    # not just /meets), synthesize minimal racecard stubs from the
+    # RacePrediction rows so the home page can still list those tracks.
+    # Stubs lack runner detail; clicking through will show a graceful
+    # "results pending" state via the existing race_detail flow.
+    if db_recovered_predictions:
+        try:
+            from app.services.secretariat import TRACK_NAMES
+        except Exception:
+            TRACK_NAMES = {}
+        seen_meet_ids_in_results = {
+            r.get("race_id", "").rsplit("-", 1)[0]
+            for r in all_races
+            if r.get("race_id") and "-" in r.get("race_id", "")
+        }
+        for p in db_recovered_predictions:
+            if not p.race_id:
+                continue
+            meet_id = p.race_id.rsplit("-", 1)[0] if "-" in p.race_id else ""
+            if meet_id and meet_id in seen_meet_ids_in_results:
+                continue  # entries fetch succeeded; don't overwrite
+            if p.race_id in seen_race_ids:
+                continue
+            seen_race_ids.add(p.race_id)
+            track_name = TRACK_NAMES.get((p.track_code or "").upper()) or (p.track_code or "Unknown")
+            all_races.append({
+                "race_id": p.race_id,
+                "course": track_name,
+                "course_id": p.track_code or "",
+                "track_code": p.track_code or "",
+                "race_name": p.race_name or "",
+                "race_type": p.race_type or "",
+                "surface": p.surface or "",
+                "runners": [],  # no runner data when upstream is fully gone
+                "off_dt": None,
+                "post_time_et": p.post_time_et,
+                "_stub_from_db": True,
+            })
 
     # Sticky union — once a race is seen for this date, keep it on the list
     # for the rest of the day even if upstream prunes the meet from /meets
