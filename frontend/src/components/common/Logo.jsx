@@ -17,7 +17,7 @@ export function GateSmartMark({ size = 48 }) {
       width={size}
       height={size}
       xmlns="http://www.w3.org/2000/svg"
-      style={{ display: 'block' }}
+      style={{ display: 'block', margin: '0 auto' }}
       aria-label="GateSmart"
     >
       <rect x="0" y="0" width="64" height="64" rx="10" ry="10" fill={GOLD} />

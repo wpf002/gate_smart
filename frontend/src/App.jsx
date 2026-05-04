@@ -94,7 +94,7 @@ function SideNav() {
       <div
         className="side-nav-logo"
         onClick={goToRacesFresh}
-        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+        style={{ cursor: 'pointer' }}
       >
         <GateSmartMark size={56} />
       </div>
