@@ -12,6 +12,7 @@ import AffiliateDrawer from '../components/common/AffiliateDrawer';
 import { PARTNERS } from '../utils/affiliates';
 import Icon from '../components/common/Icon';
 import AccuracyBadge, { MorningLineBadge } from '../components/common/AccuracyBadge';
+import { getMorningLine } from '../utils/api';
 import NotificationBell from '../components/common/NotificationBell';
 
 const FINISH_POSITION = {
@@ -657,6 +658,19 @@ export default function RaceDetailPage() {
     },
   });
 
+  // Mirror of MorningLineBadge's query — TanStack dedupes by key, so this is
+  // a free read of the same cache entry. We need to know up-front whether a
+  // morning line exists so the layout below can collapse to one column
+  // instead of leaving a blank half-row.
+  const { data: morningLine } = useQuery({
+    queryKey: ['morning-line', raceId],
+    queryFn: () => getMorningLine(raceId),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    enabled: !!raceId,
+  });
+  const hasMorningLine = !!(morningLine?.available && morningLine?.picks);
+
   // Poll for results once a race is finished. Upstream chart publish can take
   // anywhere from a few minutes (routine maidens) to 20+ minutes (stakes,
   // photo finishes, inquiries). We retry every 30s until the API returns a
@@ -900,16 +914,18 @@ export default function RaceDetailPage() {
             original morning-line picks even after the race runs. */}
         {race && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'stretch' }}>
-            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+            <div style={{ flex: hasMorningLine ? '1 1 280px' : '1 1 100%', minWidth: 0 }}>
               <AccuracyBadge
                 trackCode={race.track_code || race.course_id || race.course}
                 trackName={race.course || race.track}
                 compact={false}
               />
             </div>
-            <div style={{ flex: '1 1 280px', minWidth: 0 }}>
-              <MorningLineBadge raceId={raceId} />
-            </div>
+            {hasMorningLine && (
+              <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+                <MorningLineBadge raceId={raceId} />
+              </div>
+            )}
           </div>
         )}
 

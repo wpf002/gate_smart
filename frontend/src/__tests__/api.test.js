@@ -193,6 +193,7 @@ describe('askAdvisor', () => {
     expect(mockAxios.post).toHaveBeenCalledWith('/advisor/ask', {
       question: 'What is each way?',
       context: null,
+      history: null,
     });
   });
 
@@ -202,6 +203,7 @@ describe('askAdvisor', () => {
     expect(mockAxios.post).toHaveBeenCalledWith('/advisor/ask', {
       question: 'Who should I back?',
       context: { race_id: 'r1' },
+      history: null,
     });
   });
 });
