@@ -29,7 +29,7 @@ const CONFIDENCE_PLAIN = {
 };
 
 // ── AnalysisPanel ─────────────────────────────────────────────────────────────
-function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '', raceType = '', raceFinished = false }) {
+function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'usa', raceId = '', course = '', raceType = '', raceFinished = false, morningLine = null }) {
   const [techExpanded, setTechExpanded] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerHorse, setDrawerHorse] = useState('');
@@ -230,12 +230,74 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
     </div>
   ) : null;
 
+  // Compare a fresh re-run analysis against the locked morning line. The note
+  // only shows when the displayed analysis was generated live (no `lock_source`
+  // — the nightly job stamps "nightly" on its cached runs) AND the morning line
+  // came from a full nightly run (a `nightly_fallback` morning line already
+  // wears a QUICK PICK pill explaining future divergence). Compares the top
+  // four picks in order; any mismatch trips the banner.
+  const divergenceInfo = (() => {
+    if (!analysis?.predicted_finish || !morningLine?.available || !morningLine?.picks) return null;
+    if (analysis.lock_source === 'nightly') return null;
+    if (morningLine.lock_source === 'nightly_fallback') return null;
+    const newPicks = ['first', 'second', 'third', 'fourth']
+      .map(pos => analysis.predicted_finish[pos]?.number)
+      .map(n => (n == null || n === '') ? null : String(n));
+    if (!newPicks[0]) return null;
+    const mlPicks = (morningLine.picks || []).map(p => (p == null) ? null : String(p));
+    const compareN = Math.min(newPicks.length, mlPicks.length);
+    let differs = false;
+    for (let i = 0; i < compareN; i++) {
+      if (newPicks[i] && mlPicks[i] && newPicks[i] !== mlPicks[i]) { differs = true; break; }
+    }
+    if (!differs) return null;
+    return {
+      mlFormatted: mlPicks.map(p => p ?? '?').join('-'),
+      newFormatted: newPicks.filter(Boolean).join('-'),
+    };
+  })();
+
   // Predicted finish order
   const PredictedFinishSection = () => analysis.predicted_finish ? (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
         Predicted Finish Order
       </div>
+      {divergenceInfo && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 12px', marginBottom: 10,
+          background: 'linear-gradient(135deg, rgba(201,162,39,0.10) 0%, rgba(201,162,39,0.04) 100%)',
+          border: '1px solid var(--border-gold)',
+          borderRadius: 'var(--radius-md)',
+          fontSize: 12, lineHeight: 1.4,
+        }}>
+          <Icon name="refresh" size={14} color="var(--accent-gold)" />
+          <span style={{
+            fontFamily: 'var(--font-display)', fontSize: 10,
+            letterSpacing: '0.08em', color: 'var(--accent-gold)',
+            padding: '2px 6px', borderRadius: 4,
+            border: '1px solid var(--border-gold)',
+            background: 'rgba(201,162,39,0.12)',
+            flexShrink: 0,
+          }}>
+            LIVE RE-RUN
+          </span>
+          <span style={{ color: 'var(--text-secondary)', flex: 1, minWidth: 0 }}>
+            Differs from morning line
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontWeight: 700,
+              color: 'var(--accent-gold-bright)', marginLeft: 6,
+              letterSpacing: '0.04em',
+            }}>
+              {divergenceInfo.mlFormatted}
+            </span>
+            <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 11 }}>
+              · re-runs use fresh inputs
+            </span>
+          </span>
+        </div>
+      )}
       {['first', 'second', 'third', 'fourth'].map(pos => {
         const p = analysis.predicted_finish[pos];
         if (!p?.horse_name) return null;
@@ -1014,7 +1076,7 @@ export default function RaceDetailPage() {
         {showTabs && (
           <div style={{ marginBottom: 16 }}>
             {tabs.length > 1 && <TabBar tabs={tabs} active={validTab} onChange={setActiveTab} />}
-            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} runners={race?.runners || []} userRegion={userProfile?.region || 'usa'} raceId={raceId} course={race?.course || race?.venue || ''} raceType={race?.race_type || race?.race_class || ''} raceFinished={raceFinished} />}
+            {validTab === 'analysis' && <AnalysisPanel analysis={analysis} loading={analysisStreaming} mode={analysisMode} runners={race?.runners || []} userRegion={userProfile?.region || 'usa'} raceId={raceId} course={race?.course || race?.venue || ''} raceType={race?.race_type || race?.race_class || ''} raceFinished={raceFinished} morningLine={morningLine} />}
             {validTab === 'debrief' && <DebriefPanel debrief={debrief} loading={debriefLoading} />}
           </div>
         )}

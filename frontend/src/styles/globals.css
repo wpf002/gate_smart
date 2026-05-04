@@ -460,31 +460,6 @@ input::placeholder, textarea::placeholder {
   }
 }
 
-/* ─── Accuracy "no data" banner — inline on desktop, stacked on mobile so the
-       explanation text fills the panel below the title row ──────────────────── */
-.accuracy-no-data {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
-.accuracy-no-data-title {
-  flex-shrink: 0;
-}
-.accuracy-no-data-body::before {
-  content: '· ';
-}
-@media (max-width: 767px) {
-  .accuracy-no-data {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-  .accuracy-no-data-body::before {
-    content: '';
-  }
-}
-
 /* ─── Search page tagline — keep on a single mobile row ──────────────────── */
 @media (max-width: 767px) {
   .search-tagline {

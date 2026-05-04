@@ -34,11 +34,29 @@ function TrackAccuracyBadge({ trackCode, trackName, compact }) {
 
   if (noData) {
     return (
-      <div className="accuracy-no-data" style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
-        <span className="accuracy-no-data-title" style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(201,162,39,0.08) 0%, var(--bg-secondary) 100%)',
+        border: '1px solid var(--border-gold)',
+        borderRadius: 'var(--radius-md)',
+        padding: '12px 14px',
+        marginBottom: 12,
+        height: '100%',
+        boxSizing: 'border-box',
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-display)', fontSize: 11,
+          color: 'var(--accent-gold)', letterSpacing: '0.08em',
+          marginBottom: 4,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
           SECRETARIAT AT {(displayName || '').toUpperCase()}
-        </span>
-        <span className="accuracy-no-data-body" style={{ fontSize: 11, color: 'var(--text-muted)' }}>No predictions recorded here yet — stats appear after races are analyzed and results posted</span>
+        </div>
+        <div style={{
+          fontSize: 13, color: 'var(--text-muted)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          No predictions recorded here yet
+        </div>
       </div>
     );
   }
@@ -50,6 +68,8 @@ function TrackAccuracyBadge({ trackCode, trackName, compact }) {
       borderRadius: 'var(--radius-md)',
       padding: '12px 14px',
       marginBottom: 12,
+      height: '100%',
+      boxSizing: 'border-box',
     }}>
       <div style={{
         fontFamily: 'var(--font-display)', fontSize: 11,
@@ -99,6 +119,8 @@ export function MorningLineBadge({ raceId }) {
       borderRadius: 'var(--radius-md)',
       padding: '12px 14px',
       marginBottom: 12,
+      height: '100%',
+      boxSizing: 'border-box',
     }}>
       <div style={{
         fontFamily: 'var(--font-display)', fontSize: 11,
