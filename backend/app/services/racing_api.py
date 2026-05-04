@@ -517,6 +517,41 @@ async def get_na_racecards_full(date: str = None) -> dict:
         _re.IGNORECASE,
     )
 
+    # Recovery: scan today's RacePrediction rows for any meet_ids that
+    # nightly_predict_all knew about this morning but are now missing from
+    # the live /meets response. Upstream prunes finished meets aggressively;
+    # this brings them back so the home page reflects every track that
+    # actually ran today, not just the ones still upcoming.
+    if target_date == datetime.now(eastern).date():
+        try:
+            from app.core import database as _db
+            from app.models.accuracy import RacePrediction
+            from sqlalchemy import select, distinct
+
+            live_meet_ids = {m.get("meet_id") for m in meets if m.get("meet_id")}
+            async with _db._AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(distinct(RacePrediction.race_id))
+                    .where(
+                        RacePrediction.race_date == target_date,
+                        RacePrediction.user_id.is_(None),
+                        RacePrediction.analysis_mode == "auto_daily",
+                    )
+                )
+                race_ids_today = [row[0] for row in result.all() if row[0]]
+
+            recovered_meet_ids = set()
+            for rid in race_ids_today:
+                if "-" in rid:
+                    meet_id = rid.rsplit("-", 1)[0]
+                    if meet_id and meet_id not in live_meet_ids:
+                        recovered_meet_ids.add(meet_id)
+
+            for meet_id in recovered_meet_ids:
+                meets.append({"meet_id": meet_id})
+        except Exception:
+            pass
+
     all_races = []
     seen_race_ids: set[str] = set()
     for meet in meets:
