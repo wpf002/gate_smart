@@ -224,7 +224,15 @@ async def get_horse_results(horse_id: str, limit: int = 10) -> dict:
 # ── Jockeys & Trainers ────────────────────────────────────────────────────────
 
 async def get_na_meets(date: str = None) -> dict:
-    """Get all North America race meets for a given date (requires NA add-on)."""
+    """Get all North America race meets for a given date (requires NA add-on).
+
+    Maintains a sticky union per date — the upstream API drops meets
+    from /north-america/meets once their card finishes, which would make
+    a finished track silently disappear from the home page mid-afternoon.
+    We persist every meet seen for a date in `na:meets:sticky:{date}`
+    (24h TTL) and union new fetches with it so a track stays listed
+    until the day ends.
+    """
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
     eastern = ZoneInfo("America/New_York")
@@ -234,12 +242,32 @@ async def get_na_meets(date: str = None) -> dict:
         race_date = (datetime.now(eastern).date() + timedelta(days=1)).isoformat()
     else:
         race_date = date
-    return await _get(
+
+    live = await _get(
         "/north-america/meets",
         params={"start_date": race_date, "end_date": race_date},
         cache_key=f"na:meets:{race_date}",
         ttl=600,
     )
+
+    sticky_key = f"na:meets:sticky:{race_date}"
+    sticky = await cache_get(sticky_key) or {"meets": []}
+
+    by_id: dict[str, dict] = {}
+    for m in sticky.get("meets", []) or []:
+        mid = m.get("meet_id")
+        if mid:
+            by_id[mid] = m
+    # Live response wins on conflicts so we get the freshest field for any
+    # meet that's still being updated upstream.
+    for m in live.get("meets", []) or []:
+        mid = m.get("meet_id")
+        if mid:
+            by_id[mid] = m
+
+    union = {**live, "meets": list(by_id.values())}
+    await cache_set(sticky_key, union, ex=86400)
+    return union
 
 
 async def get_na_meet_entries(meet_id: str) -> dict:
@@ -534,7 +562,29 @@ async def get_na_racecards_full(date: str = None) -> dict:
         except Exception:
             continue
 
-    return {"racecards": all_races, "total": len(all_races), "region": "usa"}
+    # Sticky union — once a race is seen for this date, keep it on the list
+    # for the rest of the day even if upstream prunes the meet from /meets
+    # or /entries (which it does aggressively as cards finish, sometimes
+    # even mid-card while the last race is still running). Without this,
+    # tracks silently disappear from the home page during the racing day.
+    sticky_key = f"na:racecards_full:sticky:{target_date.isoformat()}"
+    sticky = await cache_get(sticky_key) or {"racecards": []}
+
+    by_id: dict[str, dict] = {}
+    for r in sticky.get("racecards", []) or []:
+        rid = r.get("race_id")
+        if rid:
+            by_id[rid] = r
+    # Live data wins on conflict (so scratches / ML changes propagate)
+    for r in all_races:
+        rid = r.get("race_id")
+        if rid:
+            by_id[rid] = r
+
+    merged = list(by_id.values())
+    payload = {"racecards": merged, "total": len(merged), "region": "usa"}
+    await cache_set(sticky_key, payload, ex=86400)
+    return payload
 
 
 async def get_na_results_full(date: str = None) -> dict:
