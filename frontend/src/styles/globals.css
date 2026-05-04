@@ -34,7 +34,7 @@
   --radius-lg: 16px;
 
   --bottom-nav-height: 64px;
-  --sidebar-width: 132px;
+  --sidebar-width: 104px;
 }
 
 /* ─── Reset ─────────────────────────────────────────────────────────────── */
@@ -138,7 +138,7 @@ input, textarea, select {
   font-size: 26px;
   color: var(--accent-gold);
   letter-spacing: 0.06em;
-  padding: 0 14px 20px;
+  padding: 0 8px 16px;
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 12px;
 }
@@ -147,7 +147,7 @@ input, textarea, select {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 12px 12px;
   background: none;
   border: none;
   cursor: pointer;
