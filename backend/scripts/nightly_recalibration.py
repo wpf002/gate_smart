@@ -18,6 +18,7 @@ from collections import defaultdict
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -65,9 +66,10 @@ def _categorise(data: dict, baseline: float, min_samples: int = 10, delta: float
 
 
 async def main(dry_run: bool):
+    from sqlalchemy import select
+
     from app.core import database as _db
     from app.models.accuracy import RacePrediction, SecretariatCalibration
-    from sqlalchemy import select
 
     await _db.init_db()
     await _ensure_columns(_db._engine)

@@ -15,7 +15,6 @@ from typing import Optional
 from app.core.cache import cache_get
 from app.services.secretariat import compute_input_fingerprint
 
-
 # Must match nightly_predict_all.LOCK_MODE — that's the cache key the
 # nightly Sonnet pass writes to.
 _LOCK_MODE = "medium"

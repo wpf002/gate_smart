@@ -77,10 +77,12 @@ async def check_and_send_race_alerts() -> None:
     needed, then fires a OneSignal notification and marks alert_sent=True.
     """
     try:
+        from sqlalchemy import select
+        from sqlalchemy import update as _update
+
         from app.core.database import _AsyncSessionLocal
         from app.models.accuracy import RacePrediction
         from app.services.notifications import send_race_alert_notification
-        from sqlalchemy import select, update as _update
 
         if not _AsyncSessionLocal:
             return

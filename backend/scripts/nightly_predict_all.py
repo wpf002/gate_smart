@@ -21,6 +21,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -155,13 +156,15 @@ async def predict_race(
 
 
 async def main(target_date: datetime.date, dry_run: bool):
-    import httpx
-    import anthropic
     import ssl
-    from app.core.config import settings
-    from app.core import database as _db
-    from app.models.accuracy import RacePrediction
+
+    import anthropic
+    import httpx
     from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.core import database as _db
+    from app.core.config import settings
+    from app.models.accuracy import RacePrediction
 
     await _db.init_db()
 
@@ -220,8 +223,8 @@ async def main(target_date: datetime.date, dry_run: bool):
     # same Redis cache key the live route checks (keyed by input fingerprint),
     # so repeat clicks return the locked nightly analysis verbatim — no live
     # LLM call unless inputs (scratch / jockey / ML) actually change.
-    from app.services.secretariat import analyze_race, compute_input_fingerprint
     from app.core.cache import cache_set as _cache_set
+    from app.services.secretariat import analyze_race, compute_input_fingerprint
 
     # Mode used for the cached analysis. Frontend's default risk tolerance
     # is "medium" (see RaceDetailPage MODES const), so caching under "medium"
@@ -312,7 +315,7 @@ async def main(target_date: datetime.date, dry_run: bool):
                 analysis["locked_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 analysis["input_fingerprint"] = fp
                 analysis["lock_source"] = "nightly"
-                cache_key = f"ai_analysis:{race_id}:{LOCK_MODE}:{fp}"
+                cache_key = f"ai_analysis:{race_id}:{LOCK_MODE}:default:{fp}"
                 try:
                     await _cache_set(cache_key, analysis, ex=86400)  # 24h
                 except Exception as e:
@@ -335,7 +338,8 @@ async def main(target_date: datetime.date, dry_run: bool):
                 "post_time_et": post_time_et,
                 "lock_source": lock_source,
             }
-            from sqlalchemy import update as _update, or_ as _or_
+            from sqlalchemy import or_ as _or_
+            from sqlalchemy import update as _update
             async with _db._AsyncSessionLocal() as db:
                 stmt = pg_insert(RacePrediction).values(**row)
                 stmt = stmt.on_conflict_do_nothing(constraint="uq_race_prediction")

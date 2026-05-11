@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
+from app.core.cache import cache_get, cache_incr, cache_set
 from app.services import racing_api
-from app.core.cache import cache_get, cache_set, cache_incr
 
 router = APIRouter()
 

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 log = logging.getLogger(__name__)
 
-from app.core.cache import cache_get, cache_set, cache_incr
+from app.core.cache import cache_get, cache_incr, cache_set
 from app.core.limiter import limiter
 from app.services import racing_api, secretariat
 
@@ -82,7 +82,8 @@ async def analyze_race(request: Request) -> JSONResponse:
         raise HTTPException(status_code=502, detail="Racing data unavailable")
 
     fp = secretariat.compute_input_fingerprint(race_data)
-    cache_key = f"ai_analysis:{req.race_id}:{req.mode}:{fp}"
+    exp = req.experience_level or "default"
+    cache_key = f"ai_analysis:{req.race_id}:{req.mode}:{exp}:{fp}"
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
@@ -213,7 +214,8 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
                 return
 
             fp = secretariat.compute_input_fingerprint(race_data)
-            cache_key = f"ai_analysis:{req.race_id}:{req.mode}:{fp}"
+            exp = req.experience_level or "default"
+            cache_key = f"ai_analysis:{req.race_id}:{req.mode}:{exp}:{fp}"
 
             cached = await cache_get(cache_key)
             if cached is not None:
@@ -247,6 +249,11 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
                     pass
                 yield f"data: {json.dumps({'result': result})}\n\n"
 
+        except json.JSONDecodeError:
+            log.exception("analyze_race_stream JSON parse failed (likely truncation) for race_id=%s mode=%s", req.race_id, req.mode)
+            yield f"data: {json.dumps({'error': 'Secretariat response was incomplete — please try again.'})}\n\n"
+        except secretariat.SecretariatBusyError as exc:
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
         except Exception:
             log.exception("analyze_race_stream failed for race_id=%s mode=%s", req.race_id, req.mode)
             yield f"data: {json.dumps({'error': 'An unexpected error occurred'})}\n\n"
@@ -319,9 +326,10 @@ async def morning_line(race_id: str) -> JSONResponse:
     reads this; no LLM call (data is already in the DB)."""
     _validate_race_id(race_id)
 
+    from sqlalchemy import select
+
     from app.core import database as _db
     from app.models.accuracy import RacePrediction
-    from sqlalchemy import select
 
     async with _db._AsyncSessionLocal() as db:
         result = await db.execute(
@@ -560,7 +568,7 @@ async def _settle_prediction(race_id: str, race_result: dict) -> None:
 async def clear_race_analysis(race_id: str) -> JSONResponse:
     """Clear cached analysis and scorecard for a race (used by the Reset button)."""
     _validate_race_id(race_id)
-    from app.core.cache import cache_keys, cache_delete
+    from app.core.cache import cache_delete, cache_keys
     keys = await cache_keys(f"ai_analysis:{race_id}:*")
     keys += await cache_keys(f"scorecard:{race_id}")
     for key in keys:
@@ -591,9 +599,10 @@ async def secretariat_accuracy() -> JSONResponse:
     if cached is not None:
         return JSONResponse(cached)
 
+    from sqlalchemy import select
+
     from app.core import database as _db
     from app.models.accuracy import RacePrediction
-    from sqlalchemy import select
 
     def _norm(name):
         return (name or "").lower().strip().replace("'", "").replace("-", " ")

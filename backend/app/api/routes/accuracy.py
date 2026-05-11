@@ -4,7 +4,7 @@ Accuracy API — daily report retrieval, history, and manual email trigger.
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, desc, func
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, get_optional_user
@@ -112,6 +112,7 @@ async def resettle_date(
     Protected by admin_key matching SECRET_KEY.
     """
     import datetime as dt
+
     import sqlalchemy
 
     if payload.get("admin_key") != settings.SECRET_KEY:
@@ -134,8 +135,9 @@ async def resettle_date(
         for stmt in ddl:
             await conn.execute(sqlalchemy.text(stmt))
 
-    from app.models.accuracy import RacePrediction, DailyAccuracyReport
     from sqlalchemy import update
+
+    from app.models.accuracy import DailyAccuracyReport, RacePrediction
 
     # 1. Reset predictions to unsettled
     await db.execute(
@@ -270,8 +272,8 @@ async def resettle_date(
     )
     report_obj = report_res.scalar_one()
 
-    from app.services.secretariat import generate_daily_email_report
     from app.services.email_service import send_daily_report
+    from app.services.secretariat import generate_daily_email_report
 
     email_content = await generate_daily_email_report(report_obj, preds_list)
     sent = await send_daily_report(
@@ -328,8 +330,8 @@ async def trigger_send_report(
     )
     predictions = preds_result.scalars().all()
 
-    from app.services.secretariat import generate_daily_email_report
     from app.services.email_service import send_daily_report
+    from app.services.secretariat import generate_daily_email_report
 
     email_content = await generate_daily_email_report(report, predictions)
     sent = await send_daily_report(

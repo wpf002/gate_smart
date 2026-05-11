@@ -3,10 +3,12 @@ Secretariat — GateSmart's AI handicapping engine.
 Powered by Claude (Anthropic). This is the core intelligence of the platform.
 All race analysis, horse evaluation, and betting recommendations flow through here.
 """
+import json
 import ssl
+
 import anthropic
 import httpx
-import json
+
 from app.core.config import settings
 from app.core.llm_cost import tracked_create
 
@@ -224,13 +226,17 @@ This playbook is additive — it does not change the JSON output schema, the con
 
 Always include the program number (#) with every horse name in predictions and recommendations. Program numbers are how bettors identify horses at the teller window.
 
-DUAL EXPLANATION REQUIREMENT:
-For every analysis, write TWO versions of your summary:
-1. Technical version (overall_summary): use proper handicapping terminology (Beyer figures, pace scenarios, class relief, etc.)
-2. Beginner version (overall_summary_beginner): explain as if talking to someone who has NEVER been to a horse race. No jargon. Examples:
-   - Instead of "class relief" say "this horse is competing against easier opponents today"
-   - Instead of "pace scenario" say "how fast the race will be run and whether that helps this horse"
-   - Instead of "vulnerable favorite" say "the horse most people are betting on might not win because..."
+SUMMARY STYLE — single voice, adapts to USER EXPERIENCE LEVEL:
+Write ONE overall_summary (and one per-runner summary). Style is driven by the
+"USER EXPERIENCE LEVEL" directive on each prompt:
+- beginner: plain English, no jargon. Translate "class relief" → "competing against
+  easier opponents today"; "pace scenario" → "how fast the race will be run and
+  whether that helps this horse"; "vulnerable favorite" → "the horse most people
+  are betting on might not win because...".
+- advanced: proper handicapping terminology (Beyer trajectory, pace shape,
+  class moves). No over-explaining basics.
+- intermediate (or unspecified): balanced — include figures and pace but briefly
+  explain their significance.
 
 BEGINNER EDUCATION:
 - Always explain US-specific terms when they appear (Beyer, claiming race, allowance, etc.)
@@ -256,7 +262,9 @@ async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, s
     Never raises — catch all exceptions and return empty dict.
     """
     import re
+
     from sqlalchemy import select, text
+
     from app.core.cache import cache_get
     from app.core.database import _AsyncSessionLocal
     from app.models.equibase import HorsePastPerformance, HorseResultChart
@@ -451,15 +459,15 @@ def _truncate_analysis(data: dict) -> dict:
     data['race_summary'] = _trunc(data.get('race_summary', ''), SUMMARY)
     data['pace_scenario'] = _trunc(data.get('pace_scenario', ''), SENT)
     data['overall_summary'] = _trunc(data.get('overall_summary', ''), SUMMARY)
-    data['overall_summary_beginner'] = _trunc(data.get('overall_summary_beginner', ''), SUMMARY)
     data['beginner_tip'] = _trunc(data.get('beginner_tip', ''), SENT)
+    data.pop('overall_summary_beginner', None)
 
     la = data.get('longshot_alert') or {}
     la['reason'] = _trunc(la.get('reason', ''), SENT)
 
     for r in data.get('runners', []):
         r['summary'] = _trunc(r.get('summary', ''), SENT)
-        r['summary_beginner'] = _trunc(r.get('summary_beginner', ''), SENT)
+        r.pop('summary_beginner', None)
         r['strengths'] = [_trunc(s, PHRASE) for s in r.get('strengths', [])]
         r['weaknesses'] = [_trunc(s, PHRASE) for s in r.get('weaknesses', [])]
 
@@ -566,15 +574,14 @@ def _experience_level_block(experience_level: str | None) -> str:
             "\nUSER EXPERIENCE LEVEL: beginner. "
             "Lead with your top pick clearly identified. "
             "Keep overall_summary under 2 sentences. "
-            "Write overall_summary_beginner as the primary output — "
+            "Write overall_summary and every runner summary in plain English — "
             "speak directly to someone at their first race. No jargon.\n"
         )
     if experience_level == "advanced":
         return (
             "\nUSER EXPERIENCE LEVEL: advanced. "
             "Lead with speed figures, class analysis, and pace scenario. "
-            "Use proper handicapping terminology. "
-            "The technical summary is primary. "
+            "Use proper handicapping terminology in overall_summary and every runner summary. "
             "Be specific about Beyer trajectory, class relief/rise, trainer patterns, and pace shape. "
             "Do not over-explain basics.\n"
         )
@@ -670,8 +677,7 @@ Return this JSON exactly:
       "value_score": 0-100,
       "strengths": ["short phrase"],
       "weaknesses": ["short phrase"],
-      "summary": "one sentence technical",
-      "summary_beginner": "one sentence plain English — no jargon",
+      "summary": "one sentence — style follows USER EXPERIENCE LEVEL above",
       "fair_odds": "e.g. 3/1",
       "recommended_bet": "win/place/show/avoid/use-in-exotics or null"
     }}
@@ -703,8 +709,7 @@ Return this JSON exactly:
     "trifecta":  "Say to teller: '$X Trifecta, N-M-K, race R'",
     "superfecta":"Say to teller: '$X Superfecta, N-M-K-J, race R'"
   }},
-  "overall_summary": "2-3 sentences — technical, for experienced bettors. Complete sentences, do not cut off mid-thought.",
-  "overall_summary_beginner": "2-3 sentences — plain English, no jargon, for first-time racegoers. Complete sentences.",
+  "overall_summary": "2-3 sentences — style follows USER EXPERIENCE LEVEL above. Complete sentences, do not cut off mid-thought.",
   "beginner_tip": "one concrete action a first-time bettor can take today — any stake mentioned must follow STAKE SIZING RULES",
   "confidence": "low/medium/high"
 }}"""
@@ -777,8 +782,7 @@ Return this JSON exactly:
       "value_score": 0-100,
       "strengths": ["short phrase"],
       "weaknesses": ["short phrase"],
-      "summary": "one sentence technical",
-      "summary_beginner": "one sentence plain English — no jargon",
+      "summary": "one sentence — style follows USER EXPERIENCE LEVEL above",
       "fair_odds": "e.g. 3/1",
       "recommended_bet": "win/place/show/avoid/use-in-exotics or null"
     }}
@@ -810,8 +814,7 @@ Return this JSON exactly:
     "trifecta":  "Say to teller: '$X Trifecta, N-M-K, race R'",
     "superfecta":"Say to teller: '$X Superfecta, N-M-K-J, race R'"
   }},
-  "overall_summary": "2-3 sentences — technical, for experienced bettors. Complete sentences, do not cut off mid-thought.",
-  "overall_summary_beginner": "2-3 sentences — plain English, no jargon, for first-time racegoers. Complete sentences.",
+  "overall_summary": "2-3 sentences — style follows USER EXPERIENCE LEVEL above. Complete sentences, do not cut off mid-thought.",
   "beginner_tip": "one concrete action a first-time bettor can take today — any stake mentioned must follow STAKE SIZING RULES",
   "confidence": "low/medium/high"
 }}"""
@@ -1064,6 +1067,7 @@ async def score_race(race_data: dict) -> dict:
     Called from the /advisor/scorecard endpoint.
     """
     import asyncio
+
     from app.core.cache import cache_get, cache_set
 
     runners = race_data.get("runners", [])
@@ -1347,8 +1351,9 @@ async def extract_and_store_fair_prices(race_id: str, analysis: dict) -> None:
     Key: alerts:fair:{race_id}:{horse_id}
     TTL: 14400 (4 hours)
     """
-    from app.core.cache import cache_set
     import datetime
+
+    from app.core.cache import cache_set
     runners = analysis.get("runners", [])
     for runner in runners:
         horse_id = runner.get("horse_id", "")
@@ -1382,12 +1387,54 @@ _LIVE_RACING_KEYWORDS = (
 )
 
 
-def _needs_web_search(question: str) -> bool:
-    """True if the question is asking about current racing state (entries, odds,
-    upcoming races) and therefore justifies the more expensive Sonnet+search path.
-    Otherwise we answer cheaply from Haiku's training knowledge."""
-    q = (question or "").lower()
-    return any(kw in q for kw in _LIVE_RACING_KEYWORDS)
+_OBVIOUS_LIVE_RACES = (
+    "preakness", "kentucky derby", "belmont stakes", "breeders' cup", "breeders cup",
+    "travers", "haskell", "arlington million", "pacific classic", "santa anita derby",
+    "florida derby", "wood memorial", "blue grass stakes", "arkansas derby",
+)
+
+
+async def _needs_web_search(question: str) -> bool:
+    """Decide whether the question needs live web data.
+
+    Fast paths first (no LLM call): obvious live-racing keywords, or named
+    current stakes races. Otherwise fall back to a cheap Haiku classifier so
+    creative phrasings ("who do you think will win the Preakness this year?")
+    still route to the Sonnet+search path.
+    """
+    q = (question or "").lower().strip()
+    if not q:
+        return False
+    if any(kw in q for kw in _LIVE_RACING_KEYWORDS):
+        return True
+    if any(race in q for race in _OBVIOUS_LIVE_RACES):
+        return True
+
+    # Cheap classifier — Haiku, ~$0.0003/call. Bypasses brittle keyword matching.
+    try:
+        resp = await tracked_create(
+            client,
+            endpoint="ask_route_classifier",
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4,
+            temperature=0.0,
+            system=(
+                "You classify a single user question. Reply with one token: "
+                "YES if the question is about current racing state (today's races, "
+                "specific upcoming stakes, live odds, recent results, named horses "
+                "in races happening now or soon, recent scratches/workouts). "
+                "NO if the question is about evergreen handicapping theory, "
+                "history, bet types, training, breeding, or general strategy. "
+                "Reply with only YES or NO."
+            ),
+            messages=[{"role": "user", "content": q[:500]}],
+        )
+        text = _extract_text(resp).strip().upper()
+        return text.startswith("YES")
+    except Exception:
+        # Classifier failed — be conservative and don't search (avoids burning $0.07
+        # on a Sonnet+search call we may not need). User can rephrase.
+        return False
 
 
 async def answer_betting_question(question: str, context: dict = None, history: list[dict] = None) -> str:
@@ -1403,7 +1450,7 @@ async def answer_betting_question(question: str, context: dict = None, history: 
     import datetime
 
     today_str = datetime.date.today().strftime("%A, %B %d, %Y")
-    use_search = _needs_web_search(question)
+    use_search = await _needs_web_search(question)
 
     prompt = f"""Today is {today_str}.
 
@@ -1436,6 +1483,11 @@ NEVER ACCEPTABLE:
 - Generic gambling platitudes instead of a real handicap.
 - Returning fewer than 4 sentences for a substantive question.
 - Answers that don't name specific horses for race-prediction questions.
+- Inventing horse names, trainer names, or race results when you cannot search.
+  If you do not have web search available AND the question requires current
+  racing data, you MUST say so directly — list the data you would need from
+  the user (field, morning line, recent prep results) — and never fabricate
+  entries, finishing orders, or trainer/jockey assignments.
 
 DEPTH AND TONE:
 - Beginner questions (rules, terms, bet types): plain English, concrete example.
@@ -1538,9 +1590,10 @@ async def _store_prediction(
     Never raises; all exceptions are suppressed.
     """
     try:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
         from app.core.database import _AsyncSessionLocal
         from app.models.accuracy import RacePrediction
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
 
         if not _AsyncSessionLocal:
             return
@@ -1602,9 +1655,10 @@ async def _compute_category_trends(report_date, lookback_days: int = 7) -> dict:
     start_date = report_date - datetime.timedelta(days=lookback_days - 1)
 
     try:
+        from sqlalchemy import and_, or_, select
+
         from app.core.database import _AsyncSessionLocal
         from app.models.accuracy import RacePrediction
-        from sqlalchemy import select, and_, or_
 
         if not _AsyncSessionLocal:
             return {"block": "", "persistent_weak": [], "regressing": [], "improving": []}
@@ -2018,22 +2072,37 @@ By surface (win-pick wins/total): {_fmt_bucket(by_surface)}
 Sample correct picks: {hit_sample}
 Sample misses: {miss_sample}
 {track_ref_block}{(trends_block + chr(10)) if trends_block else ""}{stored_lessons_block}
-Write three analysis sections for Secretariat's nightly digest. Be specific and honest.
-Treat the win, place, and show pick rates as three separate accuracy signals — a strong show
-rate with a weak win rate means the model is identifying live contenders but mis-ranking them at
-the top, which is a different problem than missing the contenders entirely.
-When you reference a track, use ONLY the code (e.g. "FL", "FP", "CD") OR the exact full name from
-the TRACK CODE REFERENCE above. NEVER invent or guess a full track name from a code — different
-codes can look similar (FP is Fonner Park, FL is Finger Lakes; do not confuse them).
-When the trend data above shows persistent weak spots or regressions, you MUST name them and
-treat single-day improvements as provisional until they repeat. In "how_im_evolving", only
-claim a prior lesson is working if a category it targeted has actually improved in the trend data.
+Write three analysis sections for Secretariat's nightly digest.
+
+PURPOSE: a non-technical reader should be able to answer three questions after reading:
+  1. What specifically is Secretariat doing well right now? (with names and numbers)
+  2. What specifically is Secretariat doing badly right now? (with names and numbers)
+  3. What specifically is changing tomorrow because of today? (with names and numbers)
+
+Hard rules — every bullet must cite evidence. No abstract claims like "the engine
+is functioning" or "calibration is improving". If you can't point to a specific
+horse, race, track, category, or lesson, do not write the sentence.
+
+Track-code rule: use ONLY the code (e.g. "FL", "FP", "CD") OR the exact full
+name from the TRACK CODE REFERENCE above. Never invent a full name from a code
+(FP is Fonner Park, FL is Finger Lakes — they are different tracks).
+
+Trend rule: treat single-day swings as provisional. A category that "improved"
+in one day after weeks of zero is not validated — say "provisional, needs to
+repeat" rather than "this lesson is working".
+
+Lesson rule: when stored lessons are listed above, name them by the first
+3-6 words and say one of:
+  - "VALIDATED by today" — only if today's results in that category were good
+  - "STILL UNPROVEN" — if today was flat or mixed
+  - "FAILING — should drop" — if today's results in that category were bad
+
 Return JSON exactly:
 {{
   "subject": "Secretariat – {today_str} | {len(hits)}/{total} ({win_pct}) win rate",
-  "what_went_right": "2-4 sentences: which patterns produced correct picks today and why those signals worked. If place or show rates are strong, name what's working at the contender-identification level even when the top pick missed. Name specific tracks, race types, or surfaces if there's a pattern.",
-  "what_went_wrong": "2-4 sentences: which patterns failed and the likely reason. Distinguish missing-the-contenders failures (low show rate) from mis-ranking failures (decent show rate, weak win rate). Be honest about systematic weaknesses, not just bad luck.",
-  "how_im_evolving": "2-4 sentences: specific adjustments I will make, grounded in the 7-day trend data above. If a persistent weak spot exists, name it and commit to a concrete gate. If a prior lesson has NOT moved its target category in the trend data, say so plainly."
+  "what_went_right": "3-5 bullets, one per line, each starting with '• '. Each bullet names a specific horse + track + race type that hit, OR a specific category (e.g. 'Allowance: 6/21, 28.6%') with the count. End each bullet with one phrase explaining WHY the signal worked (pace shape, class drop, jockey switch, speed figure trend, etc.). Example bullet: '• Rock Music at CD R7 (Maiden Claiming) — top pick hit at 8-1; class drop after layoff held up.' If win rate was poor but show rate was high, lead with what THAT means concretely (contender ID worked, top-pick ranking failed).",
+  "what_went_wrong": "3-5 bullets, one per line, each starting with '• '. Each bullet names a specific miss (or a specific category that went 0-for-N) and the SPECIFIC failure mode — not 'mis-ranking', but 'I ranked an 8/1 over a 5/2 in 5 of 8 EMD races'. If a track or race type was a systematic zero, lead with that bullet and quote the 7-day rate. Distinguish 'didn't even get on the board (show miss)' from 'on the board but wrong horse on top (rank miss)'.",
+  "how_im_evolving": "2-4 bullets, one per line, each starting with '• '. EACH bullet must be either: (a) 'KEEPING lesson [first words]: VALIDATED by [today's evidence]' / (b) 'DROPPING lesson [first words]: FAILED — [today's contrary evidence]' / (c) 'NEW RULE: at [track/category], I will [specific concrete action] until [measurable trigger]'. No bullet that doesn't name a lesson, a track, or a measurable trigger. If today produced no actionable change, write a single bullet: '• No rule change today — [reason in one phrase].'"
 }}"""
 
     response = await tracked_create(
@@ -2056,6 +2125,15 @@ Return JSON exactly:
     what_right = analysis.get("what_went_right", "")
     what_wrong = analysis.get("what_went_wrong", "")
     evolving = analysis.get("how_im_evolving", "")
+
+    def _bullets_to_html(text: str) -> str:
+        if not text:
+            return ""
+        lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
+        if all(ln.startswith("•") or ln.startswith("- ") for ln in lines) and len(lines) > 1:
+            items = "".join(f"<li>{ln.lstrip('•- ').strip()}</li>" for ln in lines)
+            return f"<ul style='margin:0;padding-left:20px'>{items}</ul>"
+        return "<p>" + text.replace("\n", "<br>") + "</p>"
 
     # ── Assemble final email in Python ──
     trends_text_section = f"\n7-DAY TRENDS\n{trends_block}\n" if trends_block else ""
@@ -2108,13 +2186,13 @@ COMPLETE RESULTS ({total} races)
   </table>
 
   <h2 style="color:#2d6a2d">✅ What Went Right</h2>
-  <p>{what_right}</p>
+  {_bullets_to_html(what_right)}
 
   <h2 style="color:#a33">❌ What Went Wrong</h2>
-  <p>{what_wrong}</p>
+  {_bullets_to_html(what_wrong)}
 
   <h2 style="color:#c8a84b">🔄 How I'm Evolving</h2>
-  <p>{evolving}</p>
+  {_bullets_to_html(evolving)}
 {_render_trends_html(trends)}
   <h2>📋 Complete Results — All {total} Races</h2>
   {html_table}

@@ -2,10 +2,11 @@
 Unit tests for secretariat._parse_json — the JSON extraction helper
 introduced to fix truncated/malformed Claude responses.
 """
-import pytest
 import json
-from app.services.secretariat import _parse_json
 
+import pytest
+
+from app.services.secretariat import _parse_json
 
 # ---------------------------------------------------------------------------
 # Happy-path parsing
@@ -70,7 +71,6 @@ def test_parse_raises_on_no_json_object():
 # ---------------------------------------------------------------------------
 
 from unittest.mock import AsyncMock, patch
-
 
 CD_RESULTS = {
     "race_id": "CD_meet-1",

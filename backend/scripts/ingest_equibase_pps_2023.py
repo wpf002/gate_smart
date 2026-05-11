@@ -22,14 +22,14 @@ import zipfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
-load_dotenv()
 
-from app.core.config import settings
-from app.services.equibase_api import parse_pp_file
+load_dotenv()
 
 import psycopg2
 import psycopg2.extras
 
+from app.core.config import settings
+from app.services.equibase_api import parse_pp_file
 
 INSERT_SQL = """
 INSERT INTO horse_past_performances (

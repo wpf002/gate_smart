@@ -7,7 +7,7 @@ Run with:  pytest backend/tests/ -v
 import hashlib
 import hmac
 import json
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio

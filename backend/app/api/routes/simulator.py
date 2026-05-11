@@ -9,13 +9,14 @@ logger = logging.getLogger(__name__)
 import msgspec
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, or_
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_optional_user
 from app.core.cache import cache_get, cache_set
 from app.core.database import get_db
-from app.models.user import PaperBet as PaperBetModel, User
+from app.models.user import PaperBet as PaperBetModel
+from app.models.user import User
 from app.services import racing_api
 
 router = APIRouter()

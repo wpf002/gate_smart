@@ -1,0 +1,5 @@
+[tool.isort]
+profile = "black"
+known_first_party = ["app"]
+src_paths = ["app", "scripts", "tests"]
+line_length = 100

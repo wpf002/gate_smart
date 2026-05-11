@@ -29,6 +29,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Races per batch for per-race reflection calls (larger = fewer API calls)
@@ -281,13 +282,15 @@ async def synthesise_lessons(client, reflections: list[dict], date_str: str) -> 
 
 
 async def main(target_date: datetime.date, dry_run: bool):
-    import httpx
-    import anthropic
     import ssl
-    from app.core.config import settings
-    from app.core import database as _db
-    from app.models.accuracy import RacePrediction, SecretariatCalibration
+
+    import anthropic
+    import httpx
     from sqlalchemy import select, update
+
+    from app.core import database as _db
+    from app.core.config import settings
+    from app.models.accuracy import RacePrediction, SecretariatCalibration
 
     await _db.init_db()
     await _ensure_columns(_db._engine)

@@ -270,9 +270,7 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
   const scoreClass =
     score >= 70 ? 'score-high' : score >= 40 ? 'score-med' : score != null ? 'score-low' : null;
 
-  const summaryText = isBeginner
-    ? (analysisData?.summary_beginner || analysisData?.summary)
-    : analysisData?.summary;
+  const summaryText = analysisData?.summary || analysisData?.summary_beginner;
 
   // Beginner rows are always expandable to reveal hidden details
   const hasExpandedContent = isBeginner ? true : !!(summaryText || scorecard);

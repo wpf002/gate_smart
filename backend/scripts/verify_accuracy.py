@@ -13,13 +13,15 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
 async def main():
+    from sqlalchemy import func, select
+
     from app.core import database as _db
     from app.models.accuracy import RacePrediction
-    from sqlalchemy import select, func
 
     await _db.init_db()
 

@@ -6,8 +6,16 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text,
-    UniqueConstraint, Index,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column

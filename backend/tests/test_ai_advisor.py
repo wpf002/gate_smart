@@ -6,10 +6,11 @@ ai_advisor.py imports:
   from app.services import racing_api, secretariat     → patch methods on those module refs
 """
 import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
-from unittest.mock import AsyncMock, patch
 from httpx import ASGITransport, AsyncClient
 
 FAKE_RACE = {"race_id": "race-1", "course": "Cheltenham", "runners": []}
@@ -108,7 +109,7 @@ async def test_analyze_stores_result_in_cache(client):
     # so don't assert on the full dict — just key, TTL, and the new fields.
     cache_set_mock.assert_called_once()
     args, kwargs = cache_set_mock.call_args
-    assert args[0] == f"ai_analysis:race-1:balanced:{expected_fp}"
+    assert args[0] == f"ai_analysis:race-1:balanced:default:{expected_fp}"
     assert args[1]["input_fingerprint"] == expected_fp
     assert "locked_at" in args[1]
     assert kwargs == {"ex": 21600}
@@ -151,7 +152,7 @@ async def test_analyze_cache_key_includes_race_id_and_mode(client):
         await client.post("/api/advisor/analyze",
                           content=_body({"race_id": "race-99", "mode": "longshot"}),
                           headers={"Content-Type": "application/json"})
-    cache_get_mock.assert_called_once_with(f"ai_analysis:race-99:longshot:{expected_fp}")
+    cache_get_mock.assert_called_once_with(f"ai_analysis:race-99:longshot:default:{expected_fp}")
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +291,7 @@ async def test_ask_passes_question_and_context(client):
         await client.post("/api/advisor/ask",
                           content=_body({"question": "Is this horse value?", "context": ctx}),
                           headers={"Content-Type": "application/json"})
-    ask_mock.assert_called_once_with("Is this horse value?", ctx)
+    ask_mock.assert_called_once_with("Is this horse value?", ctx, None)
 
 
 @pytest.mark.asyncio
@@ -300,7 +301,7 @@ async def test_ask_context_defaults_to_none(client):
         await client.post("/api/advisor/ask",
                           content=_body({"question": "What is a furlong?"}),
                           headers={"Content-Type": "application/json"})
-    ask_mock.assert_called_once_with("What is a furlong?", None)
+    ask_mock.assert_called_once_with("What is a furlong?", None, None)
 
 
 @pytest.mark.asyncio

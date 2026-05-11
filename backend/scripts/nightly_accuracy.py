@@ -19,6 +19,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -47,9 +48,10 @@ def _norm(name: str) -> str:
 
 
 async def main(target_date: datetime.date, dry_run: bool):
-    from app.core import database as _db
-    from app.models.accuracy import RacePrediction, DailyAccuracyReport
     from sqlalchemy import select, update
+
+    from app.core import database as _db
+    from app.models.accuracy import DailyAccuracyReport, RacePrediction
 
     await _db.init_db()
     await _ensure_columns(_db._engine)
@@ -281,8 +283,8 @@ async def main(target_date: datetime.date, dry_run: bool):
         preds_list = [_FakePred(s) for s in settled]
 
     # 6. Generate and send email
-    from app.services.secretariat import generate_daily_email_report
     from app.services.email_service import send_daily_report
+    from app.services.secretariat import generate_daily_email_report
 
     print("\n[nightly_accuracy] Generating email via Claude…")
     email = await generate_daily_email_report(report_obj, preds_list)

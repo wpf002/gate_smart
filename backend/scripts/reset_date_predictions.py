@@ -15,6 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -31,9 +32,10 @@ async def _ensure_columns(engine) -> None:
 
 
 async def main(target_date: datetime.date, dry_run: bool):
+    from sqlalchemy import select, update
+
     from app.core import database as _db
     from app.models.accuracy import RacePrediction
-    from sqlalchemy import update, select
 
     await _db.init_db()
     await _ensure_columns(_db._engine)

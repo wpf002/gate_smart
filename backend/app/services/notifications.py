@@ -1,4 +1,5 @@
 import httpx
+
 from app.core.config import settings
 
 ONESIGNAL_API = "https://onesignal.com/api/v1"

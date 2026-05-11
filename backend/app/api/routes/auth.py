@@ -9,12 +9,11 @@ POST /api/auth/logout     — no-op (JWT is stateless; client drops the token)
 """
 from datetime import datetime, timezone
 
+import msgspec
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-import msgspec
 
 from app.core.auth import (
     create_access_token,

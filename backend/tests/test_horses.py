@@ -3,9 +3,10 @@ Tests for GET /api/horses/* — racing_api and secretariat are mocked.
 Routes now use _find_runner_in_racecards (get_racecards lookup) instead of
 get_horse/get_horse_results. Search uses ?q= and the /results route is removed.
 """
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, patch
 from httpx import ASGITransport, AsyncClient
 
 FAKE_RUNNER = {

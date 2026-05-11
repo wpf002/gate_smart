@@ -2,10 +2,11 @@
 Tests for GET /api/races/* — racing_api service is mocked throughout.
 Routes now use NA-only functions (get_na_racecards_full, get_na_results_full).
 """
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
-from unittest.mock import AsyncMock, patch
 from httpx import ASGITransport, AsyncClient
 
 FAKE_NA_RACECARDS = {"racecards": [{"race_id": "IND_1775520000000-1", "course": "Indianapolis"}]}

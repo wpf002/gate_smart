@@ -25,6 +25,7 @@ from itertools import groupby
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -363,13 +364,17 @@ def _render(predictions, yesterday_report, calibration, runner_lookup, race_data
 
 
 async def main(target_date: datetime.date, dry_run: bool):
+    from sqlalchemy import or_, select
+    from sqlalchemy import text as _text
+
     from app.core import database as _db
     from app.core.config import settings
     from app.models.accuracy import (
-        RacePrediction, DailyAccuracyReport, SecretariatCalibration,
+        DailyAccuracyReport,
+        RacePrediction,
+        SecretariatCalibration,
     )
     from app.services.email_service import send_daily_report
-    from sqlalchemy import select, or_, text as _text
 
     await _db.init_db()
 

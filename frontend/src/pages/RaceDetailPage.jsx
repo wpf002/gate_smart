@@ -147,10 +147,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
 
   // Summary text section
   const SummarySection = ({ forceMode } = {}) => {
-    const m = forceMode || effectiveViewMode;
-    const text = m === 'beginner'
-      ? (analysis.overall_summary_beginner || analysis.overall_summary)
-      : analysis.overall_summary;
+    const text = analysis.overall_summary || analysis.overall_summary_beginner;
     return text ? (
       <p style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.6, marginBottom: 12 }}>{text}</p>
     ) : null;
@@ -516,7 +513,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
           </div>
         </div>
       )}
-      {!wpDismissed && (raceType?.toLowerCase().includes('maiden') || analysis?.overall_summary?.toLowerCase().includes('maiden') || analysis?.overall_summary_beginner?.toLowerCase().includes('maiden')) && (
+      {!wpDismissed && (raceType?.toLowerCase().includes('maiden') || analysis?.overall_summary?.toLowerCase().includes('maiden')) && (
         <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(201,168,76,0.7)', lineHeight: 1.6, display: 'flex', alignItems: 'flex-start', gap: 6, textAlign: 'left' }}>
           <span style={{ flex: 1, minWidth: 0 }}>Interested in horses like these?{' '}
             <button

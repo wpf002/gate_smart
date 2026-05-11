@@ -10,10 +10,10 @@ Both use horse_name_key as the primary lookup key (normalized lowercase slug).
 from typing import Optional
 
 from sqlalchemy import (
+    JSON,
     Float,
     Index,
     Integer,
-    JSON,
     SmallInteger,
     String,
     Text,

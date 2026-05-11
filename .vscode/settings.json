@@ -1,0 +1,14 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "isort.interpreter": ["${workspaceFolder}/backend/.venv/bin/python"],
+  "isort.path": ["${workspaceFolder}/backend/.venv/bin/isort"],
+  "isort.args": ["--settings-path", "${workspaceFolder}/backend/pyproject.toml"],
+  "isort.importStrategy": "fromEnvironment",
+  "isort.check": true,
+  "[python]": {
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  }
+}

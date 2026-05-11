@@ -7,7 +7,7 @@ daily totals and per-endpoint breakdown. Gated to the project owner's email.
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func, desc
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user

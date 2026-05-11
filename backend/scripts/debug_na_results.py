@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Debug: print raw NA results structure for one meet to identify field names."""
-import asyncio, json, os, sys
+import asyncio
+import json
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv; load_dotenv()
 
 
 async def main():
-    from app.services.racing_api import get_na_meets, get_na_meet_results
+    from app.services.racing_api import get_na_meet_results, get_na_meets
 
     meets_data = await get_na_meets("2026-04-18")
     meets = meets_data.get("meets", [])

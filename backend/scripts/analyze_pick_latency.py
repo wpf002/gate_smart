@@ -17,6 +17,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -50,7 +51,8 @@ _BIN_ORDER = ["<1h", "1–3h", "3–6h", "6–10h", "10h+"]
 
 
 async def main(days: int) -> None:
-    from sqlalchemy import select, and_, or_
+    from sqlalchemy import and_, or_, select
+
     from app.core import database as _db
     from app.models.accuracy import RacePrediction
 

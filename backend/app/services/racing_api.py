@@ -371,7 +371,8 @@ def _parse_na_distance_furlongs(description: str, dist_value=None, dist_unit: st
 
 def _normalize_na_race(race: dict, meet: dict) -> dict:
     """Normalize a NA race entry to match GateSmart's internal race schema."""
-    from datetime import datetime, timezone as tz
+    from datetime import datetime
+    from datetime import timezone as tz
 
     # race_key is an object like {"race_number": "1", "day_evening": "D"}
     race_key = race.get("race_key") or {}
@@ -483,7 +484,9 @@ async def get_na_racecards_full(date: str = None) -> dict:
     multiple days). We filter by post_time_long so we only return races whose
     scheduled post time falls on the requested date (UTC calendar day).
     """
-    from datetime import date as date_cls, timedelta, datetime, timezone as tz
+    from datetime import date as date_cls
+    from datetime import datetime, timedelta
+    from datetime import timezone as tz
     from zoneinfo import ZoneInfo
     eastern = ZoneInfo("America/New_York")
 
@@ -525,9 +528,10 @@ async def get_na_racecards_full(date: str = None) -> dict:
     db_recovered_predictions: list = []
     if target_date == datetime.now(eastern).date():
         try:
+            from sqlalchemy import select
+
             from app.core import database as _db
             from app.models.accuracy import RacePrediction
-            from sqlalchemy import select
 
             live_meet_ids = {m.get("meet_id") for m in meets if m.get("meet_id")}
             async with _db._AsyncSessionLocal() as db:
