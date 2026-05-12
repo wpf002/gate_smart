@@ -31,6 +31,11 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_read_timeout 90s;
+        # Railway edge needs SNI on the upstream TLS handshake; without these
+        # the connection fails with "tlsv1 alert internal error" and every
+        # /api call returns 502.
+        proxy_ssl_server_name on;
+        proxy_ssl_name $proxy_host;
     }
 
     # SPA fallback

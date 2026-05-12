@@ -3,7 +3,7 @@
 ## Live Production URLs
 
 Backend:  <https://backend-production-15e941.up.railway.app>
-Frontend: <https://frontend-production-de916.up.railway.app>
+Frontend: <https://gate-smart.up.railway.app>
 Health:   <https://backend-production-15e941.up.railway.app/health>
 API Docs: <https://backend-production-15e941.up.railway.app/docs>
 
