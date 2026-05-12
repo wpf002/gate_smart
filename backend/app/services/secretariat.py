@@ -2109,7 +2109,7 @@ Return JSON exactly:
         client,
         endpoint="generate_daily_email_report",
         model="claude-sonnet-4-6",
-        max_tokens=1200,
+        max_tokens=2500,
         temperature=0.4,
         system=(
             "You are Secretariat, an AI horse racing handicapper reviewing your daily performance. "
@@ -2119,12 +2119,25 @@ Return JSON exactly:
         messages=[{"role": "user", "content": analysis_prompt}],
     )
 
-    analysis = _parse_json(response.content[0].text)
+    # Narrative is best-effort. If Claude truncates or returns malformed JSON,
+    # still send the digest with the deterministic scorecard + results table
+    # rather than crashing and skipping the morning email entirely.
+    raw_text = response.content[0].text if response.content else ""
+    try:
+        analysis = _parse_json(raw_text)
+    except (json.JSONDecodeError, ValueError) as e:
+        stop = getattr(response, "stop_reason", "?")
+        print(
+            f"[generate_daily_email_report] narrative JSON parse failed "
+            f"(stop_reason={stop}): {e} — sending digest with placeholder narrative"
+        )
+        analysis = {}
 
-    subject = analysis.get("subject", f"Secretariat – {today_str} | {len(hits)}/{total} wins")
-    what_right = analysis.get("what_went_right", "")
-    what_wrong = analysis.get("what_went_wrong", "")
-    evolving = analysis.get("how_im_evolving", "")
+    subject = analysis.get("subject", f"Secretariat – {today_str} | {len(hits)}/{total} ({win_pct}) win rate")
+    fallback = "• Narrative unavailable — Claude response was truncated or malformed. Scorecard and full results below are authoritative."
+    what_right = analysis.get("what_went_right") or fallback
+    what_wrong = analysis.get("what_went_wrong") or fallback
+    evolving = analysis.get("how_im_evolving") or "• No rule change today — narrative generation failed."
 
     def _bullets_to_html(text: str) -> str:
         if not text:
