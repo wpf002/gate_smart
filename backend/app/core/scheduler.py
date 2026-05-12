@@ -77,6 +77,14 @@ async def job_race_alerts() -> None:
         log.warning(f"[scheduler] race_alerts failed: {e}")
 
 
+async def job_smoke_check() -> None:
+    try:
+        from app.services.smoke_check import run_smoke_check
+        await run_smoke_check()
+    except Exception as e:
+        log.warning(f"[scheduler] smoke_check failed: {e}")
+
+
 def create_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="UTC")
 
@@ -86,5 +94,6 @@ def create_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(job_recalibration,CronTrigger(hour=3,  minute=30), id="recalibration",name="Prompt recalibration (11:30 PM ET)")
     scheduler.add_job(job_reflect,      CronTrigger(hour=4,  minute=0),  id="reflect",      name="Secretariat reflection (midnight ET)")
     scheduler.add_job(job_race_alerts,  IntervalTrigger(minutes=5),      id="race_alerts",  name="Race alerts (every 5 min)")
+    scheduler.add_job(job_smoke_check,  IntervalTrigger(minutes=5),      id="smoke_check",  name="Prod smoke check (every 5 min)")
 
     return scheduler

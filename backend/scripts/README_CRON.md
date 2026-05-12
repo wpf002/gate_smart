@@ -11,6 +11,7 @@ Source of truth: `backend/app/core/scheduler.py` (APScheduler runs in-process wh
 | 11:30 PM | `nightly_recalibration.py` | Update 30-day rolling calibration, inject into prompts |
 | 12:00 AM | `nightly_reflect.py`       | Secretariat reflection layer                           |
 | every 5m | `race_alerts` (in-process) | Push notifications for upcoming races                  |
+| every 5m | `smoke_check` (in-process) | Pings prod endpoints, emails on regression (prod only) |
 
 ## Manual Run
 
