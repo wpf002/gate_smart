@@ -349,6 +349,36 @@ async def trigger_send_report(
     return {"sent": sent, "date": target.isoformat()}
 
 
+@router.post("/run-predict-all")
+async def trigger_predict_all(payload: dict):
+    """Manually trigger nightly_predict_all for a date. Admin-key gated.
+
+    Use when the 11 AM ET cron hasn't fired yet but users need morning-line picks
+    populated immediately (e.g., race-day mornings before the schedule kicks in).
+    Idempotent: predictions table has on_conflict_do_nothing.
+
+    Runs the job in the background and returns immediately so the HTTP request
+    doesn't hold open for the full 15–20 minute run. Tail Railway logs to follow
+    progress; check /api/advisor/morning-line/{race_id} for completion.
+    """
+    import asyncio
+
+    if payload.get("admin_key") != settings.SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Not authorised")
+
+    date_str = payload.get("date")
+    try:
+        target = datetime.date.fromisoformat(date_str) if date_str else datetime.date.today()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format — use YYYY-MM-DD")
+
+    from app.core.scheduler import _run_script
+    args = ["--date", target.isoformat()] if date_str else None
+    asyncio.create_task(_run_script("nightly_predict_all.py", args))
+
+    return {"status": "started", "date": target.isoformat(), "check": "/api/advisor/morning-line/{race_id}"}
+
+
 @router.get("/track-stats/{track_code}")
 async def get_track_stats(
     track_code: str,

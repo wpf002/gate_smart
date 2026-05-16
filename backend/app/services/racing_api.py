@@ -515,8 +515,13 @@ async def get_na_racecards_full(date: str = None) -> dict:
     day_end_ms = int(et_day_end.timestamp() * 1000)
 
     import re as _re
+    # Match wager-pool "meets" the upstream API mixes into the meets list.
+    # `\bdouble\b` catches stakes-day daily-double pools like "Preakness Double"
+    # / "Belmont Double" (and the upstream-truncated "Bes Preakness Double") in
+    # addition to the generic "Daily Double". No real NA track name contains
+    # "double", so this is safe.
     _WAGER_POOL = _re.compile(
-        r'\b(pick\s*\d+|trifecta|superfecta|exacta|daily\s*double|rolling\s*pick|over\s*[/-]?\s*under)\b',
+        r'\b(pick\s*\d+|trifecta|superfecta|exacta|double|rolling\s*\w+|over\s*[/-]?\s*under|wager|pool)\b',
         _re.IGNORECASE,
     )
 

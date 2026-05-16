@@ -6,7 +6,7 @@ Source of truth: `backend/app/core/scheduler.py` (APScheduler runs in-process wh
 
 | Time     | Script                     | Purpose                                                |
 | -------- | -------------------------- | ------------------------------------------------------ |
-| 11:00 AM | `nightly_predict_all.py`   | Lightweight haiku predictions for all US races         |
+| 08:00 AM | `nightly_predict_all.py`   | Full pre-race analysis for all US races                |
 | 06:00 AM | `nightly_accuracy.py`      | Settle yesterday's predictions, send email digest      |
 | 11:30 PM | `nightly_recalibration.py` | Update 30-day rolling calibration, inject into prompts |
 | 12:00 AM | `nightly_reflect.py`       | Secretariat reflection layer                           |

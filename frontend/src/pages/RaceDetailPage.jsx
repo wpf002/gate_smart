@@ -460,16 +460,16 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
       <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border-subtle)' }}>
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.5 }}>
           {effectiveViewMode === 'beginner'
-            ? 'Pick 3/4/5/6 bets require picking the winner of several consecutive races in a row. Use your top selection from this race as one "leg" of your ticket — then pick winners from the next 2–5 races on the card.'
-            : 'Sequence bets — use the primary leg single or wheel to the backup for coverage. Stack with other legs from adjacent races.'}
+            ? 'A Pick 3/4/5/6 needs winners of 3–6 consecutive races. For THIS race (one leg of your ticket), play the single below. If you want extra coverage, "wheel" the single with the backup so your ticket wins if either one comes home. Pick the other legs from the next races on the card.'
+            : 'For this leg of the sequence: single the primary, or wheel primary + backup for coverage. Pair with picks from adjacent races to complete the Pick 3/4/5/6 ticket.'}
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 80, flexShrink: 0 }}>Top selection</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 110, flexShrink: 0 }}>This leg · single</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-gold-bright)' }}>{analysis.top_contenders[0]}</span>
         </div>
         {analysis.top_contenders[1] && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 80, flexShrink: 0 }}>Second pick</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 110, flexShrink: 0 }}>This leg · wheel w/</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{analysis.top_contenders[1]}</span>
           </div>
         )}

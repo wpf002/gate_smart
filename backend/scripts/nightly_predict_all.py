@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-nightly_predict_all.py — Morning lightweight predictions for all US races.
-Uses claude-haiku at temperature=0.1 to store cheap pre-race top-4 calls.
-Runs at 8 AM ET.  Cost estimate: ~$0.15/day for ~149 races.
+nightly_predict_all.py — Morning pre-race predictions for all US races.
+Runs the full analyze_race (with a Haiku top-4 fallback for oversized fields)
+so the morning digest and the race-day live page share the same locked pick.
+Runs at 8 AM ET via app.core.scheduler (12:00 UTC). Cost: ~$1.65/day for ~150 races.
 
 Usage:
     cd backend
