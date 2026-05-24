@@ -121,11 +121,17 @@ class DailyAccuracyReport(Base):
 
 
 class LLMCallLog(Base):
-    """One row per Claude API call — used to track daily cost burn by endpoint/model."""
+    """One row per Claude API call — used to track daily cost burn by endpoint/model/user.
+
+    user_id is NULL for background/system calls (nightly_predict_all, nightly_reflect,
+    daily email generation) and set to the authenticated user's id for on-demand calls
+    triggered via the API (analyze_race, ask_haiku, explain_horse, etc.).
+    """
     __tablename__ = "llm_call_log"
     __table_args__ = (
         Index("ix_llm_call_log_date", "call_date"),
         Index("ix_llm_call_log_endpoint", "endpoint"),
+        Index("ix_llm_call_log_user_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -136,6 +142,7 @@ class LLMCallLog(Base):
     )
     endpoint: Mapped[str] = mapped_column(String(80), nullable=False)
     model: Mapped[str] = mapped_column(String(80), nullable=False)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)

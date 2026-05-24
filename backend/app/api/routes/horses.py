@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -135,12 +135,15 @@ async def horse_profile(horse_id: str):
 
 
 @router.get("/{horse_id}/explain")
-async def horse_explain(horse_id: str):
+async def horse_explain(horse_id: str, request: Request):
+    from app.core.auth import user_id_from_request
+    _user_id = user_id_from_request(request)
+
     runner, race_ctx = await _find_runner_in_racecards(horse_id)
     if not runner:
         raise HTTPException(status_code=404, detail="Horse not found")
     try:
-        explanation = await secretariat.explain_horse(runner, race_ctx)
+        explanation = await secretariat.explain_horse(runner, race_ctx, user_id=_user_id)
         return {"horse_id": horse_id, "analysis": explanation}
     except HTTPException:
         raise
@@ -183,7 +186,10 @@ async def horse_past_performances(
 
 
 @router.get("/{horse_id}/form/decode")
-async def horse_form_decode(horse_id: str, form: str = ""):
+async def horse_form_decode(horse_id: str, request: Request, form: str = ""):
+    from app.core.auth import user_id_from_request
+    _user_id = user_id_from_request(request)
+
     runner, _ = await _find_runner_in_racecards(horse_id)
     horse_name = runner.get("horse_name") or horse_id if runner else horse_id
     if not form and runner:
@@ -191,7 +197,7 @@ async def horse_form_decode(horse_id: str, form: str = ""):
     if not form:
         raise HTTPException(status_code=400, detail="No form string available")
     try:
-        result = await secretariat.explain_form_string(form, horse_name)
+        result = await secretariat.explain_form_string(form, horse_name, user_id=_user_id)
         return {"horse_id": horse_id, "form": form, "decoded": result}
     except HTTPException:
         raise

@@ -58,6 +58,22 @@ def decode_token(token: str) -> Optional[int]:
         return None
 
 
+def user_id_from_request(request) -> Optional[int]:
+    """Best-effort extraction of the authenticated user id from a Request.
+
+    Used by routes that take a raw Request (rather than the get_current_user
+    dependency) and want optional user attribution — e.g. for cost-logging.
+    Returns None if no auth header, invalid token, or expired token.
+    """
+    header = request.headers.get("authorization", "") if request else ""
+    if not header.lower().startswith("bearer "):
+        return None
+    try:
+        return decode_token(header[7:])
+    except Exception:
+        return None
+
+
 async def get_current_user(
     token: Optional[str] = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),

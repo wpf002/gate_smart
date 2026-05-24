@@ -638,7 +638,7 @@ def _stake_sizing_block(bankroll: float | None) -> str:
     )
 
 
-async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, experience_level: str = None) -> dict:
+async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, experience_level: str = None, user_id: int | None = None) -> dict:
     """
     Full race analysis — Secretariat's core function.
     Returns structured analysis of all runners and recommended bets.
@@ -718,6 +718,7 @@ Return this JSON exactly:
         response = await tracked_create(
             client,
             endpoint="analyze_race",
+            user_id=user_id,
             model="claude-haiku-4-5-20251001",
             max_tokens=5000,
             temperature=0.2,
@@ -841,6 +842,7 @@ Return this JSON exactly:
         await log_call(
             endpoint="stream_analyze_race",
             model="claude-haiku-4-5-20251001",
+            user_id=user_id,
             input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
             output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
         )
@@ -872,7 +874,7 @@ Return this JSON exactly:
         ))
 
 
-async def explain_horse(horse_data: dict, race_context: dict = None) -> dict:
+async def explain_horse(horse_data: dict, race_context: dict = None, user_id: int | None = None) -> dict:
     """Explain a single horse's form and prospects in plain English."""
     ts_context = await get_hardware_and_historical_context([horse_data])
     horse_name = horse_data.get("horse") or horse_data.get("horse_name", "")
@@ -898,6 +900,7 @@ Return this JSON exactly:
     response = await tracked_create(
         client,
         endpoint="explain_horse",
+        user_id=user_id,
         model="claude-haiku-4-5-20251001",
         max_tokens=500,
         temperature=0.2,
@@ -912,7 +915,8 @@ async def recommend_bet_type(
     bankroll: float,
     risk_tolerance: str,
     experience_level: str,
-    race_analysis: dict
+    race_analysis: dict,
+    user_id: int | None = None,
 ) -> dict:
     """
     Given a user's profile and race analysis,
@@ -952,6 +956,7 @@ Return JSON:
     response = await tracked_create(
         client,
         endpoint="recommend_bet_type",
+        user_id=user_id,
         model="claude-sonnet-4-6",
         max_tokens=1500,
         temperature=0.2,
@@ -962,7 +967,7 @@ Return JSON:
     return _parse_json(response.content[0].text)
 
 
-async def explain_form_string(form_string: str, horse_name: str) -> dict:
+async def explain_form_string(form_string: str, horse_name: str, user_id: int | None = None) -> dict:
     """Decode a raw form string (e.g. '1-3-2-F-1') for a beginner."""
     prompt = f"""Explain this horse racing form string in plain English for a beginner.
 
@@ -987,6 +992,7 @@ Return JSON:
     response = await tracked_create(
         client,
         endpoint="explain_form_string",
+        user_id=user_id,
         model="claude-haiku-4-5-20251001",
         max_tokens=1200,
         temperature=0.2,
@@ -997,7 +1003,7 @@ Return JSON:
     return _parse_json(response.content[0].text)
 
 
-async def score_horse(horse_data: dict, race_context: dict, historical_context: str = "") -> dict:
+async def score_horse(horse_data: dict, race_context: dict, historical_context: str = "", user_id: int | None = None) -> dict:
     """
     Score a single horse across 6 dimensions for the Score Card.
     Returns structured JSON with scores 0-100 per dimension.
@@ -1052,6 +1058,7 @@ A horse can score 90 on speed and 20 on value — that's fine and useful."""
     response = await tracked_create(
         client,
         endpoint="score_horse",
+        user_id=user_id,
         model="claude-haiku-4-5-20251001",
         max_tokens=1000,
         temperature=0.2,
@@ -1061,7 +1068,7 @@ A horse can score 90 on speed and 20 on value — that's fine and useful."""
     return _parse_json(response.content[0].text)
 
 
-async def score_race(race_data: dict) -> dict:
+async def score_race(race_data: dict, user_id: int | None = None) -> dict:
     """
     Score all horses in a race concurrently. Returns list of score cards.
     Called from the /advisor/scorecard endpoint.
@@ -1108,7 +1115,7 @@ async def score_race(race_data: dict) -> dict:
         horse_name = horse.get("horse") or horse.get("horse_name", "")
         ctx = historical_context.get(horse_name, "")
         try:
-            return await score_horse(horse, race_context, historical_context=ctx)
+            return await score_horse(horse, race_context, historical_context=ctx, user_id=user_id)
         except Exception as e:
             return {
                 "horse_id": horse.get("horse_id", ""),
@@ -1394,7 +1401,7 @@ _OBVIOUS_LIVE_RACES = (
 )
 
 
-async def _needs_web_search(question: str) -> bool:
+async def _needs_web_search(question: str, user_id: int | None = None) -> bool:
     """Decide whether the question needs live web data.
 
     Fast paths first (no LLM call): obvious live-racing keywords, or named
@@ -1415,6 +1422,7 @@ async def _needs_web_search(question: str) -> bool:
         resp = await tracked_create(
             client,
             endpoint="ask_route_classifier",
+            user_id=user_id,
             model="claude-haiku-4-5-20251001",
             max_tokens=4,
             temperature=0.0,
@@ -1437,7 +1445,7 @@ async def _needs_web_search(question: str) -> bool:
         return False
 
 
-async def answer_betting_question(question: str, context: dict = None, history: list[dict] = None) -> str:
+async def answer_betting_question(question: str, context: dict = None, history: list[dict] = None, user_id: int | None = None) -> str:
     """Free-form Q&A — Secretariat answers any horse-racing question.
 
     Cost-tiered routing:
@@ -1450,7 +1458,7 @@ async def answer_betting_question(question: str, context: dict = None, history: 
     import datetime
 
     today_str = datetime.date.today().strftime("%A, %B %d, %Y")
-    use_search = await _needs_web_search(question)
+    use_search = await _needs_web_search(question, user_id=user_id)
 
     prompt = f"""Today is {today_str}.
 
@@ -1534,18 +1542,20 @@ Reply with the markdown answer directly — no JSON wrapper, no preface, no meta
             response = await tracked_create(
                 client,
                 endpoint="ask_sonnet_search",
+                user_id=user_id,
                 tools=web_search_tool,
                 **create_args,
             )
         except anthropic.APIError:
             # Web search unavailable — answer from training instead of swallowing the cost twice
-            response = await tracked_create(client, endpoint="ask_sonnet_nosearch", **create_args)
+            response = await tracked_create(client, endpoint="ask_sonnet_nosearch", user_id=user_id, **create_args)
         return _extract_text(response)
 
     # Default: Haiku, no web search (≈$0.003/call) for evergreen handicapping/strategy/history
     response = await tracked_create(
         client,
         endpoint="ask_haiku",
+        user_id=user_id,
         model="claude-haiku-4-5-20251001",
         max_tokens=1500,
         temperature=0.3,

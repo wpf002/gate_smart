@@ -64,8 +64,13 @@ async def log_call(
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
     web_searches: int = 0,
+    user_id: int | None = None,
 ) -> None:
-    """Write a single row to llm_call_log. Never raises — cost logging must not break the app."""
+    """Write a single row to llm_call_log. Never raises — cost logging must not break the app.
+
+    user_id=None for background/system calls; set to the authenticated user's id
+    for on-demand calls so admin dashboards can attribute usage per user.
+    """
     try:
         from app.core.database import _AsyncSessionLocal
         from app.models.accuracy import LLMCallLog
@@ -75,6 +80,7 @@ async def log_call(
             call_date=datetime.date.today(),
             endpoint=endpoint,
             model=model,
+            user_id=user_id,
             input_tokens=int(input_tokens),
             output_tokens=int(output_tokens),
             cache_read_tokens=int(cache_read_tokens),
@@ -89,10 +95,11 @@ async def log_call(
         log.warning("llm_cost.log_call failed: %s", e)
 
 
-async def tracked_create(client, *, endpoint: str, **create_kwargs) -> Any:
+async def tracked_create(client, *, endpoint: str, user_id: int | None = None, **create_kwargs) -> Any:
     """Drop-in wrapper for `client.messages.create(...)` that logs cost.
 
     Pass `endpoint="analyze_race"` (or similar) so daily breakdowns can group by feature.
+    Pass `user_id` so per-user usage can be attributed (omit for background jobs).
     All other kwargs are forwarded verbatim.
     """
     response = await client.messages.create(**create_kwargs)
@@ -105,6 +112,7 @@ async def tracked_create(client, *, endpoint: str, **create_kwargs) -> Any:
     await log_call(
         endpoint=endpoint,
         model=create_kwargs.get("model", "unknown"),
+        user_id=user_id,
         input_tokens=in_tok,
         output_tokens=out_tok,
         cache_read_tokens=cache_read or 0,

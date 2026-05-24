@@ -62,6 +62,9 @@ class DebriefRequest(msgspec.Struct):
 @router.post("/analyze")
 @limiter.limit("10/minute")
 async def analyze_race(request: Request) -> JSONResponse:
+    from app.core.auth import user_id_from_request
+    _user_id = user_id_from_request(request)
+
     raw = await request.body()
     try:
         req = msgspec.json.decode(raw, type=AnalyzeRequest)
@@ -89,7 +92,7 @@ async def analyze_race(request: Request) -> JSONResponse:
         return JSONResponse(cached)
 
     try:
-        analysis = await secretariat.analyze_race(race_data, mode=req.mode, bankroll=req.bankroll)
+        analysis = await secretariat.analyze_race(race_data, mode=req.mode, bankroll=req.bankroll, user_id=_user_id)
     except secretariat.SecretariatBusyError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception:
@@ -109,7 +112,7 @@ async def analyze_race(request: Request) -> JSONResponse:
             race_data_trimmed = {**race_data, "runners": trimmed}
             try:
                 analysis = await secretariat.analyze_race(
-                    race_data_trimmed, mode=req.mode, bankroll=req.bankroll
+                    race_data_trimmed, mode=req.mode, bankroll=req.bankroll, user_id=_user_id
                 )
             except Exception:
                 raise HTTPException(
@@ -133,6 +136,9 @@ async def analyze_race(request: Request) -> JSONResponse:
 
 @router.post("/recommend-bet")
 async def recommend_bet(request: Request) -> JSONResponse:
+    from app.core.auth import user_id_from_request
+    _user_id = user_id_from_request(request)
+
     raw = await request.body()
     try:
         req = msgspec.json.decode(raw, type=RecommendRequest)
@@ -149,9 +155,9 @@ async def recommend_bet(request: Request) -> JSONResponse:
         raise HTTPException(status_code=502, detail="Racing data unavailable")
 
     try:
-        analysis = await secretariat.analyze_race(race_data, mode="balanced")
+        analysis = await secretariat.analyze_race(race_data, mode="balanced", user_id=_user_id)
         recommendation = await secretariat.recommend_bet_type(
-            req.bankroll, req.risk_tolerance, req.experience_level, analysis
+            req.bankroll, req.risk_tolerance, req.experience_level, analysis, user_id=_user_id
         )
     except Exception:
         raise HTTPException(status_code=502, detail="AI analysis unavailable")
@@ -162,6 +168,9 @@ async def recommend_bet(request: Request) -> JSONResponse:
 @router.post("/ask")
 @limiter.limit("30/minute")
 async def ask(request: Request) -> JSONResponse:
+    from app.core.auth import user_id_from_request
+    _user_id = user_id_from_request(request)
+
     raw = await request.body()
     try:
         req = msgspec.json.decode(raw, type=AskRequest)
@@ -172,7 +181,7 @@ async def ask(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail="Question too long (max 500 characters)")
 
     try:
-        answer = await secretariat.answer_betting_question(req.question, req.context, req.history)
+        answer = await secretariat.answer_betting_question(req.question, req.context, req.history, user_id=_user_id)
     except Exception:
         raise HTTPException(status_code=502, detail="AI analysis unavailable")
 
@@ -190,15 +199,9 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
 
     _validate_race_id(req.race_id)
 
-    # Extract optional user_id from JWT for per-user prediction tracking
-    _user_id = None
-    try:
-        _auth_header = request.headers.get("Authorization", "")
-        if _auth_header.startswith("Bearer "):
-            from app.core.auth import decode_token
-            _user_id = decode_token(_auth_header[7:])
-    except Exception:
-        pass
+    # Optional user_id from JWT — used for per-user prediction tracking + cost attribution.
+    from app.core.auth import user_id_from_request
+    _user_id = user_id_from_request(request)
 
     async def generate():
         try:
@@ -270,6 +273,9 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
 @router.post("/scorecard")
 @limiter.limit("10/minute")
 async def score_card(request: Request) -> JSONResponse:
+    from app.core.auth import user_id_from_request
+    _user_id = user_id_from_request(request)
+
     raw = await request.body()
     try:
         req = msgspec.json.decode(raw, type=ScoreCardRequest)
@@ -291,7 +297,7 @@ async def score_card(request: Request) -> JSONResponse:
         raise HTTPException(status_code=502, detail="Racing data unavailable")
 
     try:
-        result = await secretariat.score_race(race_data)
+        result = await secretariat.score_race(race_data, user_id=_user_id)
     except Exception:
         raise HTTPException(status_code=502, detail="AI scoring unavailable")
 
@@ -301,6 +307,9 @@ async def score_card(request: Request) -> JSONResponse:
 
 @router.post("/explain-form")
 async def explain_form(request: Request) -> JSONResponse:
+    from app.core.auth import user_id_from_request
+    _user_id = user_id_from_request(request)
+
     raw = await request.body()
     try:
         req = msgspec.json.decode(raw, type=ExplainFormRequest)
@@ -311,7 +320,7 @@ async def explain_form(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail="form_string is required")
 
     try:
-        result = await secretariat.explain_form_string(req.form_string, req.horse_name or req.form_string)
+        result = await secretariat.explain_form_string(req.form_string, req.horse_name or req.form_string, user_id=_user_id)
     except Exception:
         raise HTTPException(status_code=502, detail="AI analysis unavailable")
 

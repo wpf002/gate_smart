@@ -37,6 +37,19 @@ async def init_db() -> None:
 
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # create_all only creates missing tables; columns added later need an
+        # explicit ALTER. Idempotent — safe to run on every boot.
+        from sqlalchemy import text
+        for stmt in _STARTUP_MIGRATIONS:
+            await conn.execute(text(stmt))
+
+
+# Add to this list when a model gains a new column. Each statement must be
+# idempotent ("IF NOT EXISTS"). Removed columns / renames are NOT auto-handled.
+_STARTUP_MIGRATIONS: list[str] = [
+    "ALTER TABLE llm_call_log ADD COLUMN IF NOT EXISTS user_id INTEGER",
+    "CREATE INDEX IF NOT EXISTS ix_llm_call_log_user_id ON llm_call_log (user_id)",
+]
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
