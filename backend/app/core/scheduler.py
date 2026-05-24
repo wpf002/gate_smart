@@ -54,6 +54,8 @@ async def _run_script(script_name: str, extra_args: list[str] | None = None) -> 
 
 
 async def job_predict_all() -> None:
+    global _predict_all_last_attempt
+    _predict_all_last_attempt = datetime.datetime.now(datetime.timezone.utc)
     await _run_script("nightly_predict_all.py")
 
 
@@ -95,25 +97,37 @@ async def job_smoke_check() -> None:
 # re-firing on those is harmless (idempotent via on_conflict_do_nothing).
 _PREDICT_ALL_HEALTHY_THRESHOLD = 10
 
+# Cooldown between predict_all launches. A full run takes ~15 min; if it fails
+# (e.g., Haiku rate-limited) and writes < threshold rows, the every-15-min
+# catchup would otherwise re-fire it immediately, compounding the rate-limit
+# pressure. 60 min lets a real run finish and write rows (so the count check
+# bails), while still allowing ~5 retry windows per 8-hour catchup band for
+# genuinely catastrophic failures. In-memory state resets on container restart,
+# which is desirable — a restart is itself one of the failure modes catchup
+# exists to heal, so we WANT the next catchup to fire after a deploy.
+_PREDICT_ALL_COOLDOWN_MIN = 60
+_predict_all_last_attempt: datetime.datetime | None = None
+
 
 async def job_predict_all_catchup() -> None:
     """Self-healing predict-all check. Runs every 15 min between 8 AM and 4 PM ET.
 
     Fires nightly_predict_all if today has fewer than _PREDICT_ALL_HEALTHY_THRESHOLD
-    auto_daily rows. Heals three failure modes the cron alone cannot:
+    auto_daily rows AND no predict_all attempt has fired in the last
+    _PREDICT_ALL_COOLDOWN_MIN minutes. Heals three failure modes the cron
+    alone cannot:
       1. Container started AFTER the scheduled fire (deploy at 9 AM, cron at 8 AM)
       2. Crash mid-run leaving partial rows
       3. APScheduler in-process job silently dropped (rare but observed)
 
     Idempotent: predict-all writes use on_conflict_do_nothing. max_instances=1
-    on this job prevents two catchups racing each other. While a catchup is in
-    flight (~15 min for 160 races), rows accumulate; the next catchup check
-    sees count >= threshold and bails. If predict_all itself is already running
-    via the 12:00 UTC cron, this catchup will fire a second invocation —
-    harmless because of the conflict guard, and worst case wastes a few Claude
-    calls (~$1.65 total even for a full duplicate run).
+    on this job prevents two catchups racing each other. The cooldown stops the
+    catchup from re-firing predict_all on top of an in-flight or recently-failed
+    run — without it, a Haiku-throttled run that writes < threshold rows would
+    be relaunched every 15 minutes, compounding the rate-limit pressure.
     """
-    from datetime import datetime
+    global _predict_all_last_attempt
+    from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
 
     from sqlalchemy import func, select
@@ -125,6 +139,11 @@ async def job_predict_all_catchup() -> None:
     now_et = datetime.now(et)
     if now_et.hour < 8 or now_et.hour >= 16:
         return
+
+    if _predict_all_last_attempt is not None:
+        age_min = (datetime.now(timezone.utc) - _predict_all_last_attempt).total_seconds() / 60
+        if age_min < _PREDICT_ALL_COOLDOWN_MIN:
+            return
 
     today = now_et.date()
     try:
@@ -145,6 +164,7 @@ async def job_predict_all_catchup() -> None:
         return
 
     print(f"[scheduler] catchup: only {count} predictions for {today.isoformat()} — firing predict_all", flush=True)
+    _predict_all_last_attempt = datetime.now(timezone.utc)
     await _run_script("nightly_predict_all.py")
 
 
