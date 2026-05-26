@@ -12,3 +12,4 @@ psycopg2-binary==2.9.10
 python-jose[cryptography]==3.3.0
 bcrypt==4.3.0
 apscheduler==3.10.4
+isort==5.13.2
