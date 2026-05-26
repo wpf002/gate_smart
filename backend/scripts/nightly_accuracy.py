@@ -282,35 +282,46 @@ async def main(target_date: datetime.date, dry_run: bool):
         report_obj = _FakeReport()
         preds_list = [_FakePred(s) for s in settled]
 
-    # 6. Generate and send email
+    # 6. Generate and send email. Report row is already committed above — any
+    # exception here must NOT mask that or crash the script with non-zero exit,
+    # otherwise the scheduler logs failure for a job that actually settled data.
+    # Failures are surfaced via [DIGEST EMAIL FAILED] banners that Railway log
+    # alerts can match on.
     from app.services.email_service import send_daily_report
     from app.services.secretariat import generate_daily_email_report
 
-    print("\n[nightly_accuracy] Generating email via Claude…")
-    email = await generate_daily_email_report(report_obj, preds_list)
+    try:
+        print("\n[nightly_accuracy] Generating email via Claude…")
+        email = await generate_daily_email_report(report_obj, preds_list)
 
-    subject = email.get("subject", f"Secretariat Daily Report — {target_date}")
-    text = email.get("text", "")
-    html = email.get("html", "")
+        subject = email.get("subject", f"Secretariat Daily Report — {target_date}")
+        text = email.get("text", "")
+        html = email.get("html", "")
 
-    print(f"\nSubject: {subject}")
-    print(f"\nText preview:\n{text[:800]}")
+        print(f"\nSubject: {subject}")
+        print(f"\nText preview:\n{text[:800]}")
 
-    if dry_run:
-        print("\n[DRY RUN] Email not sent.")
-    else:
-        sent = await send_daily_report(subject=subject, html_body=html, text_body=text)
-        if sent:
-            async with _db._AsyncSessionLocal() as db:
-                await db.execute(
-                    update(DailyAccuracyReport)
-                    .where(DailyAccuracyReport.report_date == target_date)
-                    .values(
-                        email_sent=True,
-                        email_sent_at=datetime.datetime.now(datetime.timezone.utc),
+        if dry_run:
+            print("\n[DRY RUN] Email not sent.")
+        else:
+            sent = await send_daily_report(subject=subject, html_body=html, text_body=text)
+            if sent:
+                async with _db._AsyncSessionLocal() as db:
+                    await db.execute(
+                        update(DailyAccuracyReport)
+                        .where(DailyAccuracyReport.report_date == target_date)
+                        .values(
+                            email_sent=True,
+                            email_sent_at=datetime.datetime.now(datetime.timezone.utc),
+                        )
                     )
-                )
-                await db.commit()
+                    await db.commit()
+            else:
+                print(f"[DIGEST EMAIL FAILED] send_daily_report returned False for {target_date.isoformat()}")
+    except Exception as e:
+        import traceback
+        print(f"[DIGEST EMAIL FAILED] {target_date.isoformat()} report saved but email step raised: {type(e).__name__}: {e}")
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

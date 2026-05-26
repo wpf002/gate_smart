@@ -2115,33 +2115,39 @@ Return JSON exactly:
   "how_im_evolving": "2-4 bullets, one per line, each starting with '• '. EACH bullet must be either: (a) 'KEEPING lesson [first words]: VALIDATED by [today's evidence]' / (b) 'DROPPING lesson [first words]: FAILED — [today's contrary evidence]' / (c) 'NEW RULE: at [track/category], I will [specific concrete action] until [measurable trigger]'. No bullet that doesn't name a lesson, a track, or a measurable trigger. If today produced no actionable change, write a single bullet: '• No rule change today — [reason in one phrase].'"
 }}"""
 
-    response = await tracked_create(
-        client,
-        endpoint="generate_daily_email_report",
-        model="claude-sonnet-4-6",
-        max_tokens=2500,
-        temperature=0.4,
-        system=(
-            "You are Secretariat, an AI horse racing handicapper reviewing your daily performance. "
-            "Write in first person. Be analytical, honest, and specific — name tracks, race types, and patterns. "
-            "Do not use filler phrases. Every sentence must contain a concrete observation."
-        ),
-        messages=[{"role": "user", "content": analysis_prompt}],
-    )
-
-    # Narrative is best-effort. If Claude truncates or returns malformed JSON,
-    # still send the digest with the deterministic scorecard + results table
-    # rather than crashing and skipping the morning email entirely.
-    raw_text = response.content[0].text if response.content else ""
+    # Narrative is best-effort. If Claude is unavailable (credit depleted,
+    # rate-limited, network down) OR returns malformed JSON, still send the
+    # digest with the deterministic scorecard + results table rather than
+    # crashing and skipping the morning email entirely.
+    analysis: dict = {}
     try:
-        analysis = _parse_json(raw_text)
-    except (json.JSONDecodeError, ValueError) as e:
-        stop = getattr(response, "stop_reason", "?")
-        print(
-            f"[generate_daily_email_report] narrative JSON parse failed "
-            f"(stop_reason={stop}): {e} — sending digest with placeholder narrative"
+        response = await tracked_create(
+            client,
+            endpoint="generate_daily_email_report",
+            model="claude-sonnet-4-6",
+            max_tokens=2500,
+            temperature=0.4,
+            system=(
+                "You are Secretariat, an AI horse racing handicapper reviewing your daily performance. "
+                "Write in first person. Be analytical, honest, and specific — name tracks, race types, and patterns. "
+                "Do not use filler phrases. Every sentence must contain a concrete observation."
+            ),
+            messages=[{"role": "user", "content": analysis_prompt}],
         )
-        analysis = {}
+        raw_text = response.content[0].text if response.content else ""
+        try:
+            analysis = _parse_json(raw_text)
+        except (json.JSONDecodeError, ValueError) as e:
+            stop = getattr(response, "stop_reason", "?")
+            print(
+                f"[generate_daily_email_report] narrative JSON parse failed "
+                f"(stop_reason={stop}): {e} — sending digest with placeholder narrative"
+            )
+    except Exception as e:
+        print(
+            f"[generate_daily_email_report] narrative Claude call failed: {type(e).__name__}: {e} "
+            f"— sending digest with placeholder narrative (scorecard + results table are authoritative)"
+        )
 
     subject = analysis.get("subject", f"Secretariat – {today_str} | {len(hits)}/{total} ({win_pct}) win rate")
     fallback = "• Narrative unavailable — Claude response was truncated or malformed. Scorecard and full results below are authoritative."
