@@ -1,16 +1,20 @@
 """
-Nightly job scheduler — runs automatically when the FastAPI server starts.
+In-process scheduler — runs automatically when the FastAPI server starts.
 
-Schedule (all UTC, summer EDT = UTC-4):
-  12:00  nightly_predict_all.py    — 8:00 AM ET, pre-race full analysis
-  15:35  substack_draft_email.py   — 11:35 AM ET, Substack-ready draft email
-  10:00  nightly_accuracy.py       — 6:00 AM ET next morning, settle + email digest
-  03:30  nightly_recalibration.py  — 11:30 PM ET, recalibrate prompt weights
-  04:00  nightly_reflect.py        — midnight ET, Secretariat reflection layer
+The heavy nightly scripts (predict_all, reflect, recalibration, accuracy) run as
+dedicated Railway cron services (predict-daily, reflect-nightly, recalibrate-nightly,
+accuracy-nightly), so they are NOT registered here — registering them in both
+places double-fires every night and doubles the Anthropic bill.
 
-predict_all is intentionally early: race-day users open the app well before
-afternoon cards. The prior 11 AM ET slot left morning users seeing "morning
-line unavailable" on every race for hours.
+In-process jobs left here:
+  15:35 UTC  substack_draft_email.py     — 11:35 AM ET, no Railway counterpart
+  every 15m  predict_all catchup         — self-heals predict_all (DB row-count check,
+                                            08:00–16:00 ET window)
+  every 5m   race_alerts, smoke_check    — too frequent to spin up cron containers
+
+predict_all is intentionally early (08:00 ET cron): race-day users open the app
+well before afternoon cards. The prior 11 AM ET slot left morning users seeing
+"morning line unavailable" on every race for hours.
 """
 import asyncio
 import datetime
@@ -53,26 +57,8 @@ async def _run_script(script_name: str, extra_args: list[str] | None = None) -> 
         log.exception(f"[scheduler] {script_name} raised an exception: {e}")
 
 
-async def job_predict_all() -> None:
-    global _predict_all_last_attempt
-    _predict_all_last_attempt = datetime.datetime.now(datetime.timezone.utc)
-    await _run_script("nightly_predict_all.py")
-
-
 async def job_substack_draft() -> None:
     await _run_script("substack_draft_email.py")
-
-
-async def job_accuracy() -> None:
-    await _run_script("nightly_accuracy.py")
-
-
-async def job_recalibration() -> None:
-    await _run_script("nightly_recalibration.py")
-
-
-async def job_reflect() -> None:
-    await _run_script("nightly_reflect.py")
 
 
 async def job_race_alerts() -> None:
@@ -175,12 +161,10 @@ def create_scheduler() -> AsyncIOScheduler:
     # then every 15 min. The job itself bails outside the 8 AM–4 PM ET window.
     catchup_first_run = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=30)
 
-    scheduler.add_job(job_predict_all,  CronTrigger(hour=12, minute=0),  id="predict_all",  name="Morning predictions (8 AM ET)")
+    # predict_all, accuracy, recalibration, reflect — run as Railway cron services,
+    # NOT here. Re-registering would double-fire and double-bill the Anthropic API.
     scheduler.add_job(job_predict_all_catchup, IntervalTrigger(minutes=15, start_date=catchup_first_run), id="predict_all_catchup", name="Predict-all self-heal (every 15 min, 8 AM–4 PM ET)", max_instances=1, coalesce=True)
     scheduler.add_job(job_substack_draft, CronTrigger(hour=15, minute=35), id="substack_draft", name="Substack draft email (11:35 AM ET)")
-    scheduler.add_job(job_accuracy,     CronTrigger(hour=10, minute=0),  id="accuracy",     name="Morning accuracy + email (6 AM ET)")
-    scheduler.add_job(job_recalibration,CronTrigger(hour=3,  minute=30), id="recalibration",name="Prompt recalibration (11:30 PM ET)")
-    scheduler.add_job(job_reflect,      CronTrigger(hour=4,  minute=0),  id="reflect",      name="Secretariat reflection (midnight ET)")
     scheduler.add_job(job_race_alerts,  IntervalTrigger(minutes=5),      id="race_alerts",  name="Race alerts (every 5 min)")
     scheduler.add_job(job_smoke_check,  IntervalTrigger(minutes=5),      id="smoke_check",  name="Prod smoke check (every 5 min)")
 
