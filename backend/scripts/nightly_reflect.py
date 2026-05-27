@@ -303,21 +303,23 @@ async def main(target_date: datetime.date, dry_run: bool):
 
     print(f"\n[nightly_reflect] Reflecting on {target_date} | dry_run={dry_run}")
 
-    # 1. Load NA-only settled predictions for target_date
-    # International races are settled but excluded from lesson synthesis
-    # to keep Secretariat's calibration focused on North American racing
+    # 1. Load NA-only settled predictions for target_date that haven't been
+    # reflected yet. The reflection IS NULL filter makes re-runs cheap: a
+    # restart-triggered catchup or manual backfill skips rows we've already
+    # paid Claude to reflect on.
     async with _db._AsyncSessionLocal() as db:
         result = await db.execute(
             select(RacePrediction).where(
                 RacePrediction.race_date == target_date,
                 RacePrediction.result_fetched == True,  # noqa: E712
+                RacePrediction.reflection.is_(None),
                 (RacePrediction.region == "na") | (RacePrediction.region == None),  # noqa: E711
             )
         )
         predictions = result.scalars().all()
 
     if not predictions:
-        print("No settled predictions to reflect on — exiting.")
+        print("No unreflected settled predictions for target_date — exiting.")
         return
 
     total = len(predictions)

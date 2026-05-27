@@ -1,20 +1,46 @@
 """
 In-process scheduler — runs automatically when the FastAPI server starts.
 
-The heavy nightly scripts (predict_all, reflect, recalibration, accuracy) run as
-dedicated Railway cron services (predict-daily, reflect-nightly, recalibrate-nightly,
-accuracy-nightly), so they are NOT registered here — registering them in both
-places double-fires every night and doubles the Anthropic bill.
+Owns ALL nightly work for GateSmart. The Railway cron services
+(predict-daily, reflect-nightly, recalibrate-nightly, accuracy-nightly) are
+no longer used: they never actually executed their scripts because
+railway.toml's file-level startCommand overrode their per-service overrides,
+so the cron containers booted uvicorn instead of running the intended script.
+The work was silently being done by THIS scheduler all along. When commit
+f3018ad removed the nightly triggers expecting the cron services to take
+over, accuracy + reflect + recalibrate stopped happening entirely.
 
-In-process jobs left here:
-  15:35 UTC  substack_draft_email.py     — 11:35 AM ET, no Railway counterpart
-  every 15m  predict_all catchup         — self-heals predict_all (DB row-count check,
-                                            08:00–16:00 ET window)
-  every 5m   race_alerts, smoke_check    — too frequent to spin up cron containers
+Now everything runs from here, against the backend container that has the
+env vars. The cron services should be deleted (they don't fire anything).
 
-predict_all is intentionally early (08:00 ET cron): race-day users open the app
-well before afternoon cards. The prior 11 AM ET slot left morning users seeing
-"morning line unavailable" on every race for hours.
+Schedule (UTC):
+  03:30  nightly_recalibration.py  — 30-day rolling recalibration
+  04:00  nightly_reflect.py        — reflect on settled races + synth lessons
+  10:00  nightly_accuracy.py       — settle yesterday's races + email digest
+  12:00  predict_all (via 8 AM ET catchup, see below)
+  15:35  substack_draft_email.py   — 11:35 AM ET
+
+Continuous:
+  every 30m  accuracy_catchup        — self-heal accuracy 10:00–14:00 UTC
+  every 15m  predict_all_catchup     — self-heal predict_all 08:00–16:00 ET
+  every 5m   race_alerts, smoke_check — race-time + uptime
+
+Double-fire guard:
+  RAILWAY_SERVICE_NAME must be "backend" (or unset for local dev) for the
+  scheduler to register. If a cron container ever boots start.sh, it bails
+  here instead of spinning up a competing scheduler against the same DB.
+
+Idempotency (so a restart-triggered re-fire is safe):
+  accuracy   — script filters result_fetched=False; report row uses
+               on_conflict_do_update; email_sent flag prevents re-emailing
+               an already-sent report (see catchup logic below).
+  reflect    — script filters reflection IS NULL (added 2026-05-27).
+  recalibrate — overwrites the single calibration row; cost-bounded.
+  predict_all — RacePrediction inserts use on_conflict_do_nothing.
+
+misfire_grace_time=3600 on the nightly triggers means a backend that
+restarts within an hour of the scheduled time still fires the job —
+covers the deploy-during-cron-window case.
 """
 import asyncio
 import datetime
@@ -28,7 +54,6 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 log = logging.getLogger(__name__)
 
-# Path to the scripts directory
 SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "scripts")
 
 
@@ -61,6 +86,18 @@ async def job_substack_draft() -> None:
     await _run_script("substack_draft_email.py")
 
 
+async def job_nightly_accuracy() -> None:
+    await _run_script("nightly_accuracy.py")
+
+
+async def job_nightly_reflect() -> None:
+    await _run_script("nightly_reflect.py")
+
+
+async def job_nightly_recalibration() -> None:
+    await _run_script("nightly_recalibration.py")
+
+
 async def job_race_alerts() -> None:
     try:
         from app.services.race_alerts import check_and_send_race_alerts
@@ -77,40 +114,29 @@ async def job_smoke_check() -> None:
         log.warning(f"[scheduler] smoke_check failed: {e}")
 
 
-# Catchup threshold: a real run writes a row per race (~140–170/day on weekends,
-# ~30–60 on weekdays). Anything under 10 by mid-morning is "almost certainly
-# missed" — the only days with under 10 NA races are major US holidays, and
-# re-firing on those is harmless (idempotent via on_conflict_do_nothing).
+# --- predict_all catchup (self-healing) ----------------------------------
+# A real run writes a row per race (~140–170/day on weekends, ~30–60 on
+# weekdays). Anything under 10 by mid-morning is "almost certainly missed" —
+# the only days with under 10 NA races are major US holidays, and re-firing
+# on those is harmless (idempotent via on_conflict_do_nothing).
 _PREDICT_ALL_HEALTHY_THRESHOLD = 10
 
-# Cooldown between predict_all launches. A full run takes ~15 min; if it fails
-# (e.g., Haiku rate-limited) and writes < threshold rows, the every-15-min
-# catchup would otherwise re-fire it immediately, compounding the rate-limit
-# pressure. 60 min lets a real run finish and write rows (so the count check
-# bails), while still allowing ~5 retry windows per 8-hour catchup band for
-# genuinely catastrophic failures. In-memory state resets on container restart,
-# which is desirable — a restart is itself one of the failure modes catchup
-# exists to heal, so we WANT the next catchup to fire after a deploy.
+# Cooldown between predict_all launches. A full run takes ~15 min; if it
+# fails (e.g., Haiku rate-limited) and writes < threshold rows, the
+# every-15-min catchup would otherwise re-fire it immediately. 60 min lets a
+# real run finish, while still allowing ~5 retry windows per 8-hour catchup
+# band for genuinely catastrophic failures. In-memory state resets on
+# container restart, which is desirable.
 _PREDICT_ALL_COOLDOWN_MIN = 60
 _predict_all_last_attempt: datetime.datetime | None = None
 
 
 async def job_predict_all_catchup() -> None:
-    """Self-healing predict-all check. Runs every 15 min between 8 AM and 4 PM ET.
+    """Self-healing predict-all check. Runs every 15 min between 8 AM–4 PM ET.
 
-    Fires nightly_predict_all if today has fewer than _PREDICT_ALL_HEALTHY_THRESHOLD
-    auto_daily rows AND no predict_all attempt has fired in the last
-    _PREDICT_ALL_COOLDOWN_MIN minutes. Heals three failure modes the cron
-    alone cannot:
-      1. Container started AFTER the scheduled fire (deploy at 9 AM, cron at 8 AM)
-      2. Crash mid-run leaving partial rows
-      3. APScheduler in-process job silently dropped (rare but observed)
-
-    Idempotent: predict-all writes use on_conflict_do_nothing. max_instances=1
-    on this job prevents two catchups racing each other. The cooldown stops the
-    catchup from re-firing predict_all on top of an in-flight or recently-failed
-    run — without it, a Haiku-throttled run that writes < threshold rows would
-    be relaunched every 15 minutes, compounding the rate-limit pressure.
+    Fires nightly_predict_all if today has fewer than
+    _PREDICT_ALL_HEALTHY_THRESHOLD auto_daily rows AND no predict_all attempt
+    has fired in the last _PREDICT_ALL_COOLDOWN_MIN minutes.
     """
     global _predict_all_last_attempt
     from datetime import datetime, timezone
@@ -154,18 +180,139 @@ async def job_predict_all_catchup() -> None:
     await _run_script("nightly_predict_all.py")
 
 
-def create_scheduler() -> AsyncIOScheduler:
+# --- accuracy catchup (self-healing) -------------------------------------
+# Accuracy is the most user-visible nightly: it powers the morning briefing
+# email and the top-right stats. A missed fire is a felt outage, so we
+# catchup more eagerly than predict_all.
+_ACCURACY_CATCHUP_COOLDOWN_MIN = 60
+_accuracy_last_attempt: datetime.datetime | None = None
+
+
+async def job_accuracy_catchup() -> None:
+    """Self-healing accuracy check. Runs every 30 min between 10 UTC and 14 UTC.
+
+    Fires nightly_accuracy.py if yesterday's daily_accuracy_reports row is
+    missing OR exists but email_sent=False. Idempotent: the script's own
+    result_fetched=False filter prevents double-settling, and the report
+    row upserts. Cooldown stops back-to-back fires when one is still in
+    flight (a full accuracy run can take 2–3 minutes).
+    """
+    global _accuracy_last_attempt
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from app.core import database as _db
+    from app.models.accuracy import DailyAccuracyReport
+
+    now_utc = datetime.now(timezone.utc)
+    if not (10 <= now_utc.hour < 14):
+        return
+
+    if _accuracy_last_attempt is not None:
+        age_min = (now_utc - _accuracy_last_attempt).total_seconds() / 60
+        if age_min < _ACCURACY_CATCHUP_COOLDOWN_MIN:
+            return
+
+    yesterday = now_utc.date() - timedelta(days=1)
+    try:
+        async with _db._AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(DailyAccuracyReport).where(
+                    DailyAccuracyReport.report_date == yesterday
+                )
+            )
+            existing = result.scalar_one_or_none()
+    except Exception as e:
+        log.warning(f"[scheduler] accuracy catchup db check failed: {e}")
+        return
+
+    if existing is not None and existing.email_sent:
+        return  # Done for yesterday.
+
+    state = "missing" if existing is None else "report-saved-but-email-failed"
+    print(
+        f"[scheduler] catchup: accuracy for {yesterday.isoformat()} {state} "
+        f"— firing nightly_accuracy.py",
+        flush=True,
+    )
+    _accuracy_last_attempt = now_utc
+    await _run_script("nightly_accuracy.py")
+
+
+def create_scheduler() -> AsyncIOScheduler | None:
+    """Create and return the scheduler, or None if not running as the backend.
+
+    Returning None lets main.py treat scheduling as optional, which is the
+    correct behavior for any sibling service that boots start.sh by accident.
+    """
+    svc = os.getenv("RAILWAY_SERVICE_NAME", "")
+    if svc and svc != "backend":
+        print(
+            f"[scheduler] RAILWAY_SERVICE_NAME='{svc}' — not the backend, "
+            f"skipping scheduler to avoid double-fires",
+            flush=True,
+        )
+        return None
+
     scheduler = AsyncIOScheduler(timezone="UTC")
 
     # Catchup fires 30s after startup (so deploys self-heal immediately) and
     # then every 15 min. The job itself bails outside the 8 AM–4 PM ET window.
     catchup_first_run = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=30)
 
-    # predict_all, accuracy, recalibration, reflect — run as Railway cron services,
-    # NOT here. Re-registering would double-fire and double-bill the Anthropic API.
-    scheduler.add_job(job_predict_all_catchup, IntervalTrigger(minutes=15, start_date=catchup_first_run), id="predict_all_catchup", name="Predict-all self-heal (every 15 min, 8 AM–4 PM ET)", max_instances=1, coalesce=True)
-    scheduler.add_job(job_substack_draft, CronTrigger(hour=15, minute=35), id="substack_draft", name="Substack draft email (11:35 AM ET)")
-    scheduler.add_job(job_race_alerts,  IntervalTrigger(minutes=5),      id="race_alerts",  name="Race alerts (every 5 min)")
-    scheduler.add_job(job_smoke_check,  IntervalTrigger(minutes=5),      id="smoke_check",  name="Prod smoke check (every 5 min)")
+    # Nightly jobs — misfire_grace_time=3600 means a backend that restarts
+    # within an hour of the scheduled time still fires the missed job.
+    scheduler.add_job(
+        job_nightly_recalibration,
+        CronTrigger(hour=3, minute=30),
+        id="nightly_recalibration",
+        name="Nightly recalibration (03:30 UTC)",
+        misfire_grace_time=3600,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        job_nightly_reflect,
+        CronTrigger(hour=4, minute=0),
+        id="nightly_reflect",
+        name="Nightly reflect (04:00 UTC)",
+        misfire_grace_time=3600,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        job_nightly_accuracy,
+        CronTrigger(hour=10, minute=0),
+        id="nightly_accuracy",
+        name="Nightly accuracy + morning briefing email (10:00 UTC / 6 AM ET)",
+        misfire_grace_time=3600,
+        max_instances=1,
+        coalesce=True,
+    )
+    # Catchup for accuracy — eager because users see the morning email.
+    scheduler.add_job(
+        job_accuracy_catchup,
+        IntervalTrigger(minutes=30, start_date=catchup_first_run),
+        id="accuracy_catchup",
+        name="Accuracy self-heal (every 30 min, 10–14 UTC)",
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # predict_all is fired only via catchup — the catchup runs from 8 AM ET
+    # onward, so the 12 UTC fire happens at the very first catchup tick.
+    scheduler.add_job(
+        job_predict_all_catchup,
+        IntervalTrigger(minutes=15, start_date=catchup_first_run),
+        id="predict_all_catchup",
+        name="Predict-all self-heal (every 15 min, 8 AM–4 PM ET)",
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(job_substack_draft, CronTrigger(hour=15, minute=35), id="substack_draft", name="Substack draft email (11:35 AM ET)", misfire_grace_time=3600)
+    scheduler.add_job(job_race_alerts, IntervalTrigger(minutes=5), id="race_alerts", name="Race alerts (every 5 min)")
+    scheduler.add_job(job_smoke_check, IntervalTrigger(minutes=5), id="smoke_check", name="Prod smoke check (every 5 min)")
 
     return scheduler

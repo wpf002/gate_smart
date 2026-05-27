@@ -39,10 +39,12 @@ async def lifespan(app: FastAPI):
         logging.getLogger(__name__).warning(f"Column migration failed (non-fatal): {e}")
 
     scheduler = create_scheduler()
-    scheduler.start()
-    print("[scheduler] Nightly jobs scheduled and running", flush=True)
+    if scheduler is not None:
+        scheduler.start()
+        print("[scheduler] Nightly jobs scheduled and running", flush=True)
     yield
-    scheduler.shutdown(wait=False)
+    if scheduler is not None:
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(

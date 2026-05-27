@@ -30,6 +30,11 @@ _last_status: str | None = None  # "ok" | "fail"
 _last_alert_at: datetime.datetime | None = None
 _RE_ALERT_AFTER = datetime.timedelta(minutes=30)
 
+# Accuracy is considered stale if yesterday's daily_accuracy_reports row is
+# missing or unsent by this UTC hour. 14 UTC gives the 10 UTC scheduled fire
+# plus 4 hours of 30-min catchup retries to land — anything later is real.
+_ACCURACY_STALE_AFTER_HOUR_UTC = 14
+
 
 def _checks() -> list[tuple[str, str]]:
     tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
@@ -39,6 +44,43 @@ def _checks() -> list[tuple[str, str]]:
         ("Races today (proxy)", f"{FRONTEND}/api/races/today"),
         (f"Races {tomorrow} (proxy)", f"{FRONTEND}/api/races/date/{tomorrow}"),
     ]
+
+
+async def _check_accuracy_freshness() -> tuple[str, int] | None:
+    """Return (label, code) tuple if yesterday's accuracy report is stale.
+
+    Code mapping: 0 = check raised, 599 = row missing, 598 = row exists but
+    email_sent=False. None means healthy (or it's too early in the day to
+    judge). The HTTP-style code lets the existing failure formatter render
+    this row uniformly with the URL checks.
+    """
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    if now_utc.hour < _ACCURACY_STALE_AFTER_HOUR_UTC:
+        return None
+
+    yesterday = (now_utc.date() - datetime.timedelta(days=1)).isoformat()
+    try:
+        from sqlalchemy import select
+
+        from app.core import database as _db
+        from app.models.accuracy import DailyAccuracyReport
+
+        async with _db._AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(DailyAccuracyReport).where(
+                    DailyAccuracyReport.report_date == yesterday
+                )
+            )
+            row = result.scalar_one_or_none()
+    except Exception as e:
+        log.warning(f"[smoke] accuracy freshness check raised: {e}")
+        return (f"Accuracy freshness check ({yesterday})", 0)
+
+    if row is None:
+        return (f"No accuracy report for {yesterday}", 599)
+    if not row.email_sent:
+        return (f"Accuracy report for {yesterday} exists but email not sent", 598)
+    return None
 
 
 async def _hit(url: str) -> tuple[int, float]:
@@ -67,6 +109,12 @@ async def run_smoke_check() -> None:
         results.append((label, url, code, elapsed))
         if code != 200:
             failures.append((label, url, code))
+
+    accuracy_stale = await _check_accuracy_freshness()
+    if accuracy_stale is not None:
+        label, code = accuracy_stale
+        results.append((label, "db://daily_accuracy_reports", code, 0.0))
+        failures.append((label, "db://daily_accuracy_reports", code))
 
     now = datetime.datetime.utcnow()
     current = "fail" if failures else "ok"

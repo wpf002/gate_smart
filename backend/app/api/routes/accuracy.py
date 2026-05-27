@@ -282,6 +282,11 @@ async def resettle_date(
         text_body=email_content.get("text", ""),
     )
 
+    if sent:
+        report_obj.email_sent = True
+        report_obj.email_sent_at = dt.datetime.now(dt.timezone.utc)
+        await db.commit()
+
     return {
         "date": target.isoformat(),
         "results_found": len(all_by_id),

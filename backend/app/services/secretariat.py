@@ -4,6 +4,7 @@ Powered by Claude (Anthropic). This is the core intelligence of the platform.
 All race analysis, horse evaluation, and betting recommendations flow through here.
 """
 import json
+import re
 import ssl
 
 import anthropic
@@ -36,6 +37,48 @@ def _parse_json(text: str) -> dict:
     if start != -1 and end > start:
         text = text[start:end]
     return json.loads(text.strip())
+
+
+_DIGEST_SECTION_PATTERN = re.compile(r"^===\s*([A-Z_]+)\s*===\s*$", re.MULTILINE)
+
+
+def _parse_digest_sections(raw: str) -> dict[str, str]:
+    """Parse `=== KEY ===` delimited sections into {key_lower: body}.
+
+    Tolerant of leading prose, code fences, and trailing junk. Returns an
+    empty dict if no markers are found, so callers can fall back cleanly.
+    Robust against the failure that bit the old JSON parser: unescaped
+    newlines and bullets inside section bodies are fine here because we
+    split on header lines, not on quoted strings.
+    """
+    if not raw:
+        return {}
+    matches = list(_DIGEST_SECTION_PATTERN.finditer(raw))
+    if not matches:
+        return {}
+    out: dict[str, str] = {}
+    for i, m in enumerate(matches):
+        key = m.group(1).lower()
+        body_start = m.end()
+        body_end = matches[i + 1].start() if i + 1 < len(matches) else len(raw)
+        body = raw[body_start:body_end].strip()
+        # Drop the prompt's parenthetical formatting guides if the model
+        # echoes them. A guide block starts with "(" at the beginning of a
+        # line and runs until the next blank line.
+        cleaned: list[str] = []
+        skipping = False
+        for line in body.splitlines():
+            stripped = line.strip()
+            if skipping:
+                if not stripped:
+                    skipping = False
+                continue
+            if stripped.startswith("("):
+                skipping = True
+                continue
+            cleaned.append(line)
+        out[key] = "\n".join(cleaned).strip()
+    return out
 
 
 class SecretariatBusyError(Exception):
@@ -2070,90 +2113,93 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
         pass
 
     analysis_prompt = f"""Date: {today_str}
-Total races: {total}
-Win pick (1st): {len(hits)} ({win_pct}) | Win pick ITM (1st-3rd): {report.in_the_money} ({itm_pct})
-Place pick (2nd choice finished top 2): {len(place_hits)} ({place_pct})
-Show pick (3rd choice finished top 3): {len(show_hits)} ({show_pct})
+Races: {total} | Win pick {len(hits)} ({win_pct}) | ITM {report.in_the_money} ({itm_pct}) | Place {len(place_hits)} ({place_pct}) | Show {len(show_hits)} ({show_pct})
 
-By track (win-pick wins/total): {_fmt_bucket(by_track)}
-By race type (win-pick wins/total): {_fmt_bucket(by_type)}
-By surface (win-pick wins/total): {_fmt_bucket(by_surface)}
+By track: {_fmt_bucket(by_track)}
+By race type: {_fmt_bucket(by_type)}
+By surface: {_fmt_bucket(by_surface)}
 
-Sample correct picks: {hit_sample}
+Sample hits: {hit_sample}
 Sample misses: {miss_sample}
 {track_ref_block}{(trends_block + chr(10)) if trends_block else ""}{stored_lessons_block}
-Write three analysis sections for Secretariat's nightly digest.
+Write three sections for tonight's notebook entry. You are reviewing your own card from today, first person, talking to yourself.
 
-PURPOSE: a non-technical reader should be able to answer three questions after reading:
-  1. What specifically is Secretariat doing well right now? (with names and numbers)
-  2. What specifically is Secretariat doing badly right now? (with names and numbers)
-  3. What specifically is changing tomorrow because of today? (with names and numbers)
+Voice — this is a notebook, not a press release:
+  Short sentences. Confident when the read is clear, uncertain when it's not. If today was rough, say so plainly. Specific names and numbers; never vague. No filler ("It's worth noting", "Across the board", "the engine", "the data shows", "calibration is improving"). No em dashes. No balanced "X, but Y" hedging — pick a side or call it a coin flip.
 
-Hard rules — every bullet must cite evidence. No abstract claims like "the engine
-is functioning" or "calibration is improving". If you can't point to a specific
-horse, race, track, category, or lesson, do not write the sentence.
+Content — every bullet must cite evidence:
+  Name horses, tracks, race types, counts. Track-code rule: use ONLY the code (e.g. "FL", "FP") OR the exact full name from the TRACK CODE REFERENCE above. FP is Fonner Park, FL is Finger Lakes, they are different tracks. Trend rule: single-day swings are provisional. If a category turned around in one day after weeks of zero, call it "provisional, needs to repeat". Lesson rule: when stored lessons are listed, name each by its first 3-6 words and one of: "VALIDATED by today" (good results in that category), "STILL UNPROVEN" (flat or mixed), "FAILING, should drop" (bad results in that category).
 
-Track-code rule: use ONLY the code (e.g. "FL", "FP", "CD") OR the exact full
-name from the TRACK CODE REFERENCE above. Never invent a full name from a code
-(FP is Fonner Park, FL is Finger Lakes — they are different tracks).
+Format your reply EXACTLY like this, with the === markers on their own lines and nothing before the first marker:
 
-Trend rule: treat single-day swings as provisional. A category that "improved"
-in one day after weeks of zero is not validated — say "provisional, needs to
-repeat" rather than "this lesson is working".
+=== SUBJECT ===
+Secretariat | {today_str} | {len(hits)}/{total} ({win_pct})
 
-Lesson rule: when stored lessons are listed above, name them by the first
-3-6 words and say one of:
-  - "VALIDATED by today" — only if today's results in that category were good
-  - "STILL UNPROVEN" — if today was flat or mixed
-  - "FAILING — should drop" — if today's results in that category were bad
+=== WHAT_WENT_RIGHT ===
+• <bullet>
+• <bullet>
+• <bullet>
 
-Return JSON exactly:
-{{
-  "subject": "Secretariat – {today_str} | {len(hits)}/{total} ({win_pct}) win rate",
-  "what_went_right": "3-5 bullets, one per line, each starting with '• '. Each bullet names a specific horse + track + race type that hit, OR a specific category (e.g. 'Allowance: 6/21, 28.6%') with the count. End each bullet with one phrase explaining WHY the signal worked (pace shape, class drop, jockey switch, speed figure trend, etc.). Example bullet: '• Rock Music at CD R7 (Maiden Claiming) — top pick hit at 8-1; class drop after layoff held up.' If win rate was poor but show rate was high, lead with what THAT means concretely (contender ID worked, top-pick ranking failed).",
-  "what_went_wrong": "3-5 bullets, one per line, each starting with '• '. Each bullet names a specific miss (or a specific category that went 0-for-N) and the SPECIFIC failure mode — not 'mis-ranking', but 'I ranked an 8/1 over a 5/2 in 5 of 8 EMD races'. If a track or race type was a systematic zero, lead with that bullet and quote the 7-day rate. Distinguish 'didn't even get on the board (show miss)' from 'on the board but wrong horse on top (rank miss)'.",
-  "how_im_evolving": "2-4 bullets, one per line, each starting with '• '. EACH bullet must be either: (a) 'KEEPING lesson [first words]: VALIDATED by [today's evidence]' / (b) 'DROPPING lesson [first words]: FAILED — [today's contrary evidence]' / (c) 'NEW RULE: at [track/category], I will [specific concrete action] until [measurable trigger]'. No bullet that doesn't name a lesson, a track, or a measurable trigger. If today produced no actionable change, write a single bullet: '• No rule change today — [reason in one phrase].'"
-}}"""
+(3-5 bullets. Each names a specific hit horse + track + race type, OR a category that worked with its count, e.g. "Allowance: 6/21". End each with one phrase on WHY the signal worked.)
 
-    # Narrative is best-effort. If Claude is unavailable (credit depleted,
-    # rate-limited, network down) OR returns malformed JSON, still send the
-    # digest with the deterministic scorecard + results table rather than
-    # crashing and skipping the morning email entirely.
-    analysis: dict = {}
+=== WHAT_WENT_WRONG ===
+• <bullet>
+• <bullet>
+
+(3-5 bullets. Name specific misses or 0-for-N categories. Distinguish "didn't get on the board" from "on the board but wrong horse on top".)
+
+=== HOW_IM_EVOLVING ===
+• <bullet>
+
+(2-4 bullets, each one of:
+  (a) "KEEPING lesson [first words]: VALIDATED by [today's evidence]"
+  (b) "DROPPING lesson [first words]: FAILED, [today's contrary evidence]"
+  (c) "NEW RULE: at [track or category], I will [concrete action] until [measurable trigger]"
+If today produced no actionable change, write a single bullet: "• No rule change today, [one phrase reason]".)
+"""
+
+    # Narrative is best-effort. If Claude is unavailable or returns garbage,
+    # still ship the digest with the deterministic scorecard + results table
+    # rather than crash. The delimited section format (vs JSON) tolerates
+    # unescaped newlines inside bullet bodies, which is the failure mode
+    # that hit the JSON parser every night before 2026-05-27.
+    sections: dict[str, str] = {}
+    raw_text = ""
     try:
         response = await tracked_create(
             client,
             endpoint="generate_daily_email_report",
             model="claude-sonnet-4-6",
-            max_tokens=2500,
-            temperature=0.4,
+            max_tokens=3500,
+            temperature=0.5,
             system=(
-                "You are Secretariat, an AI horse racing handicapper reviewing your daily performance. "
-                "Write in first person. Be analytical, honest, and specific — name tracks, race types, and patterns. "
-                "Do not use filler phrases. Every sentence must contain a concrete observation."
+                "You are Secretariat, a sharp horse racing handicapper writing tonight's review in your own notebook. "
+                "Direct, honest, specific. First person. You name horses, tracks, race types, and numbers; you never write filler. "
+                "If a day was bad, you say so plainly. You don't hedge with balanced 'X but Y' clauses, "
+                "don't use em dashes, and don't say 'across the board', 'it's worth noting', or 'the engine'. "
+                "Every bullet is short and cites at least one specific horse, track, race type, or count."
             ),
             messages=[{"role": "user", "content": analysis_prompt}],
         )
         raw_text = response.content[0].text if response.content else ""
-        try:
-            analysis = _parse_json(raw_text)
-        except (json.JSONDecodeError, ValueError) as e:
+        sections = _parse_digest_sections(raw_text)
+        if not sections:
             stop = getattr(response, "stop_reason", "?")
             print(
-                f"[generate_daily_email_report] narrative JSON parse failed "
-                f"(stop_reason={stop}): {e} — sending digest with placeholder narrative"
+                f"[generate_daily_email_report] no === SECTION === markers found "
+                f"(stop_reason={stop}, raw_len={len(raw_text)}). Raw head: {raw_text[:300]!r}"
             )
     except Exception as e:
         print(
-            f"[generate_daily_email_report] narrative Claude call failed: {type(e).__name__}: {e} "
-            f"— sending digest with placeholder narrative (scorecard + results table are authoritative)"
+            f"[generate_daily_email_report] narrative Claude call failed: {type(e).__name__}: {e}. "
+            f"Sending digest with placeholder narrative (scorecard + results table are authoritative)."
         )
 
-    subject = analysis.get("subject", f"Secretariat – {today_str} | {len(hits)}/{total} ({win_pct}) win rate")
-    fallback = "• Narrative unavailable — Claude response was truncated or malformed. Scorecard and full results below are authoritative."
-    what_right = analysis.get("what_went_right") or fallback
-    what_wrong = analysis.get("what_went_wrong") or fallback
-    evolving = analysis.get("how_im_evolving") or "• No rule change today — narrative generation failed."
+    subject = sections.get("subject") or f"Secretariat | {today_str} | {len(hits)}/{total} ({win_pct})"
+    fallback = "• Narrative unavailable. Scorecard and full results below are authoritative."
+    what_right = sections.get("what_went_right") or fallback
+    what_wrong = sections.get("what_went_wrong") or fallback
+    evolving = sections.get("how_im_evolving") or "• No rule change today, narrative generation failed."
 
     def _bullets_to_html(text: str) -> str:
         if not text:
