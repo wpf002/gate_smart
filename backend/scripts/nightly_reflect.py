@@ -8,10 +8,10 @@ Lessons are synthesised and stored in SecretariatCalibration.lessons, which are
 injected into every future analysis prompt so Secretariat genuinely improves
 over time.
 
-Pipeline order (nightly):
-  11 PM ET  — nightly_accuracy.py   (settle results)
-  11:30 PM  — nightly_recalibration.py (recalibrate weights)
-  Midnight  — nightly_reflect.py    (this script — reflect & synthesise)
+Pipeline order (UTC) — reflect MUST run after accuracy settles, or it finds
+no settled predictions and the learning loop never advances:
+  10:00  nightly_accuracy.py        (settle yesterday's results)
+  14:30  nightly_reflect.py         (this script — reflect & synthesise)
 
 Usage:
     cd backend

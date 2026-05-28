@@ -35,6 +35,11 @@ _RE_ALERT_AFTER = datetime.timedelta(minutes=30)
 # plus 4 hours of 30-min catchup retries to land — anything later is real.
 _ACCURACY_STALE_AFTER_HOUR_UTC = 14
 
+# Reflect runs at 14:30 UTC; by 16 UTC every settled race should have a
+# reflection. Settled races but zero reflections = the learning loop silently
+# produced nothing — exactly the failure that went unnoticed for weeks.
+_REFLECT_STALE_AFTER_HOUR_UTC = 16
+
 
 def _checks() -> list[tuple[str, str]]:
     tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
@@ -87,6 +92,53 @@ async def _check_accuracy_freshness() -> tuple[str, int] | None:
     return None
 
 
+async def _check_reflect_freshness() -> tuple[str, int] | None:
+    """Return (label, code) if yesterday's settled races never got reflected.
+
+    Code mapping: 0 = check raised, 597 = settled races exist but 0 reflections.
+    None means healthy (or too early to judge). This is the guardrail for the
+    learning loop: if reflect silently produces nothing, this fires an alert
+    instead of letting it rot unnoticed.
+    """
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    if now_utc.hour < _REFLECT_STALE_AFTER_HOUR_UTC:
+        return None
+
+    yesterday = now_utc.date() - datetime.timedelta(days=1)
+    try:
+        from sqlalchemy import func, select
+
+        from app.core import database as _db
+        from app.models.accuracy import RacePrediction
+
+        async with _db._AsyncSessionLocal() as db:
+            settled = await db.scalar(
+                select(func.count(RacePrediction.id)).where(
+                    RacePrediction.race_date == yesterday,
+                    RacePrediction.result_fetched == True,  # noqa: E712
+                    (RacePrediction.region == "na") | (RacePrediction.region.is_(None)),
+                )
+            )
+            reflected = await db.scalar(
+                select(func.count(RacePrediction.id)).where(
+                    RacePrediction.race_date == yesterday,
+                    RacePrediction.result_fetched == True,  # noqa: E712
+                    RacePrediction.reflection.is_not(None),
+                )
+            )
+    except Exception as e:
+        log.warning(f"[smoke] reflect freshness check raised: {e}")
+        return (f"Reflect freshness check ({yesterday})", 0)
+
+    if settled and not reflected:
+        return (
+            f"{settled} settled races for {yesterday} but 0 reflections — "
+            "reflect produced nothing",
+            597,
+        )
+    return None
+
+
 async def _hit(url: str) -> tuple[int, float]:
     start = datetime.datetime.now()
     try:
@@ -119,6 +171,12 @@ async def run_smoke_check() -> None:
         label, code = accuracy_stale
         results.append((label, "db://daily_accuracy_reports", code, 0.0))
         failures.append((label, "db://daily_accuracy_reports", code))
+
+    reflect_stale = await _check_reflect_freshness()
+    if reflect_stale is not None:
+        label, code = reflect_stale
+        results.append((label, "db://race_predictions.reflection", code, 0.0))
+        failures.append((label, "db://race_predictions.reflection", code))
 
     now = datetime.datetime.utcnow()
     current = "fail" if failures else "ok"

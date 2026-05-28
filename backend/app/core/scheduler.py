@@ -15,9 +15,11 @@ env vars. The cron services should be deleted (they don't fire anything).
 
 Schedule (UTC):
   03:30  nightly_recalibration.py  — 30-day rolling recalibration
-  04:00  nightly_reflect.py        — reflect on settled races + synth lessons
   10:00  nightly_accuracy.py       — settle yesterday's races + email digest
   12:00  predict_all (via 8 AM ET catchup, see below)
+  14:30  nightly_reflect.py        — reflect on settled races + synth lessons
+                                      (MUST run after accuracy settles — the
+                                       old 04:00 slot ran before the data existed)
   15:35  substack_draft_email.py   — 11:35 AM ET
 
 Continuous:
@@ -272,11 +274,16 @@ def create_scheduler() -> AsyncIOScheduler | None:
         max_instances=1,
         coalesce=True,
     )
+    # Reflect MUST run after accuracy settles yesterday's races. Accuracy fires
+    # at 10:00 UTC and its catchup retries through 14:00 UTC, so reflect at 14:30
+    # is guaranteed to see settled data. The old 04:00 slot ran 6h BEFORE the
+    # data it needs existed, so it found "no settled predictions" every night
+    # and the learning loop never advanced.
     scheduler.add_job(
         job_nightly_reflect,
-        CronTrigger(hour=4, minute=0),
+        CronTrigger(hour=14, minute=30),
         id="nightly_reflect",
-        name="Nightly reflect (04:00 UTC)",
+        name="Nightly reflect (14:30 UTC, after accuracy settles)",
         misfire_grace_time=3600,
         max_instances=1,
         coalesce=True,
