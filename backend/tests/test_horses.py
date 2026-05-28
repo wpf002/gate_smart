@@ -232,7 +232,7 @@ async def test_form_decode_passes_horse_name_to_secretariat(client):
                new=AsyncMock(return_value=FAKE_RACECARD_DATA)), \
          patch("app.api.routes.horses.secretariat.explain_form_string", new=form_mock):
         await client.get("/api/horses/h1/form/decode?form=1-1-F")
-    form_mock.assert_called_once_with("1-1-F", "Arkle")
+    form_mock.assert_called_once_with("1-1-F", "Arkle", user_id=None)
 
 
 @pytest.mark.asyncio
@@ -243,7 +243,7 @@ async def test_form_decode_uses_runner_form_when_no_param(client):
                new=AsyncMock(return_value=FAKE_RACECARD_DATA)), \
          patch("app.api.routes.horses.secretariat.explain_form_string", new=form_mock):
         await client.get("/api/horses/h1/form/decode")
-    form_mock.assert_called_once_with("1-1-1", "Arkle")  # "1-1-1" from FAKE_RUNNER
+    form_mock.assert_called_once_with("1-1-1", "Arkle", user_id=None)  # "1-1-1" from FAKE_RUNNER
 
 
 @pytest.mark.asyncio

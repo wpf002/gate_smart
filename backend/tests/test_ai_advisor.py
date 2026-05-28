@@ -85,7 +85,7 @@ async def test_analyze_calls_secretariat_with_mode_and_bankroll(client):
         await client.post("/api/advisor/analyze",
                           content=_body({"race_id": "r1", "mode": "aggressive", "bankroll": 500.0}),
                           headers={"Content-Type": "application/json"})
-    analyze_mock.assert_called_once_with(FAKE_RACE, mode="aggressive", bankroll=500.0)
+    analyze_mock.assert_called_once_with(FAKE_RACE, mode="aggressive", bankroll=500.0, user_id=None)
 
 
 @pytest.mark.asyncio
@@ -233,7 +233,7 @@ async def test_recommend_bet_uses_balanced_mode_for_analysis(client):
         await client.post("/api/advisor/recommend-bet",
                           content=_body({"race_id": "r1", "bankroll": 100.0}),
                           headers={"Content-Type": "application/json"})
-    analyze_mock.assert_called_once_with(FAKE_RACE, mode="balanced")
+    analyze_mock.assert_called_once_with(FAKE_RACE, mode="balanced", user_id=None)
 
 
 @pytest.mark.asyncio
@@ -249,7 +249,7 @@ async def test_recommend_bet_passes_profile_to_secretariat(client):
                                          "risk_tolerance": "aggressive",
                                          "experience_level": "expert"}),
                           headers={"Content-Type": "application/json"})
-    rec_mock.assert_called_once_with(250.0, "aggressive", "expert", FAKE_ANALYSIS)
+    rec_mock.assert_called_once_with(250.0, "aggressive", "expert", FAKE_ANALYSIS, user_id=None)
 
 
 @pytest.mark.asyncio
@@ -291,7 +291,7 @@ async def test_ask_passes_question_and_context(client):
         await client.post("/api/advisor/ask",
                           content=_body({"question": "Is this horse value?", "context": ctx}),
                           headers={"Content-Type": "application/json"})
-    ask_mock.assert_called_once_with("Is this horse value?", ctx, None)
+    ask_mock.assert_called_once_with("Is this horse value?", ctx, None, user_id=None)
 
 
 @pytest.mark.asyncio
@@ -301,7 +301,7 @@ async def test_ask_context_defaults_to_none(client):
         await client.post("/api/advisor/ask",
                           content=_body({"question": "What is a furlong?"}),
                           headers={"Content-Type": "application/json"})
-    ask_mock.assert_called_once_with("What is a furlong?", None, None)
+    ask_mock.assert_called_once_with("What is a furlong?", None, None, user_id=None)
 
 
 @pytest.mark.asyncio
@@ -345,7 +345,7 @@ async def test_explain_form_passes_form_and_name_to_secretariat(client):
         await client.post("/api/advisor/explain-form",
                           content=_body({"form_string": "1-F-2", "horse_name": "Desert Orchid"}),
                           headers={"Content-Type": "application/json"})
-    mock.assert_called_once_with("1-F-2", "Desert Orchid")
+    mock.assert_called_once_with("1-F-2", "Desert Orchid", user_id=None)
 
 
 @pytest.mark.asyncio
@@ -355,7 +355,7 @@ async def test_explain_form_uses_form_string_as_name_when_name_omitted(client):
         await client.post("/api/advisor/explain-form",
                           content=_body({"form_string": "1-2-3"}),
                           headers={"Content-Type": "application/json"})
-    mock.assert_called_once_with("1-2-3", "1-2-3")
+    mock.assert_called_once_with("1-2-3", "1-2-3", user_id=None)
 
 
 @pytest.mark.asyncio

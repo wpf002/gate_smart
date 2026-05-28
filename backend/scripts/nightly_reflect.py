@@ -32,8 +32,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Races per batch for per-race reflection calls (larger = fewer API calls)
-BATCH_SIZE = 25
+# Races per batch for per-race reflection calls. Kept small so the JSON array
+# response fits comfortably under reflect_batch's max_tokens — a batch that
+# overflows the cap truncates mid-array, fails to parse, and silently yields
+# zero reflections (which is what broke the learning loop for weeks).
+BATCH_SIZE = 12
 
 
 async def _ensure_columns(engine) -> None:
@@ -130,10 +133,15 @@ async def reflect_batch(client, races: list[dict]) -> list[dict]:
             client,
             endpoint="nightly_reflect_batch",
             model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
+            max_tokens=4096,
             temperature=0.2,
             messages=[{"role": "user", "content": prompt}],
         )
+        if getattr(resp, "stop_reason", None) == "max_tokens":
+            print(
+                f"    ⚠️  reflect_batch hit max_tokens with {len(races)} races — "
+                f"JSON likely truncated. Lower BATCH_SIZE or raise max_tokens."
+            )
         text = resp.content[0].text.strip()
         if text.startswith("```"):
             text = text[text.find("\n") + 1:]
@@ -417,17 +425,37 @@ async def main(target_date: datetime.date, dry_run: bool):
         print(f"  Reflecting batch {i // BATCH_SIZE + 1}/{(len(race_dicts) + BATCH_SIZE - 1) // BATCH_SIZE}…")
         results = await reflect_batch(client, batch)
 
-        # Merge factor/lesson back into race_dicts
+        # Merge factor/lesson/lesson_type back into race_dicts. lesson_type is
+        # required: synthesise_lessons buckets reflections into continue/change
+        # by it, so dropping it here leaves synthesise with empty buckets and it
+        # produces zero lessons. Fall back to deriving it from the hit flag when
+        # the model omits it.
         keyed = {r.get("race_id"): r for r in results}
         for rd in batch:
-            if rd["race_id"] in keyed:
-                rd["factor"] = keyed[rd["race_id"]].get("factor", "")
-                rd["lesson"] = keyed[rd["race_id"]].get("lesson", "")
+            match = keyed.get(rd["race_id"])
+            if match:
+                rd["factor"] = match.get("factor", "")
+                rd["lesson"] = match.get("lesson", "")
+                rd["lesson_type"] = match.get("lesson_type") or ("continue" if rd.get("hit") else "change")
             else:
                 rd["factor"] = ""
                 rd["lesson"] = ""
+                rd["lesson_type"] = "continue" if rd.get("hit") else "change"
         all_reflections.extend(batch)
         await asyncio.sleep(0.5)  # gentle rate limit
+
+    # Coverage guard: if we had races to reflect on but the batch calls produced
+    # zero usable reflections, the learning loop is broken (truncation, parse
+    # failure, API error) — fail loudly instead of silently writing nothing.
+    reflected = sum(1 for rd in all_reflections if rd.get("lesson"))
+    print(f"  Reflections produced: {reflected}/{len(all_reflections)}")
+    if all_reflections and reflected == 0:
+        print(
+            "  ❌ [REFLECT FAILED] 0 reflections produced from "
+            f"{len(all_reflections)} settled races — batch calls returned nothing. "
+            "Lessons will NOT update. Check reflect_batch truncation / API errors above."
+        )
+        sys.exit(1)
 
     # 4. Write per-race reflections to DB
     if not dry_run:
@@ -451,8 +479,11 @@ async def main(target_date: datetime.date, dry_run: bool):
     lessons = await synthesise_lessons(client, all_reflections, date_str)
 
     if not lessons:
-        print("  ⚠️  No lessons synthesised — skipping calibration update.")
-        return
+        print(
+            "  ❌ [REFLECT FAILED] synthesise produced 0 lessons despite "
+            f"{reflected} reflections — calibration NOT updated."
+        )
+        sys.exit(1)
 
     print(f"\n  📚 {len(lessons)} lessons for future predictions:")
     for i, lesson in enumerate(lessons, 1):

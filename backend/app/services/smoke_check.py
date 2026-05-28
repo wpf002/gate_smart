@@ -58,7 +58,11 @@ async def _check_accuracy_freshness() -> tuple[str, int] | None:
     if now_utc.hour < _ACCURACY_STALE_AFTER_HOUR_UTC:
         return None
 
-    yesterday = (now_utc.date() - datetime.timedelta(days=1)).isoformat()
+    # Keep this a date object — DailyAccuracyReport.report_date is a DATE column
+    # and asyncpg won't coerce a str, so passing .isoformat() here raises
+    # "operator does not exist: date = character varying" and the check reads as
+    # a false failure on every run.
+    yesterday = now_utc.date() - datetime.timedelta(days=1)
     try:
         from sqlalchemy import select
 
