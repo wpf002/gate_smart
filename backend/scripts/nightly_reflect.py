@@ -113,6 +113,11 @@ async def reflect_batch(client, races: list[dict]) -> list[dict]:
         "When reflecting on a MISS, note whether the actual winner was an obvious favorite you should have caught "
         "or a price horse that was hard to see — and whether the exotic payoffs suggest a hittable combo "
         "(my P/S picks plus the actual winner) I should have surfaced.\n\n"
+        "DO NOT attribute a miss to confusing, misidentifying, or mixing up horse names, even when the "
+        "winner's name resembles one of your picks. You select from the exact runner list, so name "
+        "confusion is never the real reason — picking the wrong horse is a handicapping judgment error, "
+        "not an identity error. Reflect only on factors you can verify from the data: pace, class, form, "
+        "price/value, post, pace shape, trainer/jockey, layoff.\n\n"
         "For each race return a JSON array element with:\n"
         '  "race_id": string\n'
         '  "factor": a short phrase (2-5 words) naming the single key factor that explains the outcome — '
@@ -261,6 +266,12 @@ async def synthesise_lessons(client, reflections: list[dict], date_str: str) -> 
         "Only write a lesson when something genuine emerged — do not invent lessons "
         "to fill a quota. A quiet day might warrant 2-3 lessons; a noisy day might "
         "warrant 8. Skew the mix toward whichever type the day actually produced.\n\n"
+        "NEVER write a lesson about confusing or misidentifying horses, or about "
+        "'verifying horse identity / the correct runner' — picks come from the exact "
+        "runner list, so name confusion is not a real failure mode. A winner whose "
+        "name resembles one of my picks is a handicapping miss, not an identity mixup. "
+        "Drop any such reasoning and reflect on the verifiable factor instead "
+        "(pace, class, form, price, post, pace shape).\n\n"
         "Each lesson must be specific, actionable, and written in first person.\n"
         "Format each as: 'CONTINUE: When...', 'CHANGE: When...', 'WATCH: When...'\n\n"
         'Return ONLY a JSON array of strings (between 1 and 8 items).'
