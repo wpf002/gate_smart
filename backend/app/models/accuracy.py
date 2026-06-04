@@ -62,6 +62,15 @@ class RacePrediction(Base):
     actual_third: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     result_fetched: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Market context at predict time (populated by nightly_predict_all.py).
+    # Captures the betting market so we can measure favorite-agreement and
+    # calibration of the picks. Odds are fractional-decimal (lower = favored).
+    field_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    top_pick_odds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    favorite_odds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    favorite_num: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    top_pick_is_favorite: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+
     # Outcome flags
     top_pick_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     in_the_money: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)

@@ -288,6 +288,13 @@ async def main(target_date: datetime.date, dry_run: bool):
 
         print(f"pick={first}")
 
+        # Capture market context (favorite, pick odds, field size) so we can
+        # later measure favorite-agreement and calibration of the picks.
+        from app.services.odds import compute_market_context
+        market = compute_market_context(
+            race.get("runners") or [], pick_name=first, pick_num=first_num
+        )
+
         if not dry_run:
             # Extract HH:MM post time from off_dt (ISO) or time string
             post_time_et = None
@@ -338,6 +345,11 @@ async def main(target_date: datetime.date, dry_run: bool):
                 "predicted_fourth": fourth,
                 "post_time_et": post_time_et,
                 "lock_source": lock_source,
+                "field_size": market["field_size"],
+                "top_pick_odds": market["top_pick_odds"],
+                "favorite_odds": market["favorite_odds"],
+                "favorite_num": market["favorite_num"],
+                "top_pick_is_favorite": market["top_pick_is_favorite"],
             }
             from sqlalchemy import or_ as _or_
             from sqlalchemy import update as _update
