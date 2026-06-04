@@ -40,6 +40,25 @@ _ACCURACY_STALE_AFTER_HOUR_UTC = 14
 # produced nothing — exactly the failure that went unnoticed for weeks.
 _REFLECT_STALE_AFTER_HOUR_UTC = 16
 
+# Predict-all slate completeness — the guardrail for the Morning Line itself.
+# predict_all is fired by the 8 AM ET catchup; a full run takes ~15 min and the
+# catchup keeps retrying through the morning. By 14 UTC (10 AM ET) a healthy day
+# has far more than this many picks — under it means the Morning Line is
+# effectively missing. Threshold matches the scheduler catchup so light/holiday
+# cards don't false-alarm. THIS is the check that means you never again have to
+# be the one who discovers the Morning Line is blank.
+_PREDICT_STALE_AFTER_HOUR_UTC = 14
+_PREDICT_MIN_SLATE = 10
+
+# Anthropic API health probe. A tiny 1-token call surfaces a credit/auth
+# blackout BEFORE it silently wipes a day of picks (cf. the 2026-06-01 credit
+# outage that went unnoticed for two days). Probed at most every 30 min; the
+# verdict is cached between probes so the alert state stays stable and cheap.
+_API_PROBE_EVERY = datetime.timedelta(minutes=30)
+_API_PROBE_MODEL = "claude-haiku-4-5-20251001"
+_last_api_probe_at: datetime.datetime | None = None
+_last_api_verdict: "tuple[str, int] | None" = None
+
 
 def _checks() -> list[tuple[str, str]]:
     tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
@@ -139,6 +158,93 @@ async def _check_reflect_freshness() -> tuple[str, int] | None:
     return None
 
 
+async def _check_predict_all_freshness() -> tuple[str, int] | None:
+    """Return (label, code) if today's Morning Line slate is missing/short.
+
+    Code 596 = far fewer than a real day's predictions by the cutoff hour.
+    None means healthy (or too early to judge). The scheduler's catchup is
+    already re-firing predict_all in the background; this is the alert that
+    makes a stuck slate visible instead of silent.
+    """
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    if now_utc.hour < _PREDICT_STALE_AFTER_HOUR_UTC:
+        return None
+
+    today = now_utc.date()
+    try:
+        from sqlalchemy import func, select
+
+        from app.core import database as _db
+        from app.models.accuracy import RacePrediction
+
+        async with _db._AsyncSessionLocal() as db:
+            count = await db.scalar(
+                select(func.count(RacePrediction.id)).where(
+                    RacePrediction.race_date == today,
+                    RacePrediction.analysis_mode == "auto_daily",
+                    RacePrediction.user_id.is_(None),
+                )
+            )
+    except Exception as e:
+        log.warning(f"[smoke] predict_all freshness check raised: {e}")
+        return (f"Predict-all freshness check ({today})", 0)
+
+    if (count or 0) < _PREDICT_MIN_SLATE:
+        return (
+            f"Only {count or 0} predictions for {today} by {now_utc.hour:02d}:00 UTC "
+            "— Morning Line slate is missing/short",
+            596,
+        )
+    return None
+
+
+def _classify_api_error(message: str, status_code: int | None) -> tuple[str, int] | None:
+    """Pure classifier: map an Anthropic error to an actionable alert, or None.
+
+    Only definitive, actionable failures (credit exhausted, auth) alert — a
+    transient network blip returns None so we don't false-alarm (a sustained
+    outage is caught by the slate-completeness check anyway).
+    """
+    msg = (message or "").lower()
+    if any(s in msg for s in ("credit balance", "too low", "purchase credits", "plans & billing", "billing")):
+        return (
+            "Anthropic API: credit balance too low — top up at "
+            "console.anthropic.com (Plans & Billing)",
+            595,
+        )
+    if status_code in (401, 403) or "authentication" in msg or "x-api-key" in msg:
+        return ("Anthropic API: authentication failed — check ANTHROPIC_API_KEY", 595)
+    return None
+
+
+async def _check_api_health() -> tuple[str, int] | None:
+    """Probe the Anthropic API with a 1-token call; alert on credit/auth death.
+
+    Throttled to once per _API_PROBE_EVERY; verdict cached between probes.
+    """
+    global _last_api_probe_at, _last_api_verdict
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if _last_api_probe_at is not None and now - _last_api_probe_at < _API_PROBE_EVERY:
+        return _last_api_verdict
+
+    _last_api_probe_at = now
+    try:
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        await client.messages.create(
+            model=_API_PROBE_MODEL,
+            max_tokens=1,
+            messages=[{"role": "user", "content": "ping"}],
+        )
+        _last_api_verdict = None
+    except Exception as e:  # noqa: BLE001 — probe must never crash the smoke loop
+        _last_api_verdict = _classify_api_error(str(e), getattr(e, "status_code", None))
+        if _last_api_verdict is None:
+            log.warning(f"[smoke] api health probe error (not alerting): {type(e).__name__}: {e}")
+    return _last_api_verdict
+
+
 async def _hit(url: str) -> tuple[int, float]:
     start = datetime.datetime.now()
     try:
@@ -177,6 +283,18 @@ async def run_smoke_check() -> None:
         label, code = reflect_stale
         results.append((label, "db://race_predictions.reflection", code, 0.0))
         failures.append((label, "db://race_predictions.reflection", code))
+
+    predict_stale = await _check_predict_all_freshness()
+    if predict_stale is not None:
+        label, code = predict_stale
+        results.append((label, "db://race_predictions", code, 0.0))
+        failures.append((label, "db://race_predictions", code))
+
+    api_health = await _check_api_health()
+    if api_health is not None:
+        label, code = api_health
+        results.append((label, "anthropic://messages", code, 0.0))
+        failures.append((label, "anthropic://messages", code))
 
     now = datetime.datetime.utcnow()
     current = "fail" if failures else "ok"

@@ -78,6 +78,50 @@ async def main() -> None:
         print("\n=== current rolling ===")
         print(f"  rolling_win_rate={rolling}%  sample={cal['sample_size']}  updated={cal['updated_at']:%Y-%m-%d %H:%M}")
         print(f"  favorite baseline ~{FAVORITE_BASELINE_PCT}%  |  target {TARGET_PCT}-35%  |  gap to target: {TARGET_PCT-rolling:+.1f} pts")
+
+        # --- Favorite-agreement: the core learning diagnostic --------------
+        # Where are the points leaking? If win% when picking the favorite is
+        # high but Secretariat rarely picks it, the lever is "trust the market
+        # more". If win% is low even on favorites, the handicapping itself is
+        # off. (Populated from 2026-06-04 onward — odds capture start.)
+        print("\n=== favorite-agreement (settled picks with market data) ===")
+        rows = await c.fetch(
+            """
+            SELECT top_pick_is_favorite AS is_fav,
+                   COUNT(*) AS n,
+                   ROUND(100.0*AVG((top_pick_correct)::int), 1) AS win_pct,
+                   ROUND(100.0*AVG((in_the_money)::int), 1) AS itm_pct
+            FROM race_predictions
+            WHERE result_fetched AND top_pick_is_favorite IS NOT NULL
+            GROUP BY 1 ORDER BY 1 DESC NULLS LAST
+            """
+        )
+        if not rows:
+            print("  (no settled picks with market data yet — capture began 2026-06-04)")
+        else:
+            for r in rows:
+                lbl = "picked FAVORITE" if r["is_fav"] else "picked non-favorite"
+                print(f"  {lbl:20} n={r['n']:<5} win={r['win_pct']}%  itm={r['itm_pct']}%")
+
+        print("=== win rate by field size ===")
+        rows = await c.fetch(
+            """
+            SELECT CASE WHEN field_size <= 6 THEN '1) <=6'
+                        WHEN field_size <= 9 THEN '2) 7-9'
+                        WHEN field_size <= 12 THEN '3) 10-12'
+                        ELSE '4) 13+' END AS bucket,
+                   COUNT(*) AS n,
+                   ROUND(100.0*AVG((top_pick_correct)::int), 1) AS win_pct
+            FROM race_predictions
+            WHERE result_fetched AND field_size IS NOT NULL
+            GROUP BY 1 ORDER BY 1
+            """
+        )
+        if not rows:
+            print("  (no data yet)")
+        else:
+            for r in rows:
+                print(f"  field {r['bucket']:9} n={r['n']:<5} win={r['win_pct']}%")
     finally:
         await c.close()
 
