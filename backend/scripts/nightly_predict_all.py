@@ -329,49 +329,62 @@ async def main(target_date: datetime.date, dry_run: bool):
                 except Exception as e:
                     print(f"  (cache write failed: {e})", end=" ")
 
+            # Clip every string to its column width. A single oversized value
+            # (e.g. a composite race_type from an upstream quirk) must never be
+            # able to crash the whole run — see the per-race try/except below.
+            def _clip(v, n):
+                return v[:n] if isinstance(v, str) else v
+
+            race_type_clipped = _clip(race_type, 120)
             row = {
-                "race_id": race_id,
+                "race_id": _clip(race_id, 100),
                 "race_date": target_date,
-                "track_code": track_code,
-                "race_name": race_name,
-                "race_type": race_type,
-                "surface": surface,
-                "region": region,
+                "track_code": _clip(track_code, 20),
+                "race_name": _clip(race_name, 200),
+                "race_type": race_type_clipped,
+                "surface": _clip(surface, 20),
+                "region": _clip(region, 10),
                 "analysis_mode": "auto_daily",
-                "predicted_first": first,
-                "predicted_first_num": first_num,
-                "predicted_second": second,
-                "predicted_third": third,
-                "predicted_fourth": fourth,
-                "post_time_et": post_time_et,
-                "lock_source": lock_source,
+                "predicted_first": _clip(first, 120),
+                "predicted_first_num": _clip(first_num, 10),
+                "predicted_second": _clip(second, 120),
+                "predicted_third": _clip(third, 120),
+                "predicted_fourth": _clip(fourth, 120),
+                "post_time_et": _clip(post_time_et, 10),
+                "lock_source": _clip(lock_source, 30),
                 "field_size": market["field_size"],
                 "top_pick_odds": market["top_pick_odds"],
                 "favorite_odds": market["favorite_odds"],
-                "favorite_num": market["favorite_num"],
+                "favorite_num": _clip(market["favorite_num"], 10),
                 "top_pick_is_favorite": market["top_pick_is_favorite"],
             }
             from sqlalchemy import or_ as _or_
             from sqlalchemy import update as _update
-            async with _db._AsyncSessionLocal() as db:
-                stmt = pg_insert(RacePrediction).values(**row)
-                stmt = stmt.on_conflict_do_nothing(constraint="uq_race_prediction")
-                await db.execute(stmt)
-                # Backfill race_type on rows that already exist with an empty value.
-                if race_type:
-                    await db.execute(
-                        _update(RacePrediction)
-                        .where(
-                            RacePrediction.race_id == race_id,
-                            RacePrediction.analysis_mode == "auto_daily",
-                            _or_(
-                                RacePrediction.race_type.is_(None),
-                                RacePrediction.race_type == "",
-                            ),
+            try:
+                async with _db._AsyncSessionLocal() as db:
+                    stmt = pg_insert(RacePrediction).values(**row)
+                    stmt = stmt.on_conflict_do_nothing(constraint="uq_race_prediction")
+                    await db.execute(stmt)
+                    # Backfill race_type on rows that already exist with an empty value.
+                    if race_type_clipped:
+                        await db.execute(
+                            _update(RacePrediction)
+                            .where(
+                                RacePrediction.race_id == race_id,
+                                RacePrediction.analysis_mode == "auto_daily",
+                                _or_(
+                                    RacePrediction.race_type.is_(None),
+                                    RacePrediction.race_type == "",
+                                ),
+                            )
+                            .values(race_type=race_type_clipped)
                         )
-                        .values(race_type=race_type)
-                    )
-                await db.commit()
+                    await db.commit()
+            except Exception as e:
+                # One bad race must not sink the slate. Log, skip, keep going.
+                print(f"DB write failed ({type(e).__name__}: {e}); skipping race")
+                skipped += 1
+                continue
 
         predicted += 1
         await asyncio.sleep(1.0)

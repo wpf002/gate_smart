@@ -44,7 +44,7 @@ class RacePrediction(Base):
     )
     track_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     race_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    race_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    race_type: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     surface: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     region: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # 'na' or 'int'
     analysis_mode: Mapped[str] = mapped_column(String(20), default="balanced")

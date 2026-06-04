@@ -55,6 +55,9 @@ _STARTUP_MIGRATIONS: list[str] = [
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS favorite_odds DOUBLE PRECISION",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS favorite_num VARCHAR(10)",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_is_favorite BOOLEAN",
+    # race_type occasionally arrives as a composite string > 50 chars; widen so
+    # it never truncates the whole insert. Idempotent.
+    "ALTER TABLE race_predictions ALTER COLUMN race_type TYPE VARCHAR(120)",
 ]
 
 
