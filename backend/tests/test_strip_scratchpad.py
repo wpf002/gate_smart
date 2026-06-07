@@ -19,9 +19,21 @@ def test_keeps_after_last_close_when_multiple():
     assert _strip_scratchpad(raw) == "FINAL"
 
 
-def test_unclosed_scratchpad_drops_reasoning():
-    raw = "<scratchpad>let me think, wait no, hmm, let me be precise..."
-    assert _strip_scratchpad(raw) == ""
+def test_closed_but_answer_inside_is_salvaged_not_empty():
+    # Model put the whole answer inside the scratchpad and wrote nothing after —
+    # must NOT return empty.
+    raw = "<scratchpad>The answer is Citation (1948).</scratchpad>"
+    out = _strip_scratchpad(raw)
+    assert out != ""
+    assert "scratchpad" not in out.lower()
+    assert "Citation" in out
+
+
+def test_unclosed_scratchpad_is_never_empty():
+    raw = "<scratchpad>let me think, the answer is zero"
+    out = _strip_scratchpad(raw)
+    assert out != ""
+    assert "scratchpad" not in out.lower()
 
 
 def test_no_scratchpad_passes_through():

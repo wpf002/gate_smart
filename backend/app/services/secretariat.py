@@ -4,6 +4,7 @@ Powered by Claude (Anthropic). This is the core intelligence of the platform.
 All race analysis, horse evaluation, and betting recommendations flow through here.
 """
 import json
+import logging
 import re
 import ssl
 
@@ -12,6 +13,8 @@ import httpx
 
 from app.core.config import settings
 from app.core.llm_cost import tracked_create
+
+log = logging.getLogger(__name__)
 
 # Use system SSL certs — avoids certifi/OpenSSL incompatibility on macOS Python 3.13
 _ssl_ctx = ssl.create_default_context()
@@ -1650,7 +1653,28 @@ Reply with the FINAL markdown answer directly — no JSON wrapper, no preface, n
             response = await tracked_create(client, endpoint="ask_sonnet_nosearch", user_id=user_id, **create_args)
         return _strip_scratchpad(_extract_text(response))
 
-    # Default: Haiku, no web search (≈$0.003/call) for evergreen handicapping/strategy/history
+    # Default: Haiku, no web search (≈$0.003/call) for evergreen handicapping/strategy/history.
+    # Use extended thinking so the model reasons in dedicated thinking blocks
+    # (separate from text and excluded by _extract_text) — the user sees only the
+    # clean final answer, never "let me reconsider / wait, no" narration. Falls
+    # back to a plain call if thinking is unavailable for the model/SDK.
+    try:
+        response = await tracked_create(
+            client,
+            endpoint="ask_haiku",
+            user_id=user_id,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=3000,
+            thinking={"type": "enabled", "budget_tokens": 1500},
+            system=SECRETARIAT_SYSTEM,
+            messages=msgs,
+        )
+        answer = _strip_scratchpad(_extract_text(response))
+        if answer:
+            return answer
+    except Exception:
+        log.warning("ask_haiku thinking call failed; retrying without thinking", exc_info=True)
+
     response = await tracked_create(
         client,
         endpoint="ask_haiku",
@@ -1665,30 +1689,32 @@ Reply with the FINAL markdown answer directly — no JSON wrapper, no preface, n
 
 
 def _strip_scratchpad(text: str) -> str:
-    """Remove the model's private <scratchpad> reasoning, returning only the
-    final answer that follows it.
+    """Remove the model's private <scratchpad> reasoning, returning the final
+    answer that follows it — but NEVER return empty when there was content.
 
-    Keeps everything after the LAST closing tag. If the model opened a scratchpad
-    but never closed it (rambled to the end), drop from the opening tag so we
-    never surface raw deliberation. Falls back to the original text when no
-    scratchpad is present, so non-scratchpad answers pass through untouched.
+    Primary case: keep everything after the last </scratchpad>. If the model
+    closed the tag but wrote the answer INSIDE the scratchpad (nothing after),
+    salvage the inner content rather than return nothing. For an unclosed tag,
+    keep what came before; if that's empty, salvage the remainder. No scratchpad
+    present → pass through untouched. An empty advisor answer is the worst
+    outcome, so non-emptiness wins over perfect stripping in pathological cases.
     """
     if not text:
         return text
     import re as _re
 
+    def _clean(s: str) -> str:
+        return _re.sub(r"</?scratchpad>", "", s, flags=_re.IGNORECASE).strip()
+
     lower = text.lower()
     close = lower.rfind("</scratchpad>")
     if close != -1:
-        text = text[close + len("</scratchpad>"):]
-    else:
-        open_idx = lower.find("<scratchpad>")
-        if open_idx != -1:
-            # Unclosed scratchpad — everything after the open tag is raw
-            # reasoning; keep only what came before it (usually empty).
-            text = text[:open_idx]
-    # Strip any stray tags and tidy.
-    text = _re.sub(r"</?scratchpad>", "", text, flags=_re.IGNORECASE)
+        after = _clean(text[close + len("</scratchpad>"):])
+        return after or _clean(text)  # salvage inner content if nothing followed
+    open_idx = lower.find("<scratchpad>")
+    if open_idx != -1:
+        before = _clean(text[:open_idx])
+        return before or _clean(text)
     return text.strip()
 
 
