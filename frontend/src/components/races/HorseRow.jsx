@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store';
 import { getHorsePastPerformances } from '../../utils/api';
+import { formatClaim } from '../../utils/currency';
 import RadarChart from './RadarChart';
 import Icon from '../common/Icon';
 
@@ -378,9 +379,9 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             </div>
           )}
 
-          {horse.claiming_price && !isBeginner && (
+          {formatClaim(horse.claiming_price) && !isBeginner && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-              Claim: ${Number(horse.claiming_price).toLocaleString()}
+              Claim: {formatClaim(horse.claiming_price)}
             </div>
           )}
 
@@ -433,9 +434,9 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
                   {[horse.jockey, horse.trainer].filter(Boolean).join(' · ')}
                 </div>
               )}
-              {horse.claiming_price && (
+              {formatClaim(horse.claiming_price) && (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  Claim: ${Number(horse.claiming_price).toLocaleString()}
+                  Claim: {formatClaim(horse.claiming_price)}
                 </div>
               )}
               {analysisData?.recommended_bet && (() => {

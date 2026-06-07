@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { formatPurse as formatPurseUtil } from '../../utils/currency';
+import { formatPurse as formatPurseUtil, formatClaim } from '../../utils/currency';
 import { formatRaceTime, TIMEZONE_OPTIONS } from '../../utils/timezone';
 import { useAppStore } from '../../store';
 
@@ -219,7 +219,7 @@ export function RaceCard({ race, isTomorrow = false }) {
         };
         const advancedItems = isAdvanced ? [
           fmtClass(race.race_class || race.race_type || race.type) || null,
-          race.claiming_price ? `Clm $${Number(race.claiming_price).toLocaleString()}` : null,
+          formatClaim(race.claiming_price) ? `Clm ${formatClaim(race.claiming_price)}` : null,
         ].filter(Boolean) : [];
 
         return (
