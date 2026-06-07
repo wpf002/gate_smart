@@ -286,6 +286,28 @@ async def main(target_date: datetime.date, dry_run: bool):
             first_num = None
             lock_source = "nightly_fallback"
 
+        # Guarantee distinct horses across the 4 finish slots. The model
+        # occasionally repeats a horse (e.g. first == second), which would render
+        # as an impossible Morning Line like "1-1-4-2". Keep first occurrences in
+        # order; trailing dupes drop to None rather than fabricate a pick.
+        def _norm_pick(n):
+            return (n or "").strip().lower().replace("'", "").replace("-", " ")
+
+        _seen, _kept = set(), []
+        for _name_val in (first, second, third, fourth):
+            _k = _norm_pick(_name_val)
+            if not _name_val or not _k or _k in _seen:
+                continue
+            _seen.add(_k)
+            _kept.append(_name_val)
+        _kept += [None] * (4 - len(_kept))
+        first, second, third, fourth = _kept[0], _kept[1], _kept[2], _kept[3]
+
+        if not first:
+            print("skip (no distinct pick)")
+            skipped += 1
+            continue
+
         print(f"pick={first}")
 
         # Capture market context (favorite, pick odds, field size) so we can

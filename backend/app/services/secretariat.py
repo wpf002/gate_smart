@@ -681,6 +681,45 @@ def _stake_sizing_block(bankroll: float | None) -> str:
     )
 
 
+def _pf_name_key(entry) -> str:
+    """Normalized horse identity for a predicted_finish entry (dict or str)."""
+    if isinstance(entry, dict):
+        name = entry.get("name") or entry.get("horse_name") or entry.get("horse") or ""
+    else:
+        name = entry or ""
+    return str(name).strip().lower().replace("'", "").replace("-", " ")
+
+
+def _dedupe_predicted_finish(result: dict) -> dict:
+    """Guarantee predicted_finish never names the same horse in two positions.
+
+    The model occasionally repeats a horse (e.g. first == second), which renders
+    as an impossible Morning Line like "1-1-4-2" and corrupts settlement /
+    reflection. Keep the first occurrence of each horse in order and collapse the
+    rest, so positions hold DISTINCT runners; trailing slots drop to None rather
+    than fabricate a pick. Idempotent and safe on partial/empty input.
+    """
+    pf = result.get("predicted_finish")
+    if not isinstance(pf, dict):
+        return result
+    positions = ("first", "second", "third", "fourth")
+    seen: set[str] = set()
+    kept: list = []
+    for pos in positions:
+        entry = pf.get(pos)
+        if entry is None:
+            continue
+        key = _pf_name_key(entry)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        kept.append(entry)
+    for i, pos in enumerate(positions):
+        pf[pos] = kept[i] if i < len(kept) else None
+    result["predicted_finish"] = pf
+    return result
+
+
 async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, experience_level: str = None, user_id: int | None = None) -> dict:
     """
     Full race analysis — Secretariat's core function.
@@ -774,7 +813,7 @@ Return this JSON exactly:
         raise
 
     raw_text = response.content[0].text
-    result = _truncate_analysis(_parse_json(raw_text))
+    result = _dedupe_predicted_finish(_truncate_analysis(_parse_json(raw_text)))
 
     try:
         await extract_and_store_fair_prices(race_data.get("race_id", ""), result)
@@ -890,7 +929,7 @@ Return this JSON exactly:
             output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
         )
 
-    result = _truncate_analysis(_parse_json(full_text))
+    result = _dedupe_predicted_finish(_truncate_analysis(_parse_json(full_text)))
 
     yield ("result", result)
 

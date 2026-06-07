@@ -378,12 +378,27 @@ async def morning_line(race_id: str) -> JSONResponse:
             fallback.lstrip("#").strip() if fallback else None
         )
 
-    picks = [
+    raw_picks = [
         _num_for(prediction.predicted_first, prediction.predicted_first_num),
         _num_for(prediction.predicted_second),
         _num_for(prediction.predicted_third),
         _num_for(prediction.predicted_fourth),
     ]
+
+    # Display guard: never render the same program number twice (an impossible
+    # finish like "1-1-4-2"). Two slots collapsing to one number means the
+    # stored prediction repeated a horse or two names mapped to one runner —
+    # keep the first occurrence in order, drop later dupes, pad with None. This
+    # also repairs any already-stored degenerate rows without a re-run.
+    seen_nums: set[str] = set()
+    picks: list[str | None] = []
+    for p in raw_picks:
+        if p is not None and p in seen_nums:
+            continue
+        if p is not None:
+            seen_nums.add(p)
+        picks.append(p)
+    picks += [None] * (4 - len(picks))
 
     return JSONResponse({
         "picks": picks,
