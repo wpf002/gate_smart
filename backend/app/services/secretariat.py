@@ -1584,13 +1584,17 @@ NEVER ACCEPTABLE:
   candidate answers you then revise. Work it out SILENTLY and present only the
   finished conclusion.
 
-ANSWER ONLY — NO THINKING OUT LOUD:
-The user wants the final answer, not a transcript of you arriving at it. Do all
-reasoning, fact-checking, and second-guessing internally. Output a single,
-clean, confident answer as if you already knew it — no preamble, no "working
-through the record," no visible course-corrections. If the honest answer is
-"never" or "zero," state that plainly in the first sentence and then explain
-why; do not stage a fake investigation to get there.
+PRIVATE SCRATCHPAD — THINK FIRST, THEN ANSWER:
+The user must see ONLY your final answer, never your reasoning. If the question
+is tricky or you need to check yourself, do ALL of that thinking — every "wait",
+"let me reconsider", candidate list, and self-correction — inside a single
+<scratchpad>...</scratchpad> block at the very start. You MUST close the
+</scratchpad> tag. Everything inside the scratchpad is STRIPPED before the user
+sees it, so think freely in there. After </scratchpad>, write ONLY the clean,
+finished answer: no preamble, no "working through the record", no false starts,
+no visible course-corrections — as if you knew it immediately. If the honest
+answer is "never" or "zero," state that plainly in the first sentence after the
+scratchpad and then explain why; never stage a fake investigation to get there.
 
 DEPTH AND TONE:
 - Beginner questions (rules, terms, bet types): plain English, concrete example.
@@ -1644,7 +1648,7 @@ Reply with the FINAL markdown answer directly — no JSON wrapper, no preface, n
         except anthropic.APIError:
             # Web search unavailable — answer from training instead of swallowing the cost twice
             response = await tracked_create(client, endpoint="ask_sonnet_nosearch", user_id=user_id, **create_args)
-        return _extract_text(response)
+        return _strip_scratchpad(_extract_text(response))
 
     # Default: Haiku, no web search (≈$0.003/call) for evergreen handicapping/strategy/history
     response = await tracked_create(
@@ -1657,7 +1661,35 @@ Reply with the FINAL markdown answer directly — no JSON wrapper, no preface, n
         system=SECRETARIAT_SYSTEM,
         messages=msgs,
     )
-    return _extract_text(response)
+    return _strip_scratchpad(_extract_text(response))
+
+
+def _strip_scratchpad(text: str) -> str:
+    """Remove the model's private <scratchpad> reasoning, returning only the
+    final answer that follows it.
+
+    Keeps everything after the LAST closing tag. If the model opened a scratchpad
+    but never closed it (rambled to the end), drop from the opening tag so we
+    never surface raw deliberation. Falls back to the original text when no
+    scratchpad is present, so non-scratchpad answers pass through untouched.
+    """
+    if not text:
+        return text
+    import re as _re
+
+    lower = text.lower()
+    close = lower.rfind("</scratchpad>")
+    if close != -1:
+        text = text[close + len("</scratchpad>"):]
+    else:
+        open_idx = lower.find("<scratchpad>")
+        if open_idx != -1:
+            # Unclosed scratchpad — everything after the open tag is raw
+            # reasoning; keep only what came before it (usually empty).
+            text = text[:open_idx]
+    # Strip any stray tags and tidy.
+    text = _re.sub(r"</?scratchpad>", "", text, flags=_re.IGNORECASE)
+    return text.strip()
 
 
 def _extract_text(response) -> str:
