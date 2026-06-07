@@ -187,6 +187,26 @@ describe('formatDistance', () => {
     expect(formatDistance(undefined, '9.0')).toBe('1m / 1f');
     expect(formatDistance(undefined, '8.0')).toBe('1m');
   });
+
+  it('never renders "NaN" for any input', () => {
+    // Literal "NaN" string from the feed
+    expect(formatDistance('NaN', null)).toBe('');
+    expect(formatDistance('NaN', 'NaN')).toBe('');
+    expect(formatDistance('NaN', undefined, 'USA')).toBe('');
+    // Numeric NaN
+    expect(formatDistance(NaN, NaN)).toBe('');
+    // Unparseable distance_f doesn't leak into the miles/furlongs math
+    expect(formatDistance('', 'NaN', 'GB')).toBe('');
+    expect(formatDistance(undefined, 'abc')).toBe('');
+    // None of the valid paths ever contain "NaN"
+    for (const out of [
+      formatDistance('5 1/2 Furlongs', null, 'USA'),
+      formatDistance(undefined, '8.5'),
+      formatDistance('NaN', '11.0'),
+    ]) {
+      expect(out).not.toContain('NaN');
+    }
+  });
 });
 
 describe('RaceCardSkeleton', () => {

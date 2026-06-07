@@ -79,17 +79,29 @@ export const isRacePast = isRaceDefinitelyFinished;
  *      distanceF=7  (7f)   → "7f"  (sub-mile shown in furlongs only)
  */
 export function formatDistance(dist, distanceF, region) {
+  // Sanitize inputs so we NEVER render "NaN": treat the literal string "NaN",
+  // a numeric NaN, null, or empty as "no distance"; only use distanceF if it
+  // parses to a real number.
+  const cleanDist =
+    dist == null ||
+    dist === '' ||
+    (typeof dist === 'number' && Number.isNaN(dist)) ||
+    String(dist).trim().toLowerCase() === 'nan'
+      ? ''
+      : String(dist);
+
+  const parsedF = distanceF == null || distanceF === '' ? NaN : parseFloat(distanceF);
+  const validF = Number.isFinite(parsedF) ? parsedF : null;
+
   // US races: show the raw description (e.g. "5 1/2 Furlongs", "1 1/16 Miles")
   if (['USA', 'CAN'].includes((region || '').toUpperCase())) {
-    return dist || (distanceF != null ? `${distanceF}f` : '');
+    return cleanDist || (validF != null ? `${validF}f` : '');
   }
 
-  const totalF = distanceF != null ? parseFloat(distanceF) : null;
-  if (!totalF && !dist) return '';
-  if (!totalF) return dist || '';
+  if (validF == null) return cleanDist;
 
-  const wholeMiles = Math.floor(totalF / 8);
-  const remainderF = Math.round((totalF - wholeMiles * 8) * 10) / 10;
+  const wholeMiles = Math.floor(validF / 8);
+  const remainderF = Math.round((validF - wholeMiles * 8) * 10) / 10;
 
   if (wholeMiles === 0) return `${remainderF}f`;
   if (remainderF === 0) return `${wholeMiles}m`;
