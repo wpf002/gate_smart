@@ -1587,17 +1587,14 @@ NEVER ACCEPTABLE:
   candidate answers you then revise. Work it out SILENTLY and present only the
   finished conclusion.
 
-PRIVATE SCRATCHPAD — THINK FIRST, THEN ANSWER:
-The user must see ONLY your final answer, never your reasoning. If the question
-is tricky or you need to check yourself, do ALL of that thinking — every "wait",
-"let me reconsider", candidate list, and self-correction — inside a single
-<scratchpad>...</scratchpad> block at the very start. You MUST close the
-</scratchpad> tag. Everything inside the scratchpad is STRIPPED before the user
-sees it, so think freely in there. After </scratchpad>, write ONLY the clean,
-finished answer: no preamble, no "working through the record", no false starts,
-no visible course-corrections — as if you knew it immediately. If the honest
-answer is "never" or "zero," state that plainly in the first sentence after the
-scratchpad and then explain why; never stage a fake investigation to get there.
+ANSWER ONLY — NO THINKING OUT LOUD:
+The user must see ONLY your final answer, never your reasoning. Decide everything
+internally, then write a single clean answer as if you knew it immediately — no
+preamble, no "working through the record", no false starts, no candidate answers
+you then revise, no "let me think / wait, no / let me be precise / actually".
+Lead with the answer in the first sentence. If the honest answer is "never" or
+"zero," say so plainly up front and then explain why — never stage a fake
+investigation to get there.
 
 DEPTH AND TONE:
 - Beginner questions (rules, terms, bet types): plain English, concrete example.
@@ -1651,30 +1648,9 @@ Reply with the FINAL markdown answer directly — no JSON wrapper, no preface, n
         except anthropic.APIError:
             # Web search unavailable — answer from training instead of swallowing the cost twice
             response = await tracked_create(client, endpoint="ask_sonnet_nosearch", user_id=user_id, **create_args)
-        return _strip_scratchpad(_extract_text(response))
+        return await _finalize_answer(_extract_text(response), user_id)
 
-    # Default: Haiku, no web search (≈$0.003/call) for evergreen handicapping/strategy/history.
-    # Use extended thinking so the model reasons in dedicated thinking blocks
-    # (separate from text and excluded by _extract_text) — the user sees only the
-    # clean final answer, never "let me reconsider / wait, no" narration. Falls
-    # back to a plain call if thinking is unavailable for the model/SDK.
-    try:
-        response = await tracked_create(
-            client,
-            endpoint="ask_haiku",
-            user_id=user_id,
-            model="claude-haiku-4-5-20251001",
-            max_tokens=3000,
-            thinking={"type": "enabled", "budget_tokens": 1500},
-            system=SECRETARIAT_SYSTEM,
-            messages=msgs,
-        )
-        answer = _strip_scratchpad(_extract_text(response))
-        if answer:
-            return answer
-    except Exception:
-        log.warning("ask_haiku thinking call failed; retrying without thinking", exc_info=True)
-
+    # Default: Haiku, no web search (≈$0.003/call) for evergreen handicapping/strategy/history
     response = await tracked_create(
         client,
         endpoint="ask_haiku",
@@ -1685,7 +1661,65 @@ Reply with the FINAL markdown answer directly — no JSON wrapper, no preface, n
         system=SECRETARIAT_SYSTEM,
         messages=msgs,
     )
-    return _strip_scratchpad(_extract_text(response))
+    return await _finalize_answer(_extract_text(response), user_id)
+
+
+# Tells that the model narrated its reasoning instead of just answering.
+_DELIBERATION_RE = re.compile(
+    r"(?im)\b(let me (think|reconsider|be (precise|direct|clear|specific)|work through|"
+    r"state this|get this right|be careful)|wait,?\s*(no|let me|that)|actually,|"
+    r"scratch that|hmm,|on second thought|i need to (think|reconsider|be careful)|"
+    r"let me (re)?check|correction:|my mistake)"
+)
+
+
+def _has_deliberation(text: str) -> bool:
+    return bool(text) and bool(_DELIBERATION_RE.search(text))
+
+
+_CLEANUP_PROMPT = (
+    "You are an editor. Below is a DRAFT answer to a horse-racing question. "
+    "Rewrite it as the FINAL answer the user will see.\n\n"
+    "Remove ALL of the writer's reasoning, thinking-out-loud, deliberation, false "
+    "starts, self-corrections, and hedging — every 'let me think', 'wait, no', "
+    "'actually', 'scratch that', 'let me be precise', and any candidate answer "
+    "that was then revised. Keep ONLY the correct final conclusion and its "
+    "supporting explanation. Preserve markdown, bold horse names, and lists. Do "
+    "not add new facts or change the conclusion. Output ONLY the cleaned answer, "
+    "nothing else.\n\nDRAFT:\n"
+)
+
+
+async def _cleanup_answer(draft: str, user_id: int | None) -> str:
+    """Deterministic second pass: rewrite a rambly draft into a clean final
+    answer. Used only when _has_deliberation flags the draft, so the common
+    (already-clean) case pays nothing. Returns '' on failure so the caller keeps
+    the draft rather than dropping the answer."""
+    try:
+        response = await tracked_create(
+            client,
+            endpoint="ask_cleanup",
+            user_id=user_id,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1500,
+            temperature=0,
+            messages=[{"role": "user", "content": _CLEANUP_PROMPT + draft[:8000]}],
+        )
+        return _strip_scratchpad(_extract_text(response))
+    except Exception:
+        log.warning("answer cleanup pass failed", exc_info=True)
+        return ""
+
+
+async def _finalize_answer(text: str, user_id: int | None) -> str:
+    """Strip any scratchpad, then run a cleanup rewrite if the draft still shows
+    the model thinking out loud. Never returns empty when the draft had content."""
+    answer = _strip_scratchpad(text)
+    if answer and _has_deliberation(answer):
+        cleaned = await _cleanup_answer(answer, user_id)
+        if cleaned:
+            return cleaned
+    return answer
 
 
 def _strip_scratchpad(text: str) -> str:
