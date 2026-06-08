@@ -242,6 +242,74 @@ async def job_accuracy_catchup() -> None:
     await _run_script("nightly_accuracy.py")
 
 
+# --- reflect catchup (self-healing) --------------------------------------
+# Reflect is the learning loop — the most important nightly — yet it was the
+# only nightly with NO self-heal. A single disrupted 14:30 fire vanished with no
+# retry (the 597 guardrail caught 2026-06-07 going unreflected). This catchup
+# re-fires reflect if yesterday's settled NA races have zero reflections.
+# Idempotent: nightly_reflect filters reflection IS NULL.
+_REFLECT_CATCHUP_COOLDOWN_MIN = 60
+_reflect_last_attempt: "datetime.datetime | None" = None
+
+
+async def job_reflect_catchup() -> None:
+    """Self-healing reflect check. Runs every 30 min between 15 and 20 UTC.
+
+    Reflect is scheduled at 14:30 UTC (after accuracy settles at 10:00). If that
+    fire is missed or killed, this re-fires it so the learning loop never silently
+    skips a day. Fires only when yesterday has settled NA races but zero
+    reflections — the exact condition the 597 smoke alert flags.
+    """
+    global _reflect_last_attempt
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import func, select
+
+    from app.core import database as _db
+    from app.models.accuracy import RacePrediction
+
+    now_utc = datetime.now(timezone.utc)
+    if not (15 <= now_utc.hour < 20):
+        return
+
+    if _reflect_last_attempt is not None:
+        age_min = (now_utc - _reflect_last_attempt).total_seconds() / 60
+        if age_min < _REFLECT_CATCHUP_COOLDOWN_MIN:
+            return
+
+    yesterday = now_utc.date() - timedelta(days=1)
+    try:
+        async with _db._AsyncSessionLocal() as db:
+            settled = await db.scalar(
+                select(func.count(RacePrediction.id)).where(
+                    RacePrediction.race_date == yesterday,
+                    RacePrediction.result_fetched == True,  # noqa: E712
+                    (RacePrediction.region == "na") | (RacePrediction.region.is_(None)),
+                )
+            )
+            reflected = await db.scalar(
+                select(func.count(RacePrediction.id)).where(
+                    RacePrediction.race_date == yesterday,
+                    RacePrediction.result_fetched == True,  # noqa: E712
+                    RacePrediction.reflection.is_not(None),
+                )
+            )
+    except Exception as e:
+        log.warning(f"[scheduler] reflect catchup db check failed: {e}")
+        return
+
+    if not settled or (reflected or 0) > 0:
+        return  # nothing to reflect yet, or reflection already happened
+
+    print(
+        f"[scheduler] catchup: {settled} settled races for {yesterday.isoformat()} "
+        f"but 0 reflections — firing nightly_reflect.py",
+        flush=True,
+    )
+    _reflect_last_attempt = now_utc
+    await _run_script("nightly_reflect.py", ["--date", yesterday.isoformat()])
+
+
 def create_scheduler() -> AsyncIOScheduler | None:
     """Create and return the scheduler, or None if not running as the backend.
 
@@ -303,6 +371,16 @@ def create_scheduler() -> AsyncIOScheduler | None:
         IntervalTrigger(minutes=30, start_date=catchup_first_run),
         id="accuracy_catchup",
         name="Accuracy self-heal (every 30 min, 10–14 UTC)",
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # Catchup for reflect — the learning loop must never silently skip a day.
+    scheduler.add_job(
+        job_reflect_catchup,
+        IntervalTrigger(minutes=30, start_date=catchup_first_run),
+        id="reflect_catchup",
+        name="Reflect self-heal (every 30 min, 15–20 UTC)",
         max_instances=1,
         coalesce=True,
     )
