@@ -2465,6 +2465,21 @@ async def get_calibration_context() -> str:
                 lines.append(f"  - {lesson}")
 
         lines.append(
+            "MARKET DISCIPLINE — your single biggest leak: the morning-line favorite "
+            "is the most predictive signal in any race, and your own tracked record "
+            "proves it. When your top pick IS the favorite you win ~39%; when you fade "
+            "the favorite you win only ~17% — and you currently fade it in roughly 9 of "
+            "every 10 races. Make predicted_finish.first the morning-line favorite "
+            "UNLESS you can name a SPECIFIC, concrete reason it will underperform (a "
+            "lone-speed duel it can't survive, a clear class jump, a bounce off a peak "
+            "effort, a run-style that doesn't fit the projected pace, a troubled-trip or "
+            "bias angle). 'Better value' or 'overbet' is NOT a reason to predict a "
+            "non-favorite to WIN — price belongs in your bet recommendations, never in "
+            "who you think crosses the wire first. Diverge from the favorite only when "
+            "the evidence is specific and strong; otherwise side with the market."
+        )
+
+        lines.append(
             "Use this to calibrate confidence. "
             "Widen contenders in weak areas. Be decisive in strong areas. "
             "Apply the lessons above — they come from your own mistakes and wins."

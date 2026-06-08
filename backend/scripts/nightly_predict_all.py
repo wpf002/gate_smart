@@ -127,6 +127,10 @@ async def predict_race(
         + f"Race: {json.dumps(race_ctx)}\n"
         f"Runners (scratched horses already removed): {json.dumps(slim)}\n\n"
         "Pick the four most likely finishers. Use ONLY names from the runner list above.\n"
+        "MARKET DISCIPLINE: the lowest-odds runner (the morning-line favorite) is the "
+        "single most predictive signal. Make 'first' the favorite UNLESS a specific "
+        "factor (pace, class, trip, run-style fit) clearly argues against it. Do not "
+        "fade the favorite for 'value' — pick who actually wins.\n"
         "Return ONLY this JSON, no explanation:\n"
         '{"first": "horse_name", "second": "horse_name", '
         '"third": "horse_name", "fourth": "horse_name"}'
