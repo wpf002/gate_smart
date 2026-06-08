@@ -253,12 +253,15 @@ _reflect_last_attempt: "datetime.datetime | None" = None
 
 
 async def job_reflect_catchup() -> None:
-    """Self-healing reflect check. Runs every 30 min between 15 and 20 UTC.
+    """Self-healing reflect check. Runs every 30 min from 15:00 UTC through the
+    end of the UTC day.
 
     Reflect is scheduled at 14:30 UTC (after accuracy settles at 10:00). If that
     fire is missed or killed, this re-fires it so the learning loop never silently
-    skips a day. Fires only when yesterday has settled NA races but zero
-    reflections — the exact condition the 597 smoke alert flags.
+    skips a day. The window runs to 23:59 UTC so a miss discovered late at night
+    still self-recovers same-day — after 00:00 UTC "yesterday" rolls forward and
+    the missed day is no longer the target. Fires only when yesterday has settled
+    NA races but zero reflections — the exact condition the 597 smoke alert flags.
     """
     global _reflect_last_attempt
     from datetime import datetime, timedelta, timezone
@@ -269,7 +272,7 @@ async def job_reflect_catchup() -> None:
     from app.models.accuracy import RacePrediction
 
     now_utc = datetime.now(timezone.utc)
-    if not (15 <= now_utc.hour < 20):
+    if now_utc.hour < 15:
         return
 
     if _reflect_last_attempt is not None:
@@ -380,7 +383,7 @@ def create_scheduler() -> AsyncIOScheduler | None:
         job_reflect_catchup,
         IntervalTrigger(minutes=30, start_date=catchup_first_run),
         id="reflect_catchup",
-        name="Reflect self-heal (every 30 min, 15–20 UTC)",
+        name="Reflect self-heal (every 30 min, 15 UTC–end of day)",
         max_instances=1,
         coalesce=True,
     )
