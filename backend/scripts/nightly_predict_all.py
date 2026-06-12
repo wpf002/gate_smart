@@ -160,7 +160,108 @@ async def predict_race(
     return None
 
 
-async def main(target_date: datetime.date, dry_run: bool):
+_BATCH_POLL_SECONDS = 30
+_BATCH_TIMEOUT_SECONDS = 45 * 60  # past this, unfinished races fall back to sync
+
+
+async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
+    """Analyze every race in one Message Batch (50% off all tokens).
+
+    Returns {race_id: analysis_dict} for every race that succeeded. Any race
+    missing from the map (batch error, timeout, unparseable response) falls back
+    to the existing synchronous path in the main loop — the batch can only save
+    money, never lose a pick. Requests reuse build_analyze_request, so batch and
+    sync produce identical prompts (including the cached system blocks).
+    """
+    import re as _re
+
+    from app.services.secretariat import (
+        build_analyze_request,
+        extract_and_store_fair_prices,
+        finish_analysis,
+    )
+
+    # Build one request per race. custom_id must be ^[a-zA-Z0-9_-]{1,64}$.
+    requests, id_map = [], {}
+    for race, _region in all_races:
+        race_id = race.get("race_id") or race.get("id", "")
+        if not race_id or not race.get("runners"):
+            continue
+        custom_id = _re.sub(r"[^a-zA-Z0-9_-]", "_", race_id)[:64]
+        if custom_id in id_map:
+            continue
+        id_map[custom_id] = race_id
+        try:
+            params = await build_analyze_request({**race, "race_id": race_id}, mode=mode)
+        except Exception as e:
+            print(f"  batch: build failed for {race_id} ({e}); will run sync")
+            continue
+        requests.append({"custom_id": custom_id, "params": params})
+
+    if not requests:
+        return {}
+
+    try:
+        batch = await client.messages.batches.create(requests=requests)
+    except Exception as e:
+        print(f"  batch: submit failed ({type(e).__name__}: {e}) — falling back to sync for all")
+        return {}
+
+    print(f"  batch: submitted {len(requests)} races as {batch.id}; polling…", flush=True)
+    waited = 0
+    while waited < _BATCH_TIMEOUT_SECONDS:
+        await asyncio.sleep(_BATCH_POLL_SECONDS)
+        waited += _BATCH_POLL_SECONDS
+        try:
+            batch = await client.messages.batches.retrieve(batch.id)
+        except Exception as e:
+            print(f"  batch: poll error ({e}); retrying")
+            continue
+        if batch.processing_status == "ended":
+            break
+    else:
+        print(f"  batch: timed out after {waited}s — consuming whatever finished", flush=True)
+
+    analyses: dict = {}
+    try:
+        results = client.messages.batches.results(batch.id)
+        import inspect
+        if inspect.isawaitable(results):
+            results = await results
+        async for entry in results:
+            race_id = id_map.get(entry.custom_id)
+            if not race_id or entry.result.type != "succeeded":
+                continue
+            message = entry.result.message
+            usage = getattr(message, "usage", None)
+            from app.core.llm_cost import log_call
+            await log_call(
+                endpoint="analyze_race_batch",
+                model=getattr(message, "model", "claude-haiku-4-5-20251001"),
+                input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
+                output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
+                cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0 if usage else 0,
+                cache_write_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0 if usage else 0,
+                batch=True,
+            )
+            try:
+                analysis = finish_analysis(message.content[0].text)
+            except Exception:
+                continue  # unparseable → sync fallback for this race
+            if analysis and analysis.get("predicted_finish"):
+                analyses[race_id] = analysis
+                try:
+                    await extract_and_store_fair_prices(race_id, analysis)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"  batch: results fetch failed ({type(e).__name__}: {e}) — sync fallback for the rest")
+
+    print(f"  batch: {len(analyses)}/{len(requests)} analyses recovered from batch", flush=True)
+    return analyses
+
+
+async def main(target_date: datetime.date, dry_run: bool, limit: int | None = None):
     import ssl
 
     import anthropic
@@ -213,6 +314,8 @@ async def main(target_date: datetime.date, dry_run: bool):
         na_races = []
 
     all_races = na_races
+    if limit:
+        all_races = all_races[:limit]  # testing aid: tiny real run, e.g. --limit 2 --dry-run
     print(f"  Found {len(na_races)} NA races.")
 
     if not all_races:
@@ -236,6 +339,15 @@ async def main(target_date: datetime.date, dry_run: bool):
     # gives a first-click cache hit for users who haven't changed their
     # default risk setting. Other modes fall through to live re-analysis.
     LOCK_MODE = "medium"
+
+    # Phase 1: analyze the whole card via the Batches API (50% off all tokens).
+    # Any race the batch misses falls back to the original sync call below, so
+    # this can only reduce cost, never cost us a pick.
+    try:
+        batch_analyses = await run_batch_analyses(client, all_races, LOCK_MODE)
+    except Exception as e:
+        print(f"  batch phase failed entirely ({e}); running all races sync")
+        batch_analyses = {}
 
     def _name(d):
         if isinstance(d, dict):
@@ -262,11 +374,14 @@ async def main(target_date: datetime.date, dry_run: bool):
 
         # Run the FULL analysis. Fall back to the lightweight Haiku prediction
         # if analyze_race fails (e.g., oversized field), so we never lose a pick.
-        analysis = None
-        try:
-            analysis = await analyze_race({**race, "race_id": race_id}, mode=LOCK_MODE)
-        except Exception as e:
-            print(f"full analyze failed ({e}); fallback…", end=" ")
+        analysis = batch_analyses.get(race_id)
+        made_sync_call = False
+        if analysis is None:
+            made_sync_call = True
+            try:
+                analysis = await analyze_race({**race, "race_id": race_id}, mode=LOCK_MODE)
+            except Exception as e:
+                print(f"full analyze failed ({e}); fallback…", end=" ")
 
         if analysis and analysis.get("predicted_finish"):
             pf_full = analysis["predicted_finish"]
@@ -413,13 +528,16 @@ async def main(target_date: datetime.date, dry_run: bool):
                 continue
 
         predicted += 1
-        await asyncio.sleep(1.0)
+        if made_sync_call:
+            await asyncio.sleep(1.0)  # rate-limit only live API calls, not batch-served races
 
     elapsed = time.time() - start_time
-    # Full analyze_race is ~10x the lightweight call (~$0.011/race vs ~$0.001/race)
-    cost_est = predicted * 0.011
+    # Observed means: sync full analysis ~$0.028/race; batch + prompt caching ~$0.011.
+    batch_served = sum(1 for rid in batch_analyses if rid)
+    sync_served = max(0, predicted - batch_served)
+    cost_est = batch_served * 0.011 + sync_served * 0.028
     print(f"\n✅ Done: {predicted} predicted ({len(na_races)} NA), {skipped} skipped in {elapsed:.0f}s")
-    print(f"   Estimated cost: ~${cost_est:.2f}")
+    print(f"   {batch_served} via batch, ~{sync_served} sync. Estimated cost: ~${cost_est:.2f} (exact: llm_call_log)")
     if dry_run:
         print("   [DRY RUN] No rows written.")
 
@@ -428,7 +546,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Morning predict-all races")
     parser.add_argument("--date", type=str, default=None)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--limit", type=int, default=None, help="analyze only the first N races (testing)")
     args = parser.parse_args()
 
     target = datetime.date.fromisoformat(args.date) if args.date else datetime.date.today()
-    asyncio.run(main(target_date=target, dry_run=args.dry_run))
+    asyncio.run(main(target_date=target, dry_run=args.dry_run, limit=args.limit))
