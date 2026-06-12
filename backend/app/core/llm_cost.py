@@ -33,13 +33,27 @@ def _price_lookup(model: str) -> dict:
     return PRICING["claude-sonnet-4-6"]
 
 
-def estimate_cost(model: str, input_tokens: int, output_tokens: int, web_searches: int = 0) -> float:
+def estimate_cost(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    web_searches: int = 0,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    batch: bool = False,
+) -> float:
+    """Estimate USD cost. Cache reads bill at 0.1x input, writes at 1.25x.
+    Batch API calls get a flat 50% discount on all token costs."""
     p = _price_lookup(model)
-    return (
+    token_cost = (
         (input_tokens / 1_000_000) * p["input"]
+        + (cache_read_tokens / 1_000_000) * p["input"] * 0.1
+        + (cache_write_tokens / 1_000_000) * p["input"] * 1.25
         + (output_tokens / 1_000_000) * p["output"]
-        + web_searches * WEB_SEARCH_USD_PER_CALL
     )
+    if batch:
+        token_cost *= 0.5
+    return token_cost + web_searches * WEB_SEARCH_USD_PER_CALL
 
 
 def _count_web_searches(response) -> int:
@@ -65,17 +79,27 @@ async def log_call(
     cache_write_tokens: int = 0,
     web_searches: int = 0,
     user_id: int | None = None,
+    batch: bool = False,
 ) -> None:
     """Write a single row to llm_call_log. Never raises — cost logging must not break the app.
 
     user_id=None for background/system calls; set to the authenticated user's id
     for on-demand calls so admin dashboards can attribute usage per user.
+    batch=True applies the Batches API 50% discount to the cost estimate.
     """
     try:
         from app.core.database import _AsyncSessionLocal
         from app.models.accuracy import LLMCallLog
 
-        cost = estimate_cost(model, input_tokens + cache_read_tokens + cache_write_tokens, output_tokens, web_searches)
+        cost = estimate_cost(
+            model,
+            input_tokens,
+            output_tokens,
+            web_searches,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
+            batch=batch,
+        )
         row = LLMCallLog(
             call_date=datetime.date.today(),
             endpoint=endpoint,

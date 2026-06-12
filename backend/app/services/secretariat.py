@@ -297,6 +297,29 @@ INTERNAL CONSISTENCY RULE: Within a single response, the horse you name as predi
 Always respond in valid JSON as specified in each prompt. No markdown inside string values. No extra text outside the JSON object."""
 
 
+def _cached_system(extra: str = "") -> list[dict]:
+    """System param with prompt caching enabled.
+
+    SECRETARIAT_SYSTEM is ~5.5k tokens and was being re-billed at full price on
+    every call (95% of all spend flows through it). As a cached block it bills at
+    0.1x on every hit; the nightly run makes 100+ calls inside the 5-minute cache
+    TTL, so hits are near-guaranteed. `extra` (e.g. the calibration/lessons block,
+    which changes once per day) becomes a second cached block layered on top.
+    """
+    blocks = [{
+        "type": "text",
+        "text": SECRETARIAT_SYSTEM,
+        "cache_control": {"type": "ephemeral"},
+    }]
+    if extra:
+        blocks.append({
+            "type": "text",
+            "text": extra,
+            "cache_control": {"type": "ephemeral"},
+        })
+    return blocks
+
+
 async def get_hardware_and_historical_context(horses: list[dict]) -> dict[str, str]:
     """
     For each horse, gather three data sources and merge into a single context string:
@@ -728,6 +751,48 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
     Full race analysis — Secretariat's core function.
     Returns structured analysis of all runners and recommended bets.
     """
+    create_kwargs = await build_analyze_request(
+        race_data, mode=mode, bankroll=bankroll, experience_level=experience_level
+    )
+
+    try:
+        response = await tracked_create(
+            client,
+            endpoint="analyze_race",
+            user_id=user_id,
+            **create_kwargs,
+        )
+    except anthropic.APIStatusError as exc:
+        if exc.status_code == 529:
+            raise SecretariatBusyError("Secretariat is busy right now. Try again in 30 seconds.")
+        raise
+
+    result = finish_analysis(response.content[0].text)
+
+    try:
+        await extract_and_store_fair_prices(race_data.get("race_id", ""), result)
+    except Exception:
+        pass
+    return result
+
+
+def finish_analysis(raw_text: str) -> dict:
+    """Parse + sanitize a raw analysis response. Shared by sync and batch paths."""
+    return _dedupe_predicted_finish(_truncate_analysis(_parse_json(raw_text)))
+
+
+async def build_analyze_request(
+    race_data: dict,
+    mode: str = "balanced",
+    bankroll: float = None,
+    experience_level: str = None,
+) -> dict:
+    """Build the messages.create kwargs for a full race analysis.
+
+    Shared by the synchronous analyze_race path and the nightly Batches API path
+    so both produce identical requests. The calibration/lessons block rides as a
+    cached system block (changes once per day); only race data varies per call.
+    """
     runners = race_data.get("runners", [])
     ts_context = await get_hardware_and_historical_context(runners)
 
@@ -736,11 +801,10 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
         ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values())
 
     cal_context = await get_calibration_context()
-    cal_block = f"{cal_context}\n\n---\n\n" if cal_context else ""
 
     exp_block = _experience_level_block(experience_level)
     stake_block = _stake_sizing_block(bankroll)
-    prompt = f"""{cal_block}{exp_block}Analyze this race. One sentence per field. Short phrases in arrays.
+    prompt = f"""{exp_block}Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
@@ -799,30 +863,13 @@ Return this JSON exactly:
   "confidence": "low/medium/high"
 }}"""
 
-    try:
-        response = await tracked_create(
-            client,
-            endpoint="analyze_race",
-            user_id=user_id,
-            model="claude-haiku-4-5-20251001",
-            max_tokens=5000,
-            temperature=0.2,
-            system=SECRETARIAT_SYSTEM,
-            messages=[{"role": "user", "content": prompt}]
-        )
-    except anthropic.APIStatusError as exc:
-        if exc.status_code == 529:
-            raise SecretariatBusyError("Secretariat is busy right now. Try again in 30 seconds.")
-        raise
-
-    raw_text = response.content[0].text
-    result = _dedupe_predicted_finish(_truncate_analysis(_parse_json(raw_text)))
-
-    try:
-        await extract_and_store_fair_prices(race_data.get("race_id", ""), result)
-    except Exception:
-        pass
-    return result
+    return {
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 5000,
+        "temperature": 0.2,
+        "system": _cached_system(cal_context),
+        "messages": [{"role": "user", "content": prompt}],
+    }
 
 
 async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, user_id: int = None, experience_level: str = None):
@@ -834,9 +881,9 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
     ts_context = await get_hardware_and_historical_context(runners)
     ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values()) if ts_context else ""
 
-    # Inject rolling calibration data so Secretariat learns from its own history
+    # Rolling calibration rides as a cached system block (changes once daily) so
+    # Secretariat still learns from its own history without re-billing the tokens.
     cal_context = await get_calibration_context()
-    cal_block = f"{cal_context}\n\n---\n\n" if cal_context else ""
 
     exp_block = _experience_level_block(experience_level)
     stake_block = _stake_sizing_block(bankroll)
@@ -844,7 +891,6 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
         f"RACE ID: {race_data.get('race_id', 'unknown')} | "
         f"MODE: {mode} | "
         "ANALYZE THE FOLLOWING RACE:\n\n"
-        f"{cal_block}"
         f"{exp_block}"
         f"""Analyze this race. One sentence per field. Short phrases in arrays.
 
@@ -912,7 +958,7 @@ Return this JSON exactly:
         model="claude-haiku-4-5-20251001",
         max_tokens=5000,
         temperature=0.2,
-        system=SECRETARIAT_SYSTEM,
+        system=_cached_system(cal_context),
         messages=[{"role": "user", "content": prompt}]
     ) as stream:
         async for text in stream.text_stream:
@@ -989,7 +1035,7 @@ Return this JSON exactly:
         model="claude-haiku-4-5-20251001",
         max_tokens=500,
         temperature=0.2,
-        system=SECRETARIAT_SYSTEM,
+        system=_cached_system(),
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -1045,7 +1091,7 @@ Return JSON:
         model="claude-sonnet-4-6",
         max_tokens=1500,
         temperature=0.2,
-        system=SECRETARIAT_SYSTEM,
+        system=_cached_system(),
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -1081,7 +1127,7 @@ Return JSON:
         model="claude-haiku-4-5-20251001",
         max_tokens=1200,
         temperature=0.2,
-        system=SECRETARIAT_SYSTEM,
+        system=_cached_system(),
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -1147,7 +1193,7 @@ A horse can score 90 on speed and 20 on value — that's fine and useful."""
         model="claude-haiku-4-5-20251001",
         max_tokens=1000,
         temperature=0.2,
-        system=SECRETARIAT_SYSTEM,
+        system=_cached_system(),
         messages=[{"role": "user", "content": prompt}]
     )
     return _parse_json(response.content[0].text)
@@ -1629,7 +1675,7 @@ Reply with the FINAL markdown answer directly — no JSON wrapper, no preface, n
             model="claude-sonnet-4-6",
             max_tokens=2000,
             temperature=0.3,
-            system=SECRETARIAT_SYSTEM,
+            system=_cached_system(),
             messages=msgs,
         )
         web_search_tool = [{
@@ -1658,7 +1704,7 @@ Reply with the FINAL markdown answer directly — no JSON wrapper, no preface, n
         model="claude-haiku-4-5-20251001",
         max_tokens=1500,
         temperature=0.3,
-        system=SECRETARIAT_SYSTEM,
+        system=_cached_system(),
         messages=msgs,
     )
     return await _finalize_answer(_extract_text(response), user_id)
