@@ -2341,11 +2341,15 @@ Secretariat | {today_str} | {len(hits)}/{total} ({win_pct})
 === HOW_IM_EVOLVING ===
 • <bullet>
 
-(2-4 bullets, each one of:
-  (a) "KEEPING lesson [first words]: VALIDATED by [today's evidence]"
-  (b) "DROPPING lesson [first words]: FAILED, [today's contrary evidence]"
-  (c) "NEW RULE: at [track or category], I will [concrete action] until [measurable trigger]"
-If today produced no actionable change, write a single bullet: "• No rule change today, [one phrase reason]".)
+(2-4 bullets, first person, written the way a sharp handicapper actually talks —
+NOT as a state machine. Each bullet is one of: a read today's results reinforced
+that you'll keep leaning on; a read that failed and the adjustment you're making;
+or a new angle you're taking and why. Speak plainly and naturally — do NOT use
+rigid labels like "KEEPING lesson", "DROPPING lesson", or "NEW RULE:", and do NOT
+quote prior lessons back. Talk about the handicapping pattern, not your own
+bookkeeping. Reference the PATTERN, not a single day's small box score (one rough
+or hot day is noise, not a trend). If nothing genuinely shifted, write one bullet:
+"• Nothing forced a change today — [one phrase reason]".)
 """
 
     # Narrative is best-effort. If Claude is unavailable or returns garbage,
