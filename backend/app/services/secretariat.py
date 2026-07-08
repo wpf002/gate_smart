@@ -865,7 +865,7 @@ Return this JSON exactly:
 
     return {
         "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 5000,
+        "max_tokens": 1500,
         "temperature": 0.2,
         "system": _cached_system(cal_context),
         "messages": [{"role": "user", "content": prompt}],
@@ -956,7 +956,7 @@ Return this JSON exactly:
     final_message = None
     async with client.messages.stream(
         model="claude-haiku-4-5-20251001",
-        max_tokens=5000,
+        max_tokens=1500,
         temperature=0.2,
         system=_cached_system(cal_context),
         messages=[{"role": "user", "content": prompt}]

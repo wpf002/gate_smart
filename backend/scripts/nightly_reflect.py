@@ -210,7 +210,7 @@ async def curate_lessons(
             client,
             endpoint="nightly_reflect_curate",
             model="claude-sonnet-4-6",
-            max_tokens=2000,
+            max_tokens=500,
             temperature=0.2,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -304,7 +304,7 @@ async def synthesise_lessons(client, reflections: list[dict], date_str: str) -> 
             client,
             endpoint="nightly_reflect_synthesise",
             model="claude-sonnet-4-6",
-            max_tokens=1200,
+            max_tokens=600,
             temperature=0.3,
             messages=[{"role": "user", "content": prompt}],
         )
