@@ -43,7 +43,7 @@ async def test_builder_prompt_contains_race_data_not_calibration(patched):
     # calibration moved to the cached system block — must not be re-billed in the prompt
     assert "YOUR RECENT PERFORMANCE" not in prompt
     assert kwargs["model"].startswith("claude-haiku")
-    assert kwargs["max_tokens"] == 1500
+    assert kwargs["max_tokens"] == 5000
 
 
 @pytest.mark.asyncio
