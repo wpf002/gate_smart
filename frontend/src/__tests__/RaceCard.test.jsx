@@ -16,7 +16,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
 // Pinned to 2026-04-04T08:00:00Z (= 09:00 UK BST).
 // Races with off_dt after this moment are upcoming; before are past.
 beforeEach(() => {
-  vi.useFakeTimers();
+  vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-04-04T08:00:00Z'));
   // Default the store to advanced so the meta row (distance, surface, runners,
   // prize, "Analyze →") renders. Beginner mode hides those by design.
