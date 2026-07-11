@@ -491,6 +491,42 @@ def _parse_na_distance_furlongs(description: str, dist_value=None, dist_unit: st
     return None
 
 
+def _resolve_post_epoch_ms(post_time_long, meet_id: str) -> int | None:
+    """Return absolute epoch-milliseconds for a race post time.
+
+    Upstream is inconsistent between meets: some give ``post_time_long`` as a
+    full epoch-ms value (e.g. Saratoga, Gulfstream), others give it as
+    milliseconds-since-midnight — a within-day offset that must be added to the
+    meet's UTC-midnight epoch (e.g. Monmouth Park). The meet's midnight epoch is
+    encoded in the meet_id suffix (``MTH_1783728000000`` → 1783728000000).
+
+    A within-day offset is always < 86_400_000 (ms in a day), while a real epoch
+    for any modern date is ~1.78e12 — so the two forms are unambiguous. Feeding
+    an offset straight into fromtimestamp() would place the race in 1970 and mark
+    every such race permanently "finished", which is the bug this prevents.
+    Returns None when the value can't be resolved, so callers treat the post time
+    as unknown rather than silently wrong.
+    """
+    if post_time_long is None:
+        return None
+    try:
+        ptl = int(post_time_long)
+    except (TypeError, ValueError):
+        return None
+    if ptl <= 0:
+        return None
+    if ptl >= 86_400_000:
+        return ptl  # already a full epoch-ms timestamp
+    # Within-day offset — anchor it to the meet's UTC-midnight epoch.
+    try:
+        base = int(str(meet_id).split("_", 1)[1])
+    except (IndexError, ValueError):
+        return None
+    if base >= 86_400_000:
+        return base + ptl
+    return None
+
+
 def _normalize_na_race(race: dict, meet: dict) -> dict:
     """Normalize a NA race entry to match GateSmart's internal race schema."""
     from datetime import datetime
@@ -501,12 +537,13 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
     race_number = race_key.get("race_number", "") if isinstance(race_key, dict) else ""
     race_id = f"{meet.get('meet_id', '')}-{race_number}" if race_number else meet.get("meet_id", "")
 
-    # post_time_long is Unix milliseconds; convert to ISO-8601
-    post_time_long = race.get("post_time_long")
+    # post_time_long is either full epoch-ms or ms-since-midnight depending on
+    # the meet; _resolve_post_epoch_ms normalizes both to an absolute epoch.
+    epoch_ms = _resolve_post_epoch_ms(race.get("post_time_long"), meet.get("meet_id", ""))
     off_dt = ""
-    if post_time_long:
+    if epoch_ms:
         try:
-            off_dt = datetime.fromtimestamp(int(post_time_long) / 1000, tz=tz.utc).isoformat()
+            off_dt = datetime.fromtimestamp(epoch_ms / 1000, tz=tz.utc).isoformat()
         except Exception:
             pass
 
@@ -712,14 +749,15 @@ async def get_na_racecards_full(date: str = None) -> dict:
             # entries_data carries track_name, track_id, date, meet_id
             meet_info = {k: v for k, v in entries_data.items() if k != "races"}
             for race in races:
-                # Skip races whose post time is not on the target date
+                # Skip races whose post time is not on the target date.
+                # Resolve first — some meets encode post_time_long as an
+                # offset-from-midnight, so a raw int compare would wrongly drop
+                # (or keep) them. Unresolvable times fall through and are kept.
                 ptl = race.get("post_time_long")
                 if ptl:
-                    try:
-                        if not (day_start_ms <= int(ptl) < day_end_ms):
-                            continue
-                    except (TypeError, ValueError):
-                        pass
+                    abs_ms = _resolve_post_epoch_ms(ptl, meet_id)
+                    if abs_ms is not None and not (day_start_ms <= abs_ms < day_end_ms):
+                        continue
                 normalized = _normalize_na_race(race, meet_info)
                 # Deduplicate by race_id in case the same race appears in multiple meets
                 rid = normalized.get("race_id", "")
