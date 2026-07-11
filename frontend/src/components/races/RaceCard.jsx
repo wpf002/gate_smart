@@ -62,7 +62,15 @@ export function isRaceDefinitelyFinished(race) {
   if (race.off_dt) {
     const offTime = new Date(race.off_dt);
     if (!isNaN(offTime.getTime())) {
-      return (Date.now() - offTime.getTime()) > 5 * 60 * 1000;
+      const ageMs = Date.now() - offTime.getTime();
+      // Backstop: we only ever show today's or tomorrow's card, so a post time
+      // more than 36h in the past is not a real finished race — it's a corrupt
+      // timestamp (e.g. an upstream ms-since-midnight value misread as epoch,
+      // which lands in 1970). Never claim "finished" from a nonsense date;
+      // fall through so the race shows as live/upcoming rather than wrongly
+      // marked finished with horses still in the gate.
+      if (ageMs > 36 * 60 * 60 * 1000) return false;
+      return ageMs > 5 * 60 * 1000;
     }
   }
   return false;

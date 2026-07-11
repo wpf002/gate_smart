@@ -141,6 +141,15 @@ describe('RaceCard', () => {
     expect(screen.queryByText('Finished')).not.toBeInTheDocument();
   });
 
+  it('does NOT mark Finished when off_dt is a corrupt far-past date (1970 bug)', () => {
+    // Simulates an upstream ms-since-midnight value misread as epoch, which
+    // lands in 1970. A nonsense date must never render as a finished race.
+    renderCard({ ...baseRace, off_dt: '1970-01-01T21:41:00+00:00' });
+    expect(screen.queryByText('Finished')).not.toBeInTheDocument();
+    // And the Analyze CTA (upcoming affordance) should still be offered.
+    expect(screen.getByText(/Analyze/)).toBeInTheDocument();
+  });
+
   it('tomorrow races are never marked Finished', () => {
     render(
       <MemoryRouter>
