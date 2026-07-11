@@ -515,16 +515,37 @@ def _resolve_post_epoch_ms(post_time_long, meet_id: str) -> int | None:
         return None
     if ptl <= 0:
         return None
-    if ptl >= 86_400_000:
-        return ptl  # already a full epoch-ms timestamp
-    # Within-day offset — anchor it to the meet's UTC-midnight epoch.
+
+    # The meet's UTC-midnight epoch is encoded in the meet_id suffix
+    # (``MTH_1783728000000``). Used both to anchor offset-form times and to
+    # sanity-check epoch-form ones.
+    base = None
     try:
-        base = int(str(meet_id).split("_", 1)[1])
+        cand = int(str(meet_id).split("_", 1)[1])
+        if cand >= 86_400_000:
+            base = cand
     except (IndexError, ValueError):
-        return None
-    if base >= 86_400_000:
-        return base + ptl
-    return None
+        base = None
+
+    if ptl >= 86_400_000:
+        resolved = ptl  # already a full epoch-ms timestamp
+    elif base is not None:
+        resolved = base + ptl  # within-day offset anchored to meet midnight
+    else:
+        return None  # offset form but no meet-midnight base to anchor to
+
+    # Sanity clamp: a legitimate post time falls within the meet day (allowing
+    # for evening cards that cross into the next UTC day). If the resolved value
+    # lands wildly off the meet date — a new or malformed upstream encoding we
+    # haven't seen — refuse it and return None so the caller emits no off_dt at
+    # all, rather than a bogus datetime that could mislabel the race as
+    # "finished". This is the general backstop that keeps ANY future post_time
+    # weirdness from resurrecting the 1970 finished-race bug.
+    if base is not None:
+        _DAY = 86_400_000
+        if not (base - _DAY <= resolved <= base + 2 * _DAY):
+            return None
+    return resolved
 
 
 def _normalize_na_race(race: dict, meet: dict) -> dict:

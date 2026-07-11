@@ -57,6 +57,24 @@ def test_normalize_na_race_offset_form_is_future():
     assert dt == datetime(2026, 7, 11, 21, 41, tzinfo=timezone.utc)
 
 
+def test_sanity_clamp_rejects_wildly_off_epoch():
+    """An epoch that lands far from the meet date is refused, so a malformed
+    upstream value can never resurface as a bogus 'finished' race."""
+    # A small full-epoch value (1970-era) for a 2026 meet — nonsense, reject.
+    assert _resolve_post_epoch_ms(90_000_000, MEET_ID) is None
+    # An epoch two years off the meet date must be rejected.
+    two_years_off = MEET_MIDNIGHT_MS + 730 * 86_400_000
+    assert _resolve_post_epoch_ms(two_years_off, MEET_ID) is None
+
+
+def test_evening_card_crossing_utc_midnight_allowed():
+    """A late-evening race that posts after UTC midnight (next calendar day) is
+    still within the allowed window and resolves normally."""
+    # 1.5 days after meet midnight — a plausible evening/night post in local time.
+    val = MEET_MIDNIGHT_MS + 36 * 3_600_000
+    assert _resolve_post_epoch_ms(val, MEET_ID) == val
+
+
 def test_normalize_na_race_epoch_form_unchanged():
     """A full-epoch race still normalizes to the correct datetime."""
     race = {"race_key": {"race_number": "1"}, "post_time_long": 1783787700000, "runners": []}

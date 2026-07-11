@@ -261,7 +261,8 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
     return analyses
 
 
-async def main(target_date: datetime.date, dry_run: bool, limit: int | None = None):
+async def main(target_date: datetime.date, dry_run: bool, limit: int | None = None,
+               only_missing: bool = False):
     import ssl
 
     import anthropic
@@ -314,9 +315,67 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         na_races = []
 
     all_races = na_races
+    print(f"  Found {len(na_races)} NA races.")
+
+    # Coverage tripwire — surface upstream track drops that even the /entries
+    # probe-recovery didn't catch (e.g. a wholesale outage, or a track not yet in
+    # the 28-day roster). Compares today's distinct-track count to the trailing
+    # 14-day median; a sharp drop prints a loud warning in the run logs so a
+    # missing marquee track like Saratoga can never again pass unnoticed.
+    try:
+        from sqlalchemy import text as _cov_text
+        async with _db._AsyncSessionLocal() as _cov_sess:
+            _cov_rows = await _cov_sess.execute(
+                _cov_text(
+                    "SELECT COUNT(DISTINCT split_part(race_id, '_', 1)) AS c "
+                    "FROM race_predictions "
+                    "WHERE race_date >= :cut AND race_date < :today AND race_id LIKE '%\\_%' "
+                    "GROUP BY race_date ORDER BY race_date"
+                ),
+                {"cut": target_date - datetime.timedelta(days=14), "today": target_date},
+            )
+            _counts = sorted(r[0] for r in _cov_rows)
+        _today_tracks = len({
+            (r.get("race_id") or "").split("_", 1)[0]
+            for r, _ in na_races if "_" in (r.get("race_id") or "")
+        })
+        if _counts:
+            _median = _counts[len(_counts) // 2]
+            if _today_tracks < 0.75 * _median:
+                print(f"  ⚠️  COVERAGE WARNING: {_today_tracks} distinct tracks today vs "
+                      f"trailing 14-day median {_median}. Upstream may be dropping meets — "
+                      f"verify racing_api._recover_missing_na_meets is working.")
+            else:
+                print(f"  Coverage OK: {_today_tracks} tracks (trailing median {_median}).")
+    except Exception as _cov_err:
+        print(f"  (coverage check skipped: {_cov_err})")
+
+    # --only-missing: skip races that already have a prediction for this date, so
+    # a re-run only backfills the gaps (e.g. tracks the upstream /meets listing
+    # dropped at the original run time and that have since been recovered). This
+    # keeps a recovery run cheap — it analyzes only the new races — and makes the
+    # predictor safe to re-run any time coverage looks short.
+    if only_missing:
+        from sqlalchemy import select
+        async with _db._AsyncSessionLocal() as _db_sess:
+            existing_rows = await _db_sess.execute(
+                select(RacePrediction.race_id).where(
+                    RacePrediction.race_date == target_date,
+                    RacePrediction.user_id.is_(None),
+                    RacePrediction.analysis_mode == "auto_daily",
+                )
+            )
+            existing_ids = {r[0] for r in existing_rows}
+        before = len(all_races)
+        all_races = [
+            (r, region) for (r, region) in all_races
+            if (r.get("race_id") or r.get("id", "")) not in existing_ids
+        ]
+        print(f"  --only-missing: {len(existing_ids)} already predicted; "
+              f"{len(all_races)} of {before} races need backfill.")
+
     if limit:
         all_races = all_races[:limit]  # testing aid: tiny real run, e.g. --limit 2 --dry-run
-    print(f"  Found {len(na_races)} NA races.")
 
     if not all_races:
         print("No races found — exiting.")
@@ -547,7 +606,10 @@ if __name__ == "__main__":
     parser.add_argument("--date", type=str, default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit", type=int, default=None, help="analyze only the first N races (testing)")
+    parser.add_argument("--only-missing", action="store_true",
+                        help="only predict races not already stored for the date (cheap backfill/recovery re-run)")
     args = parser.parse_args()
 
     target = datetime.date.fromisoformat(args.date) if args.date else datetime.date.today()
-    asyncio.run(main(target_date=target, dry_run=args.dry_run, limit=args.limit))
+    asyncio.run(main(target_date=target, dry_run=args.dry_run, limit=args.limit,
+                     only_missing=args.only_missing))
