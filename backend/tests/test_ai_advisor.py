@@ -74,6 +74,63 @@ async def test_analyze_returns_analysis_on_cache_miss(client):
     assert r.json() == FAKE_ANALYSIS
 
 
+def _billing_error():
+    """A real anthropic billing/credit 400, as the SDK raises it."""
+    import anthropic
+    import httpx
+    resp = httpx.Response(400, request=httpx.Request("POST", "https://api.anthropic.com"))
+    return anthropic.BadRequestError(
+        "Your credit balance is too low to access the Anthropic API.",
+        response=resp, body=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_analyze_billing_error_surfaces_honestly_not_as_too_many_runners(client):
+    """A credit/billing API failure must return a 503 'temporarily unavailable',
+    NOT be masked as 'too many runners' — and must not trigger a wasteful retry."""
+    analyze_mock = AsyncMock(side_effect=_billing_error())
+    with patch("app.api.routes.ai_advisor.cache_get", new=AsyncMock(return_value=None)), \
+         patch("app.api.routes.ai_advisor.cache_set", new=AsyncMock()), \
+         patch("app.api.routes.ai_advisor.racing_api.get_race",
+               new=AsyncMock(return_value=FAKE_RACE)), \
+         patch("app.api.routes.ai_advisor.secretariat.analyze_race", new=analyze_mock):
+        r = await client.post("/api/advisor/analyze",
+                              content=_body({"race_id": "race-1", "mode": "balanced"}),
+                              headers={"Content-Type": "application/json"})
+    assert r.status_code == 503
+    detail = r.json()["detail"].lower()
+    assert "temporarily unavailable" in detail
+    assert "too many runners" not in detail
+    # No misleading top-8 retry — the API error is fatal for this request.
+    analyze_mock.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_analyze_billing_error_not_retried_even_with_large_field(client):
+    """Even a >10-runner field must not retry on a billing error (it would fail
+    identically and mislabel the cause)."""
+    big_race = {**FAKE_RACE, "runners": [{"odds": "2/1"} for _ in range(14)]}
+    analyze_mock = AsyncMock(side_effect=_billing_error())
+    with patch("app.api.routes.ai_advisor.cache_get", new=AsyncMock(return_value=None)), \
+         patch("app.api.routes.ai_advisor.cache_set", new=AsyncMock()), \
+         patch("app.api.routes.ai_advisor.racing_api.get_race",
+               new=AsyncMock(return_value=big_race)), \
+         patch("app.api.routes.ai_advisor.secretariat.analyze_race", new=analyze_mock):
+        r = await client.post("/api/advisor/analyze",
+                              content=_body({"race_id": "race-1", "mode": "balanced"}),
+                              headers={"Content-Type": "application/json"})
+    assert r.status_code == 503
+    assert "too many runners" not in r.json()["detail"].lower()
+    analyze_mock.assert_called_once()  # not called twice
+
+
+def test_is_billing_error_helper():
+    from app.api.routes.ai_advisor import _is_billing_error
+    assert _is_billing_error(_billing_error()) is True
+    assert _is_billing_error(ValueError("nope")) is False
+
+
 @pytest.mark.asyncio
 async def test_analyze_calls_secretariat_with_mode_and_bankroll(client):
     analyze_mock = AsyncMock(return_value=FAKE_ANALYSIS)

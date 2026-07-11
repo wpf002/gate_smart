@@ -5,11 +5,26 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
+import anthropic
 import msgspec
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 log = logging.getLogger(__name__)
+
+
+def _is_billing_error(exc: Exception) -> bool:
+    """True when an Anthropic API error is a credit/billing block (400 with a
+    'credit balance' message). Worth flagging loudly — it means the whole
+    account is out of credits and every LLM call (live analysis AND the nightly
+    learning loop) will fail until it's topped up, not a per-race problem."""
+    return isinstance(exc, anthropic.APIStatusError) and "credit balance" in str(exc).lower()
+
+
+# User-facing copy for an API/infra failure (billing, auth, rate-limit, upstream
+# outage). Deliberately does NOT leak the internal reason to end users, but the
+# server logs carry the real exception so ops can tell billing from an outage.
+_AI_UNAVAILABLE_MSG = "Secretariat is temporarily unavailable — please try again shortly."
 
 from app.core.cache import cache_get, cache_incr, cache_set
 from app.core.limiter import limiter
@@ -95,6 +110,15 @@ async def analyze_race(request: Request) -> JSONResponse:
         analysis = await secretariat.analyze_race(race_data, mode=req.mode, bankroll=req.bankroll, user_id=_user_id)
     except secretariat.SecretariatBusyError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    except anthropic.APIStatusError as exc:
+        # An API/infra failure (billing, auth, rate-limit, upstream outage) is NOT
+        # a field-size problem — retrying with fewer runners would fail identically
+        # and wrongly tell the user "too many runners". Surface it honestly.
+        if _is_billing_error(exc):
+            log.critical("Anthropic credit balance exhausted — analysis + nightly loop will fail until topped up (race_id=%s): %s", req.race_id, exc)
+        else:
+            log.error("analyze_race API error for race_id=%s: %s", req.race_id, exc)
+        raise HTTPException(status_code=503, detail=_AI_UNAVAILABLE_MSG)
     except Exception:
         # If the field is large, retry with top-8 runners by odds
         runners = race_data.get("runners", [])
@@ -257,6 +281,15 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
             yield f"data: {json.dumps({'error': 'Secretariat response was incomplete — please try again.'})}\n\n"
         except secretariat.SecretariatBusyError as exc:
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        except anthropic.APIStatusError as exc:
+            # API/infra failure (billing, auth, rate-limit, upstream outage) — tell
+            # the user it's a temporary service issue, not a per-race error, and
+            # log the real cause so ops can distinguish an empty balance from an outage.
+            if _is_billing_error(exc):
+                log.critical("Anthropic credit balance exhausted — analysis + nightly loop will fail until topped up (race_id=%s): %s", req.race_id, exc)
+            else:
+                log.error("analyze_race_stream API error for race_id=%s mode=%s: %s", req.race_id, req.mode, exc)
+            yield f"data: {json.dumps({'error': _AI_UNAVAILABLE_MSG})}\n\n"
         except Exception:
             log.exception("analyze_race_stream failed for race_id=%s mode=%s", req.race_id, req.mode)
             yield f"data: {json.dumps({'error': 'An unexpected error occurred'})}\n\n"
