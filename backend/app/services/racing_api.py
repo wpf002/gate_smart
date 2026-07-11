@@ -223,6 +223,119 @@ async def get_horse_results(horse_id: str, limit: int = 10) -> dict:
 
 # ── Jockeys & Trainers ────────────────────────────────────────────────────────
 
+async def _recent_track_prefixes(days: int = 28) -> set[str]:
+    """Roster of track codes that have run in the last `days`, derived from
+    stored predictions. A meet_id looks like ``SAR_1783728000000`` and the
+    race_id we store is ``SAR_1783728000000-1``, so the code before the first
+    underscore is the track prefix.
+
+    This is the set of tracks we consider "in season" and worth probing for
+    directly when the upstream /meets listing drops one. It's self-maintaining:
+    a track enters the roster the first day it appears in /meets, and falls out
+    `days` after its meet ends, so we never probe forever for a closed track.
+    """
+    from datetime import date as _date
+    from datetime import timedelta
+
+    key = f"na:track_roster:{days}"
+    cached = await cache_get(key)
+    if cached is not None:
+        return set(cached)
+
+    prefixes: set[str] = set()
+    try:
+        from sqlalchemy import text as _text
+
+        from app.core import database as _db
+        cutoff = _date.today() - timedelta(days=days)
+        async with _db._AsyncSessionLocal() as db:
+            rows = await db.execute(
+                _text(
+                    "SELECT DISTINCT split_part(race_id, '_', 1) AS prefix "
+                    "FROM race_predictions "
+                    "WHERE race_date >= :cutoff AND race_id LIKE '%\\_%'"
+                ),
+                {"cutoff": cutoff},
+            )
+            for r in rows:
+                p = (r[0] or "").strip()
+                # Skip wager-pool prefixes (e.g. OMA_ over/under pools) and blanks.
+                if p and p != "OMA":
+                    prefixes.add(p)
+    except Exception:
+        return set()
+
+    await cache_set(key, list(prefixes), ex=3600)
+    return prefixes
+
+
+async def _recover_missing_na_meets(union: dict, race_date: str) -> None:
+    """Recover tracks the upstream /meets listing dropped for `race_date`.
+
+    The listing endpoint intermittently omits individual tracks (observed:
+    Saratoga missing on a Saturday while present on the surrounding Thu/Sun).
+    But the per-meet /entries endpoint still holds the full card under a
+    deterministic meet_id: ``{TRACK}_{UTC-midnight-ms}``. So for every in-season
+    track NOT already listed, we construct that meet_id and probe /entries.
+    If real races come back, we add the meet; if the track is genuinely dark
+    that day, /entries 404s and we negative-cache it to avoid re-probing.
+
+    Only runs for dates within a few days of now — the app only shows
+    today/tomorrow, and probing far-off dates would be wasted calls.
+    Mutates ``union['meets']`` in place.
+    """
+    from datetime import date as _date
+    from datetime import datetime, timedelta, timezone
+
+    try:
+        target = _date.fromisoformat(race_date)
+    except Exception:
+        return
+    today = _date.today()
+    if not (today - timedelta(days=2) <= target <= today + timedelta(days=3)):
+        return
+
+    # meet_id timestamp is UTC midnight of the race date, in milliseconds.
+    utc_midnight_ms = int(
+        datetime(target.year, target.month, target.day, tzinfo=timezone.utc).timestamp() * 1000
+    )
+
+    present_prefixes = {
+        (m.get("meet_id") or "").split("_", 1)[0]
+        for m in union.get("meets", []) or []
+        if "_" in (m.get("meet_id") or "")
+    }
+
+    roster = await _recent_track_prefixes()
+    missing = [p for p in roster if p and p not in present_prefixes]
+    if not missing:
+        return
+
+    for prefix in missing:
+        candidate = f"{prefix}_{utc_midnight_ms}"
+        neg_key = f"na:probe:neg:{candidate}"
+        if await cache_get(neg_key):
+            continue  # recently confirmed dark — don't hammer upstream
+        try:
+            entries = await get_na_meet_entries(candidate)
+        except Exception:
+            await cache_set(neg_key, 1, ex=1800)
+            continue
+        races = entries.get("races") if isinstance(entries, dict) else None
+        if races:
+            # Real card recovered — add it so the entries loop downstream
+            # (and its post-time date filter) picks it up like any other meet.
+            union["meets"].append({
+                "meet_id": candidate,
+                "track_name": entries.get("track_name") or prefix,
+                "track_id": entries.get("track_id", ""),
+                "date": race_date,
+                "_recovered_probe": True,
+            })
+        else:
+            await cache_set(neg_key, 1, ex=1800)
+
+
 async def get_na_meets(date: str = None) -> dict:
     """Get all North America race meets for a given date (requires NA add-on).
 
@@ -232,6 +345,11 @@ async def get_na_meets(date: str = None) -> dict:
     We persist every meet seen for a date in `na:meets:sticky:{date}`
     (24h TTL) and union new fetches with it so a track stays listed
     until the day ends.
+
+    On top of the sticky union, `_recover_missing_na_meets` probes the
+    /entries endpoint directly for any in-season track the listing dropped,
+    so a track that is actually running never disappears just because the
+    upstream /meets listing flaked for that date.
     """
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
@@ -266,6 +384,10 @@ async def get_na_meets(date: str = None) -> dict:
             by_id[mid] = m
 
     union = {**live, "meets": list(by_id.values())}
+    # Fill listing gaps by probing /entries for in-season tracks that are
+    # missing. Runs before the sticky write so recovered meets persist for
+    # the rest of the day.
+    await _recover_missing_na_meets(union, race_date)
     await cache_set(sticky_key, union, ex=86400)
     return union
 
