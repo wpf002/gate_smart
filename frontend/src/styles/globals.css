@@ -85,7 +85,7 @@ input, textarea, select {
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 16px);
-  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 /* ─── App Shell — Desktop (≥768px) ─────────────────────────────────────── */

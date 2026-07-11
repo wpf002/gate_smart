@@ -13,7 +13,7 @@ const DATE_TABS = [
 ];
 
 function TrackSection({ course, races, isTomorrow }) {
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
   return (
     <div style={{ marginBottom: 24 }}>
       <button
