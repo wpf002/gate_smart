@@ -189,3 +189,8 @@ class SecretariatCalibration(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Synthesized lessons from nightly_reflect.py — injected into every analysis prompt
     lessons: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    # Market-agreement calibration computed nightly from real results: how the
+    # model's win rate splits on siding with vs fading the morning-line favorite,
+    # and whether its longshot picks beat their own market price. Feeds the
+    # MARKET DISCIPLINE block with true numbers instead of hardcoded guesses.
+    market_calibration: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

@@ -2514,20 +2514,47 @@ async def get_calibration_context() -> str:
             for lesson in cal.lessons[:5]:
                 lines.append(f"  - {lesson}")
 
-        lines.append(
-            "MARKET DISCIPLINE — your single biggest leak: the morning-line favorite "
-            "is the most predictive signal in any race, and your own tracked record "
-            "proves it. When your top pick IS the favorite you win ~39%; when you fade "
-            "the favorite you win only ~17% — and you currently fade it in roughly 9 of "
-            "every 10 races. Make predicted_finish.first the morning-line favorite "
-            "UNLESS you can name a SPECIFIC, concrete reason it will underperform (a "
-            "lone-speed duel it can't survive, a clear class jump, a bounce off a peak "
-            "effort, a run-style that doesn't fit the projected pace, a troubled-trip or "
-            "bias angle). 'Better value' or 'overbet' is NOT a reason to predict a "
-            "non-favorite to WIN — price belongs in your bet recommendations, never in "
-            "who you think crosses the wire first. Diverge from the favorite only when "
-            "the evidence is specific and strong; otherwise side with the market."
-        )
+        # MARKET DISCIPLINE — cite the model's REAL agree-vs-fade record when we
+        # have it (populated nightly from actual results), never hardcoded numbers.
+        mc = cal.market_calibration or {}
+        if mc.get("agree_n", 0) >= 20 and mc.get("fade_n", 0) >= 20:
+            market_line = (
+                "MARKET DISCIPLINE — your single biggest leak: the morning-line favorite "
+                "is the most predictive signal in any race, and your own tracked record "
+                f"proves it. Over your last {mc['sample']} races, when predicted_finish.first "
+                f"WAS the favorite you won {mc['agree_win_rate']:.0%}; when you faded the "
+                f"favorite you won only {mc['fade_win_rate']:.0%} — and you faded in "
+                f"{mc['fade_rate']:.0%} of races. "
+            )
+            if mc.get("longshot_underperforms"):
+                market_line += (
+                    "Worse, your picks at 7/2 or longer win LESS often than their own "
+                    "market price implies — so ranking a longshot over a shorter-priced "
+                    "favorite has been a losing move for you. "
+                )
+            market_line += (
+                "Make predicted_finish.first the morning-line favorite UNLESS you can name "
+                "a SPECIFIC, concrete reason it will underperform (a lone-speed duel it "
+                "can't survive, a clear class jump, a bounce off a peak effort, a run-style "
+                "that doesn't fit the projected pace, a troubled-trip or bias angle). "
+                "'Better value' or 'overbet' is NOT a reason to predict a non-favorite to "
+                "WIN — price belongs in your bet recommendations, never in who you think "
+                "crosses the wire first. Diverge from the favorite only when the evidence "
+                "is specific and strong; otherwise side with the market."
+            )
+        else:
+            # No reliable market-agreement sample yet — give the discipline without
+            # citing numbers we can't stand behind.
+            market_line = (
+                "MARKET DISCIPLINE: the morning-line favorite is the most predictive "
+                "signal in any race. Make predicted_finish.first the favorite UNLESS you "
+                "can name a SPECIFIC, concrete reason it will underperform (lone-speed "
+                "duel, class jump, bounce off a peak, run-style that doesn't fit the pace, "
+                "troubled-trip or bias angle). 'Better value' or 'overbet' is NOT a reason "
+                "to predict a non-favorite to WIN — price belongs in your bet "
+                "recommendations, never in who crosses the wire first."
+            )
+        lines.append(market_line)
 
         lines.append(
             "Use this to calibrate confidence. "

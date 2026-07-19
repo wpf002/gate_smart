@@ -30,6 +30,7 @@ async def _ensure_columns(engine) -> None:
         "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS lessons JSONB",
         "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS win_rate_by_track_type JSONB",
         "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS win_rate_by_track_surface JSONB",
+        "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS market_calibration JSONB",
     ]
     async with engine.begin() as conn:
         for stmt in ddl:
@@ -38,6 +39,47 @@ async def _ensure_columns(engine) -> None:
 
 def _win_rate(wins: int, total: int) -> float:
     return wins / total if total else 0.0
+
+
+def _market_calibration(predictions: list) -> dict | None:
+    """Compute the model's win rate split on siding with vs fading the
+    morning-line favorite, plus whether its longshot picks beat their own market
+    price. All numbers are realized from stored results — nothing modelled — so
+    the MARKET DISCIPLINE prompt cites the truth, not a hardcoded guess.
+
+    Only rows with market context (top_pick_is_favorite / odds populated) count.
+    Returns None if the sample is too thin to be worth citing.
+    """
+    have = [p for p in predictions if p.top_pick_is_favorite is not None]
+    if len(have) < 60:
+        return None
+
+    agree = [p for p in have if p.top_pick_is_favorite]
+    fade = [p for p in have if not p.top_pick_is_favorite]
+    if len(agree) < 20 or len(fade) < 20:
+        return None
+
+    def _wr(rs):
+        return round(sum(1 for p in rs if p.top_pick_correct) / len(rs), 3) if rs else 0.0
+
+    # Edge on our own longshot picks: do picks at 7/2+ win as often as their
+    # market price implies? implied win prob for fractional-decimal odds o = 1/(o+1).
+    longshots = [p for p in have if p.top_pick_odds and p.top_pick_odds > 3.5]
+    longshot_note = False
+    if len(longshots) >= 40:
+        real = sum(1 for p in longshots if p.top_pick_correct) / len(longshots)
+        imp = sum(1.0 / (p.top_pick_odds + 1.0) for p in longshots) / len(longshots)
+        longshot_note = real < imp  # our longshot picks underperform their own odds
+
+    return {
+        "sample": len(have),
+        "agree_n": len(agree),
+        "agree_win_rate": _wr(agree),
+        "fade_n": len(fade),
+        "fade_win_rate": _wr(fade),
+        "fade_rate": round(len(fade) / len(have), 3),
+        "longshot_underperforms": longshot_note,
+    }
 
 
 def _categorise(data: dict, baseline: float, min_samples: int = 10, delta: float = 0.08):
@@ -140,9 +182,16 @@ async def main(dry_run: bool):
     weak_spots = weak_combo + weak_track + weak_type + weak_surface
     strong_spots = strong_combo + strong_track + strong_type + strong_surface
 
+    market_cal = _market_calibration(predictions)
+
     print(f"  Weak spots ({len(weak_spots)}): {weak_spots[:10]}")
     print(f"  Strong spots ({len(strong_spots)}): {strong_spots[:10]}")
     print("  By mode:", {k: f"{v['wins']}/{v['total']} ({v['win_rate']:.0%})" for k, v in mode_rates.items()})
+    if market_cal:
+        print(f"  Market: agree {market_cal['agree_win_rate']:.0%} ({market_cal['agree_n']}) vs "
+              f"fade {market_cal['fade_win_rate']:.0%} ({market_cal['fade_n']}), "
+              f"fade rate {market_cal['fade_rate']:.0%}, "
+              f"longshot-underperforms={market_cal['longshot_underperforms']}")
 
     if dry_run:
         print("\n[DRY RUN] Not writing to DB.")
@@ -164,6 +213,8 @@ async def main(dry_run: bool):
             existing.weak_spots = weak_spots[:10]
             existing.strong_spots = strong_spots[:10]
             existing.sample_size = total
+            if market_cal is not None:
+                existing.market_calibration = market_cal
         else:
             db.add(SecretariatCalibration(
                 id=1,
@@ -178,6 +229,7 @@ async def main(dry_run: bool):
                 weak_spots=weak_spots[:10],
                 strong_spots=strong_spots[:10],
                 sample_size=total,
+                market_calibration=market_cal,
             ))
         await db.commit()
 
