@@ -47,6 +47,21 @@ def _norm(name: str) -> str:
     return (name or "").lower().strip().replace("'", "").replace("-", " ")
 
 
+def _report_scoring_set(settled: list) -> list:
+    """The rows that count toward the daily digest scorecard: Secretariat's
+    nightly morning-line slate only. Excludes live re-analyses users trigger
+    (analysis_mode != 'auto_daily'), per-user predictions (user_id set), and
+    phantom rows with no recorded finisher (actual_first empty) — none of which
+    are the nightly pick and would otherwise pad or skew the win rate.
+    """
+    return [
+        s for s in settled
+        if s.get("analysis_mode") == "auto_daily"
+        and s.get("user_id") is None
+        and s.get("actual_first")
+    ]
+
+
 async def main(target_date: datetime.date, dry_run: bool):
     from sqlalchemy import select, update
 
@@ -126,6 +141,8 @@ async def main(target_date: datetime.date, dry_run: bool):
                 "id": pred.id,
                 "race_id": pred.race_id,
                 "race_name": pred.race_name,
+                "analysis_mode": pred.analysis_mode,
+                "user_id": pred.user_id,
                 "predicted": pred.predicted_first,
                 "predicted_second": pred.predicted_second,
                 "predicted_third": pred.predicted_third,
@@ -175,19 +192,22 @@ async def main(target_date: datetime.date, dry_run: bool):
                 )
             await db.commit()
 
-    # 4. Compute DailyAccuracyReport
-    total = len(settled)
-    wins = sum(1 for s in settled if s["top_correct"])
-    itm_count = sum(1 for s in settled if s["itm"])
-    place_count = sum(1 for s in settled if s["place_correct"])
-    show_count = sum(1 for s in settled if s["show_correct"])
+    # 4. Compute DailyAccuracyReport — count ONLY Secretariat's nightly
+    # morning-line slate (every row is still settled above for its own record;
+    # this filter is scoring-only).
+    report_set = _report_scoring_set(settled)
+    total = len(report_set)
+    wins = sum(1 for s in report_set if s["top_correct"])
+    itm_count = sum(1 for s in report_set if s["itm"])
+    place_count = sum(1 for s in report_set if s["place_correct"])
+    show_count = sum(1 for s in report_set if s["show_correct"])
     win_rate = wins / total if total else 0.0
     itm_rate = itm_count / total if total else 0.0
     place_rate = place_count / total if total else 0.0
     show_rate = show_count / total if total else 0.0
 
-    best = max((s for s in settled if s["top_correct"]), key=lambda s: 1, default=None)
-    worst = max((s for s in settled if not s["top_correct"]), key=lambda s: 1, default=None)
+    best = max((s for s in report_set if s["top_correct"]), key=lambda s: 1, default=None)
+    worst = max((s for s in report_set if not s["top_correct"]), key=lambda s: 1, default=None)
 
     best_call = f"{best['race_name'] or best['race_id']}: {best['predicted']} won" if best else None
     worst_miss = f"{worst['race_name'] or worst['race_id']}: picked {worst['predicted']}, actual {worst['actual']}" if worst else None
