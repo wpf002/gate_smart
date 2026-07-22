@@ -17,6 +17,8 @@ Schedule (UTC):
   03:30  nightly_recalibration.py  — 30-day rolling recalibration
   10:00  nightly_accuracy.py       — settle yesterday's races + email digest
   12:00  predict_all (via 8 AM ET catchup, see below)
+  15:00  predict_all --only-missing — second pass, fills tracks the 8 AM run
+                                       missed (late-posting cards / feed blips)
   14:30  nightly_reflect.py        — reflect on settled races + synth lessons
                                       (MUST run after accuracy settles — the
                                        old 04:00 slot ran before the data existed)
@@ -81,6 +83,15 @@ async def _run_script(script_name: str, extra_args: list[str] | None = None) -> 
     except Exception as e:
         print(f"[scheduler] {script_name} raised an exception: {e}", flush=True)
         log.exception(f"[scheduler] {script_name} raised an exception: {e}")
+
+
+async def job_predict_all_second_pass() -> None:
+    """Second predict pass at 11 AM ET, filling tracks the 8 AM run missed —
+    late-posting cards, or a transient feed blip like 2026-07-21 where only 2
+    tracks were captured and the count landed exactly on the catchup floor.
+    --only-missing re-fetches and predicts only races not already stored, so
+    it's cheap and idempotent, and never re-picks a race already locked."""
+    await _run_script("nightly_predict_all.py", ["--only-missing"])
 
 
 async def job_nightly_accuracy() -> None:
@@ -394,6 +405,7 @@ def create_scheduler() -> AsyncIOScheduler | None:
         coalesce=True,
     )
 
+    scheduler.add_job(job_predict_all_second_pass, CronTrigger(hour=15, minute=0), id="predict_all_second_pass", name="Predict-all second pass — only-missing (11 AM ET)", misfire_grace_time=3600)
     scheduler.add_job(job_race_alerts, IntervalTrigger(minutes=5), id="race_alerts", name="Race alerts (every 5 min)")
     scheduler.add_job(job_smoke_check, IntervalTrigger(minutes=5), id="smoke_check", name="Prod smoke check (every 5 min)")
 
