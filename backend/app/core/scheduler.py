@@ -20,7 +20,6 @@ Schedule (UTC):
   14:30  nightly_reflect.py        — reflect on settled races + synth lessons
                                       (MUST run after accuracy settles — the
                                        old 04:00 slot ran before the data existed)
-  15:35  substack_draft_email.py   — 11:35 AM ET
 
 Continuous:
   every 30m  accuracy_catchup        — self-heal accuracy 10:00–14:00 UTC
@@ -82,10 +81,6 @@ async def _run_script(script_name: str, extra_args: list[str] | None = None) -> 
     except Exception as e:
         print(f"[scheduler] {script_name} raised an exception: {e}", flush=True)
         log.exception(f"[scheduler] {script_name} raised an exception: {e}")
-
-
-async def job_substack_draft() -> None:
-    await _run_script("substack_draft_email.py")
 
 
 async def job_nightly_accuracy() -> None:
@@ -399,7 +394,6 @@ def create_scheduler() -> AsyncIOScheduler | None:
         coalesce=True,
     )
 
-    scheduler.add_job(job_substack_draft, CronTrigger(hour=15, minute=35), id="substack_draft", name="Substack draft email (11:35 AM ET)", misfire_grace_time=3600)
     scheduler.add_job(job_race_alerts, IntervalTrigger(minutes=5), id="race_alerts", name="Race alerts (every 5 min)")
     scheduler.add_job(job_smoke_check, IntervalTrigger(minutes=5), id="smoke_check", name="Prod smoke check (every 5 min)")
 
