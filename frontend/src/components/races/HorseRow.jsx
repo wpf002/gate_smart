@@ -5,6 +5,7 @@ import { getHorsePastPerformances } from '../../utils/api';
 import { formatClaim } from '../../utils/currency';
 import RadarChart from './RadarChart';
 import Icon from '../common/Icon';
+import FollowButton from '../common/FollowButton';
 
 // ── Position badge helper ──────────────────────────────────────────────────────
 function PosBadge({ pos, fieldSize }) {
@@ -347,6 +348,11 @@ export function HorseRow({ horse, analysis, raceId, scorecards = [], course = ''
             }}>
               {horse.horse_name}
             </div>
+            {!isScratched && horse.horse_name && (
+              <span style={{ flexShrink: 0, display: 'inline-flex' }}>
+                <FollowButton entityType="horse" entityLabel={horse.horse_name} entityKey={horse.horse_id || horse.horse_name} size={15} />
+              </span>
+            )}
             {isScratched && (
               <span className="badge badge-muted" style={{ flexShrink: 0, fontSize: 10 }}>Scratched</span>
             )}

@@ -13,6 +13,7 @@ import EducationPage from './pages/EducationPage';
 import ProfilePage from './pages/ProfilePage';
 import LoginPage from './pages/LoginPage';
 import AccuracyPage from './pages/AccuracyPage';
+import WatchlistPage from './pages/WatchlistPage';
 import OnboardingFlow from './components/common/OnboardingFlow';
 import { useAppStore } from './store';
 
@@ -59,6 +60,7 @@ class ErrorBoundary extends Component {
 const NAV_ITEMS = [
   { path: '/',          icon: 'home',    label: 'Races'   },
   { path: '/search',    icon: 'search',  label: 'Search'  },
+  { path: '/watchlist', icon: 'star',    label: 'Watchlist' },
   { path: '/advisor',   icon: 'robot',   label: 'Advisor' },
   { path: '/education', icon: 'learn',   label: 'Learn'   },
   { path: '/profile',   icon: 'profile', label: 'Profile' },
@@ -204,6 +206,7 @@ function AppShell() {
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/accuracy" element={<AccuracyPage />} />
+            <Route path="/watchlist" element={<WatchlistPage />} />
           </Routes>
         </ErrorBoundary>
       </div>
@@ -285,6 +288,17 @@ export default function App() {
       });
     });
   }, []);
+
+  // Link the OneSignal subscription to the logged-in user so per-user
+  // watchlist alerts (include_external_user_ids) reach the right device.
+  const authUserId = useAppStore((s) => s.authUser?.id);
+  useEffect(() => {
+    if (!import.meta.env.VITE_ONESIGNAL_APP_ID || !authUserId) return;
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(async (OneSignal) => {
+      try { await OneSignal.login(String(authUserId)); } catch { /* noop */ }
+    });
+  }, [authUserId]);
 
   // GA4 init
   useEffect(() => {

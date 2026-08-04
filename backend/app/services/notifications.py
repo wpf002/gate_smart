@@ -53,6 +53,53 @@ async def send_value_alert_notification(
         return resp.json()
 
 
+async def send_watchlist_notification(
+    external_user_id: str,
+    entity_label: str,
+    entity_type: str,
+    horse_name: str,
+    track_name: str,
+    race_name: str,
+    post_time: str | None = None,
+) -> dict:
+    """Notify a single user that a followed entity is entered in an upcoming race.
+    Targets that user only via include_external_user_ids (never broadcasts)."""
+    if not settings.ONESIGNAL_APP_ID or not settings.ONESIGNAL_API_KEY:
+        return {"skipped": True, "reason": "OneSignal not configured"}
+    if not external_user_id:
+        return {"skipped": True, "reason": "no external_user_id"}
+
+    # "Todd Pletcher runs Fast Horse" / "Fast Horse runs" (horse follow)
+    if entity_type == "horse":
+        line = f"{entity_label} runs"
+    else:
+        line = f"{entity_label} ({entity_type}) runs {horse_name}".rstrip()
+    when = f" at {post_time}" if post_time else ""
+    payload = {
+        "app_id": settings.ONESIGNAL_APP_ID,
+        "headings": {"en": f"⭐ Watchlist — {track_name}"},
+        "contents": {"en": f"{line} in {race_name}{when}."},
+        "data": {
+            "type": "watchlist_alert",
+            "entity_type": entity_type,
+            "entity_label": entity_label,
+            "track": track_name,
+            "race_name": race_name,
+        },
+        "include_external_user_ids": [str(external_user_id)],
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{ONESIGNAL_API}/notifications",
+            json=payload,
+            headers={
+                "Authorization": f"Basic {settings.ONESIGNAL_API_KEY}",
+                "Content-Type": "application/json",
+            },
+        )
+        return resp.json()
+
+
 async def send_race_alert_notification(
     track_name: str,
     race_name: str,

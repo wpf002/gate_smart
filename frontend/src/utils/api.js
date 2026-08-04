@@ -133,6 +133,19 @@ export const getTrackStats = (trackCode) =>
 export const getMyPredictions = (date = null, limit = 20) =>
   api.get('/accuracy/my-predictions', { params: { ...(date ? { date } : {}), limit } }).then((r) => r.data);
 
+// ── Watchlist ─────────────────────────────────────────────────────────────────
+export const getWatchlist = () =>
+  api.get('/watchlist').then((r) => r.data);
+
+export const addToWatchlist = (entity_type, entity_label, entity_key = null) =>
+  api.post('/watchlist', { entity_type, entity_label, entity_key }).then((r) => r.data);
+
+export const removeFromWatchlist = (itemId) =>
+  api.delete(`/watchlist/${itemId}`).then((r) => r.data);
+
+export const getWatchlistToday = () =>
+  api.get('/watchlist/today').then((r) => r.data);
+
 // ── Race Debrief ──────────────────────────────────────────────────────────────
 export const getRaceDebrief = (raceId) =>
   api.post('/advisor/debrief', { race_id: raceId }).then((r) => r.data);

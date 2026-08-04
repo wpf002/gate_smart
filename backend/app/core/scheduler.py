@@ -85,6 +85,16 @@ async def _run_script(script_name: str, extra_args: list[str] | None = None) -> 
         log.exception(f"[scheduler] {script_name} raised an exception: {e}")
 
 
+async def job_watchlist_alerts() -> None:
+    """Notify users when a followed horse/trainer/jockey is entered today.
+    Deduped per (user, entity, race), so running it twice is safe."""
+    try:
+        from app.services.watchlist_alerts import check_watchlist_alerts
+        await check_watchlist_alerts()
+    except Exception as e:
+        log.exception(f"[scheduler] watchlist_alerts raised: {e}")
+
+
 async def job_predict_all_second_pass() -> None:
     """Second predict pass at 11 AM ET, filling tracks the 8 AM run missed —
     late-posting cards, or a transient feed blip like 2026-07-21 where only 2
@@ -406,6 +416,9 @@ def create_scheduler() -> AsyncIOScheduler | None:
     )
 
     scheduler.add_job(job_predict_all_second_pass, CronTrigger(hour=15, minute=0), id="predict_all_second_pass", name="Predict-all second pass — only-missing (11 AM ET)", misfire_grace_time=3600)
+    # Watchlist alerts after each predict pass (deduped) — 12:45 & 15:15 UTC.
+    scheduler.add_job(job_watchlist_alerts, CronTrigger(hour=12, minute=45), id="watchlist_alerts_am", name="Watchlist alerts (8:45 AM ET)", misfire_grace_time=3600)
+    scheduler.add_job(job_watchlist_alerts, CronTrigger(hour=15, minute=15), id="watchlist_alerts_mid", name="Watchlist alerts (11:15 AM ET)", misfire_grace_time=3600)
     scheduler.add_job(job_race_alerts, IntervalTrigger(minutes=5), id="race_alerts", name="Race alerts (every 5 min)")
     scheduler.add_job(job_smoke_check, IntervalTrigger(minutes=5), id="smoke_check", name="Prod smoke check (every 5 min)")
 

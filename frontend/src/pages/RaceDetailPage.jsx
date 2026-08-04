@@ -11,6 +11,7 @@ import { useAppStore } from '../store';
 import AffiliateDrawer from '../components/common/AffiliateDrawer';
 import { PARTNERS } from '../utils/affiliates';
 import Icon from '../components/common/Icon';
+import FollowButton from '../components/common/FollowButton';
 import AccuracyBadge, { MorningLineBadge } from '../components/common/AccuracyBadge';
 import { getMorningLine } from '../utils/api';
 import NotificationBell from '../components/common/NotificationBell';
@@ -1161,6 +1162,7 @@ export default function RaceDetailPage() {
                                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--accent-gold-bright)', background: 'rgba(201,162,39,0.1)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>#{info.nums.join(',')}</span>
                                 <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                                 {info.winPct != null && <span style={{ fontSize: 10, color: 'var(--accent-green-bright)', fontFamily: 'var(--font-mono)', flexShrink: 0, marginLeft: 'auto' }}>{info.winPct}%</span>}
+                                <span style={{ marginLeft: info.winPct != null ? 4 : 'auto', flexShrink: 0, display: 'inline-flex' }}><FollowButton entityType="trainer" entityLabel={name} size={14} /></span>
                               </div>
                             ))}
                           </div>
@@ -1174,6 +1176,7 @@ export default function RaceDetailPage() {
                               <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--accent-gold-bright)', background: 'rgba(201,162,39,0.1)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>#{info.nums.join(',')}</span>
                                 <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                                <span style={{ marginLeft: 'auto', flexShrink: 0, display: 'inline-flex' }}><FollowButton entityType="jockey" entityLabel={name} size={14} /></span>
                               </div>
                             ))}
                           </div>
