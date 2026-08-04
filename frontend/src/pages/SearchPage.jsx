@@ -1,34 +1,71 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { searchHorses } from '../utils/api';
+import { searchHorses, searchPeople } from '../utils/api';
 import PageHeader from '../components/common/PageHeader';
 import { getDisplayTime } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
 import Icon from '../components/common/Icon';
+import FollowButton from '../components/common/FollowButton';
+
+const TABS = [
+  { key: 'horse',   label: 'Horses'   },
+  { key: 'trainer', label: 'Trainers' },
+  { key: 'jockey',  label: 'Jockeys'  },
+];
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
   const [submitted, setSubmitted] = useState('');
+  const [tab, setTab] = useState('horse');
   const navigate = useNavigate();
   const timezone = useAppStore((s) => s.userProfile?.timezone);
 
+  const isHorseTab = tab === 'horse';
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['horse-search', submitted],
-    queryFn: () => searchHorses(submitted),
+    queryKey: ['search', tab, submitted],
+    queryFn: () => (isHorseTab ? searchHorses(submitted) : searchPeople(submitted, tab)),
     enabled: submitted.length >= 2,
   });
 
-  const horses = data?.horses ?? [];
+  const horses = isHorseTab ? (data?.horses ?? []) : [];
+  const people = isHorseTab ? [] : (data?.results ?? []);
 
   const handleSearch = () => {
     const q = query.trim();
     if (q.length >= 2) setSubmitted(q);
   };
 
+  const tabLabel = TABS.find((t) => t.key === tab)?.label ?? '';
+
   return (
     <div>
-      <PageHeader title="SEARCH" subtitle="Find horses by name" />
+      <PageHeader title="SEARCH" subtitle="Find horses, trainers & jockeys" />
+
+      {/* Type tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)' }}>
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            style={{
+              flex: 1,
+              padding: '10px 0',
+              background: 'none',
+              border: 'none',
+              borderBottom: tab === key ? '2px solid var(--accent-gold)' : '2px solid transparent',
+              color: tab === key ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
+              fontFamily: 'var(--font-body)',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -36,7 +73,7 @@ export default function SearchPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder="Horse name (min. 2 characters)…"
+            placeholder={`${tabLabel.replace(/s$/, '')} name (min. 2 characters)…`}
             style={{ flex: 1, padding: '10px 14px', fontSize: 14, borderRadius: 'var(--radius-md)' }}
             autoFocus
           />
@@ -71,7 +108,7 @@ export default function SearchPage() {
           </div>
         )}
 
-        {!isLoading && submitted && horses.length === 0 && !isError && (
+        {!isLoading && submitted && !isError && isHorseTab && horses.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
             <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="search" size={40} /></div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>No horses found</div>
@@ -96,14 +133,51 @@ export default function SearchPage() {
           </div>
         )}
 
+        {!isLoading && submitted && !isError && !isHorseTab && people.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+            <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="search" size={40} /></div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>No {tabLabel.toLowerCase()} found</div>
+            <div style={{ fontSize: 13, marginTop: 8 }}>
+              No match for <strong style={{ color: 'var(--text-secondary)' }}>{submitted}</strong>. Try a last name.
+            </div>
+          </div>
+        )}
+
         {!submitted && (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
             <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="search" size={40} /></div>
             <div className="search-tagline" style={{ fontSize: 13 }}>
-              Search by horse name to find entries, form, trainer, and jockey
+              {isHorseTab
+                ? 'Search by horse name to find entries, form, trainer, and jockey'
+                : `Search ${tabLabel.toLowerCase()} by name, then tap ☆ to follow them`}
             </div>
           </div>
         )}
+
+        {/* Trainer / jockey results */}
+        {people.map((p) => (
+          <div
+            key={p.entity_key}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              background: 'var(--bg-card)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px 14px',
+              marginBottom: 8,
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>{p.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                {p.runner_count > 0
+                  ? `${p.runner_count} ${p.runner_count === 1 ? 'runner' : 'runners'} entered${p.racing_today ? ' · racing today' : ''}`
+                  : 'No current entries'}
+              </div>
+            </div>
+            <FollowButton entityType={p.entity_type} entityLabel={p.name} entityKey={p.entity_key} size={20} />
+          </div>
+        ))}
 
         {horses.map((horse, idx) => {
           const { time: displayTime, label: timeLabel } = getDisplayTime(horse, timezone);
@@ -120,8 +194,16 @@ export default function SearchPage() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-                    {horse.horse_name || horse.horse}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700, fontSize: 15 }}>
+                      {horse.horse_name || horse.horse}
+                    </span>
+                    <FollowButton
+                      entityType="horse"
+                      entityLabel={horse.horse_name || horse.horse}
+                      entityKey={horse.horse_id || horse.horse_name || horse.horse}
+                      size={15}
+                    />
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                     {[

@@ -133,6 +133,10 @@ export const getTrackStats = (trackCode) =>
 export const getMyPredictions = (date = null, limit = 20) =>
   api.get('/accuracy/my-predictions', { params: { ...(date ? { date } : {}), limit } }).then((r) => r.data);
 
+// ── People (trainers / jockeys) ───────────────────────────────────────────────
+export const searchPeople = (query, type) =>
+  api.get('/people/search', { params: { q: query, type } }).then((r) => r.data);
+
 // ── Watchlist ─────────────────────────────────────────────────────────────────
 export const getWatchlist = () =>
   api.get('/watchlist').then((r) => r.data);
