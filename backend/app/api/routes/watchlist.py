@@ -20,9 +20,19 @@ router = APIRouter()
 
 
 def normalize_entity(name: str) -> str:
-    """Match key: lowercased, punctuation/space-collapsed so feed spelling
-    variants (apostrophes, hyphens, casing) still match the same entity."""
-    return re.sub(r"\s+", " ", (name or "").lower().strip().replace("'", "").replace("-", " ")).strip()
+    """Match key: lowercased with all punctuation dropped and whitespace
+    collapsed, so feed spelling variants resolve to the same entity.
+
+    This matters because sources disagree: the search index returns
+    "Irad Ortiz Jr" while racecards carry "Irad Ortiz, Jr.". Without stripping
+    commas/periods those become different keys, and a follow made from search
+    would silently never match a race (so no alert would ever fire).
+    """
+    # Apostrophes/periods are intra-word and are dropped outright ("O'Brien" ->
+    # "obrien", "Jr." -> "jr"); every other separator becomes a space.
+    lowered = re.sub(r"['’.]", "", (name or "").lower())
+    cleaned = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def build_watchlist_matches(items: list, cards_by_day: dict) -> list[dict]:

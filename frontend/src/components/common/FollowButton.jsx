@@ -4,12 +4,13 @@ import { useAppStore } from '../../store';
 import Icon from './Icon';
 
 // Must mirror backend normalize_entity so followed-state checks line up.
+// Drops all punctuation (not just apostrophes/hyphens) because sources
+// disagree — "Irad Ortiz Jr" vs "Irad Ortiz, Jr." must resolve to one key.
 export function normalizeEntity(name) {
   return (name || '')
     .toLowerCase()
-    .trim()
-    .replace(/'/g, '')
-    .replace(/-/g, ' ')
+    .replace(/['’.]/g, '')       // intra-word: O'Brien -> obrien, Jr. -> jr
+    .replace(/[^a-z0-9]+/g, ' ') // other separators -> space
     .replace(/\s+/g, ' ')
     .trim();
 }

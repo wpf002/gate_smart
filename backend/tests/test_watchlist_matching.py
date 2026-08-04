@@ -76,3 +76,20 @@ def test_unfollowed_entities_do_not_match():
 
 def test_empty_watchlist_returns_empty():
     assert build_watchlist_matches([], {"today": [_race(runners=[_runner(jockey="x")])]}) == []
+
+
+def test_normalize_unifies_punctuation_variants():
+    """Sources disagree on punctuation — the search index returns
+    "Irad Ortiz Jr" while racecards carry "Irad Ortiz, Jr.". Both must produce
+    the same key or a follow made from search would never match a race."""
+    assert normalize_entity("Irad Ortiz, Jr.") == normalize_entity("Irad Ortiz Jr")
+    assert normalize_entity("O'Brien") == normalize_entity("OBrien")
+    assert normalize_entity("Saez, L.") == "saez l"
+
+
+def test_follow_from_search_spelling_matches_racecard_spelling():
+    # Followed using the search-index spelling...
+    items = [_item("jockey", normalize_entity("Irad Ortiz Jr"), "Irad Ortiz Jr")]
+    # ...but the racecard spells it differently.
+    cards = {"today": [_race(runners=[_runner(jockey="Irad Ortiz, Jr.")])]}
+    assert len(build_watchlist_matches(items, cards)) == 1
