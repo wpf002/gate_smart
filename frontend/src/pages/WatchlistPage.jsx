@@ -79,7 +79,7 @@ export default function WatchlistPage() {
                     {m.entity_label}{m.entity_type !== 'horse' && m.horse_name ? ` · ${m.horse_name}` : ''}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {m.course} · {m.race_name}{m.post_time_et ? ` · ${m.post_time_et} ET` : ''} · {m.day}
+                    {m.course} · {m.race_name}{m.post_time_et ? ` · ${m.post_time_et} ET` : ''} · {m.day ? m.day.charAt(0).toUpperCase() + m.day.slice(1) : ''}
                   </div>
                 </div>
                 <Icon name="chevron-right" size={16} />
