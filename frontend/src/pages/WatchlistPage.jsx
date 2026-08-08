@@ -102,11 +102,9 @@ export default function WatchlistPage() {
   const filtersActive = dayFilter !== 'all' || typeFilter !== 'all' || whoFilter !== 'all' || trackFilter !== 'all';
   const clearFilters = () => { setDayFilter('all'); setTypeFilter('all'); setWhoFilter('all'); setTrackFilter('all'); };
 
-  const selectStyle = {
-    padding: '5px 8px', fontSize: 12, borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--border-medium)', background: 'var(--bg-elevated)',
-    color: 'var(--text-primary)', maxWidth: 180,
-  };
+  // Visual styling lives in globals.css (.filter-select) so these match the
+  // round filter pills instead of rendering with native browser chrome.
+  const selectStyle = { maxWidth: 180 };
 
   return (
     <div>
@@ -142,13 +140,17 @@ export default function WatchlistPage() {
               {/* Who / track dropdowns + clear */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 {whoPresent.length > 1 && (
-                  <select value={whoFilter} onChange={(e) => setWhoFilter(e.target.value)} style={selectStyle} aria-label="Filter by who">
+                  <select value={whoFilter} onChange={(e) => setWhoFilter(e.target.value)}
+                    className={`filter-select${whoFilter !== 'all' ? ' is-active' : ''}`}
+                    style={selectStyle} aria-label="Filter by who">
                     <option value="all">Anyone ({whoPresent.length})</option>
                     {whoPresent.map((w) => <option key={w} value={w}>{w}</option>)}
                   </select>
                 )}
                 {tracksPresent.length > 1 && (
-                  <select value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)} style={selectStyle} aria-label="Filter by track">
+                  <select value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)}
+                    className={`filter-select${trackFilter !== 'all' ? ' is-active' : ''}`}
+                    style={selectStyle} aria-label="Filter by track">
                     <option value="all">All tracks ({tracksPresent.length})</option>
                     {tracksPresent.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>

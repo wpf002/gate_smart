@@ -407,6 +407,63 @@ input::placeholder, textarea::placeholder {
   color: var(--text-muted);
 }
 
+/* ─── Select ─────────────────────────────────────────────────────────────── */
+/* Selects otherwise render with native chrome (system arrow, blue focus ring)
+   that clashes with the dark theme. Strip it and supply our own chevron. */
+select {
+  font-family: var(--font-body);
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238A8A8A' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 12px;
+  padding-right: 28px;
+}
+
+select:focus {
+  border-color: var(--accent-gold-dim);
+}
+
+/* Native option lists follow the OS, but setting these keeps Windows/Linux
+   Chrome from rendering a white popup against the dark UI. */
+select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+/* Pill-shaped filter selects that sit alongside the round filter buttons. */
+.filter-select {
+  border-radius: 999px;
+  background-color: transparent;
+  color: var(--text-secondary);
+  padding: 5px 28px 5px 12px;
+  font-weight: 600;
+}
+
+/* An applied filter reads gold, matching an active pill. */
+.filter-select.is-active {
+  border-color: var(--accent-gold);
+  background-color: rgba(201, 162, 39, 0.15);
+  color: var(--accent-gold-bright);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23E3C25A' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* 16px on mobile prevents iOS zooming the page on focus; desktop can be
+   compact enough to match the pills. */
+@media (min-width: 768px) {
+  .filter-select {
+    font-size: 12px;
+  }
+}
+
 /* ─── Race grid on desktop ───────────────────────────────────────────────── */
 @media (min-width: 1024px) {
   .race-grid {

@@ -167,7 +167,10 @@ export default function ProfilePage() {
         <select
           value={userProfile.timezone || 'America/New_York'}
           onChange={(e) => setUserProfile({ timezone: e.target.value })}
-          style={{ width: '100%', padding: '10px 14px', fontSize: 14, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}
+          // backgroundColor (not the `background` shorthand) — the shorthand
+          // resets background-image and would wipe the chevron from globals.css,
+          // leaving the select with no dropdown indicator at all.
+          style={{ width: '100%', padding: '10px 30px 10px 14px', fontSize: 14, backgroundColor: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}
         >
           {TIMEZONE_OPTIONS.map((tz) => (
             <option key={tz.value} value={tz.value}>{tz.label}</option>
