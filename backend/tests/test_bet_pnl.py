@@ -84,3 +84,41 @@ def test_losing_day_reports_negative_roi():
 def test_empty_input_is_safe():
     p = compute_flat_bet_pnl([])
     assert p["races"] == 0 and p["win"]["roi"] == 0.0
+
+
+# ── Missing betting pools ───────────────────────────────────────────────────
+# Small fields often have no show pool (sometimes no place pool). A bet that
+# could not have been placed must never be scored as a loss.
+
+def test_no_show_pool_detected_from_winner():
+    """Winner has win+place but no show payoff -> race had no show pool."""
+    res = _result([_r("Amour de La Vie", 1, 2.8, 2.2, 0.0), _r("Eyesonthecandy", 2, 0, 3.0, 0.0)])
+    p = extract_top_pick_payoffs(res, "Amour de La Vie")
+    assert p["win"] == 2.8 and p["place"] == 2.2
+    assert p["show"] is None  # not 0.0 — the bet was impossible, not lost
+
+
+def test_off_the_board_pick_only_loses_pools_that_existed():
+    res = _result([_r("Winner", 1, 5.0, 2.4, 0.0)])
+    p = extract_top_pick_payoffs(res, "Some Other Horse")
+    assert p == {"win": 0.0, "place": 0.0, "show": None}
+
+
+def test_unavailable_pools_are_not_staked():
+    rows = [
+        # show pool absent in both races -> across-the-board is only 2 bets/race
+        {"top_pick_win_payoff": 2.8, "top_pick_place_payoff": 2.2, "top_pick_show_payoff": None},
+        {"top_pick_win_payoff": 0.0, "top_pick_place_payoff": 0.0, "top_pick_show_payoff": None},
+    ]
+    p = compute_flat_bet_pnl(rows)
+    assert p["across_the_board"]["staked"] == 8.0     # (2 win + 2 place) x $2
+    assert p["across_the_board"]["returned"] == 5.0   # 2.80 + 2.20
+    assert p["win"]["staked"] == 4.0
+
+
+def test_missing_pool_does_not_invent_a_loss():
+    """A race with only a win pool must not be charged for place/show stakes."""
+    rows = [{"top_pick_win_payoff": 10.0, "top_pick_place_payoff": None, "top_pick_show_payoff": None}]
+    p = compute_flat_bet_pnl(rows)
+    assert p["across_the_board"]["staked"] == 2.0
+    assert p["across_the_board"]["net"] == 8.0

@@ -28,9 +28,17 @@ def _f(v) -> float:
 def extract_top_pick_payoffs(race_result: dict, pick_name: str) -> dict | None:
     """Payoffs our top pick actually returned in this race.
 
-    Returns {"win", "place", "show"} in dollars per $2 staked (0.0 where the
-    pick earned nothing), or None when the chart carries no usable payoffs yet —
-    the caller must then exclude the race rather than score it as a loss.
+    Returns {"win", "place", "show"} in dollars per $2 staked, or None when the
+    chart carries no usable payoffs yet (caller must exclude the race).
+
+    Within the dict, the two values mean different things:
+        0.0   the bet was available and lost
+        None  that pool wasn't offered, so the bet could not have been placed
+
+    Small fields frequently have no show pool (and sometimes no place pool).
+    The winner's own payoffs reveal which pools existed — a winner always
+    collects from every pool that ran — so a missing pool is never mistaken for
+    a losing bet, which would invent losses that were impossible to incur.
     """
     runners = (race_result or {}).get("runners") or []
     if not runners or not pick_name:
@@ -45,17 +53,24 @@ def extract_top_pick_payoffs(race_result: dict, pick_name: str) -> dict | None:
     if not winner or _f(winner.get("win_payoff")) <= 0:
         return None
 
+    has_place_pool = _f(winner.get("place_payoff")) > 0
+    has_show_pool = _f(winner.get("show_payoff")) > 0
+
     target = _norm(pick_name)
     for r in runners:
         if _norm(r.get("horse_name") or r.get("horse")) == target:
             return {
                 "win": _f(r.get("win_payoff")),
-                "place": _f(r.get("place_payoff")),
-                "show": _f(r.get("show_payoff")),
+                "place": _f(r.get("place_payoff")) if has_place_pool else None,
+                "show": _f(r.get("show_payoff")) if has_show_pool else None,
             }
     # Priced chart, but our pick ran off the board (charts list only the top 3):
-    # every bet on it lost, which is a real, known outcome.
-    return {"win": 0.0, "place": 0.0, "show": 0.0}
+    # every bet that existed lost, which is a real, known outcome.
+    return {
+        "win": 0.0,
+        "place": 0.0 if has_place_pool else None,
+        "show": 0.0 if has_show_pool else None,
+    }
 
 
 def compute_flat_bet_pnl(rows: list, stake: float = STAKE) -> dict:
@@ -77,12 +92,17 @@ def compute_flat_bet_pnl(rows: list, stake: float = STAKE) -> dict:
     priced = [r for r in rows if _get(r, "top_pick_win_payoff") is not None]
     n = len(priced)
 
+    # A None place/show payoff means that pool wasn't offered, so no stake could
+    # have been placed. Only count stakes for pools that actually ran.
+    place_rows = [r for r in priced if _get(r, "top_pick_place_payoff") is not None]
+    show_rows = [r for r in priced if _get(r, "top_pick_show_payoff") is not None]
+
     win_returned = sum(_f(_get(r, "top_pick_win_payoff")) for r in priced) * mult
-    place_returned = sum(_f(_get(r, "top_pick_place_payoff")) for r in priced) * mult
-    show_returned = sum(_f(_get(r, "top_pick_show_payoff")) for r in priced) * mult
+    place_returned = sum(_f(_get(r, "top_pick_place_payoff")) for r in place_rows) * mult
+    show_returned = sum(_f(_get(r, "top_pick_show_payoff")) for r in show_rows) * mult
 
     win_staked = n * stake
-    atb_staked = n * stake * 3
+    atb_staked = (n + len(place_rows) + len(show_rows)) * stake
     atb_returned = win_returned + place_returned + show_returned
 
     def _pack(staked, returned):
