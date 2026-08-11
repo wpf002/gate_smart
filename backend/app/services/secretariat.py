@@ -2042,6 +2042,67 @@ async def _compute_category_trends(report_date, lookback_days: int = 7) -> dict:
     }
 
 
+def _bet_pnl_rows(pnl: dict) -> list[tuple]:
+    """(label, staked, returned, net, roi) rows for the flat-bet P&L block."""
+    return [
+        (f"${pnl['stake']:.0f} Win", pnl["win"]),
+        (f"${pnl['stake']:.0f} Across the Board", pnl["across_the_board"]),
+    ]
+
+
+def _render_bet_pnl_html(pnl: dict) -> str:
+    """Flat-bet P&L block. Renders nothing when no race had official payoffs —
+    better to omit the section than to imply a result we can't price."""
+    if not pnl or not pnl.get("races"):
+        return ""
+    rows = []
+    for label, d in _bet_pnl_rows(pnl):
+        colour = "#2d6a2d" if d["net"] > 0 else ("#a33" if d["net"] < 0 else "#666")
+        rows.append(
+            f"""    <tr>
+      <td style="padding:6px 8px;font-size:13px">{label}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:13px;color:#666">${d['staked']:,.2f}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:13px;color:#666">${d['returned']:,.2f}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:13px;font-weight:bold;color:{colour}">{'+' if d['net'] >= 0 else '−'}${abs(d['net']):,.2f}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:13px;font-weight:bold;color:{colour}">{d['roi']:+.1%}</td>
+    </tr>"""
+        )
+    unpriced = (
+        f" {pnl['unpriced_races']} race(s) had no published payoff and are excluded."
+        if pnl.get("unpriced_races") else ""
+    )
+    return f"""
+  <h2 style="color:#c8a84b">💵 If You Bet Every Top Pick</h2>
+  <table style="width:100%;border-collapse:collapse;background:#f8f4ec;border-radius:6px">
+    <tr style="color:#666;font-size:11px;text-transform:uppercase">
+      <td style="padding:6px 8px">Strategy</td>
+      <td style="padding:6px 8px;text-align:right">Staked</td>
+      <td style="padding:6px 8px;text-align:right">Returned</td>
+      <td style="padding:6px 8px;text-align:right">Net</td>
+      <td style="padding:6px 8px;text-align:right">ROI</td>
+    </tr>
+{chr(10).join(rows)}
+  </table>
+  <p style="font-size:11px;color:#999;margin-top:6px">
+    Flat ${pnl['stake']:.0f} bets on my top pick in all {pnl['races']} priced races, settled at the
+    official payoffs (quoted per $2).{unpriced} No morning-line estimates.
+  </p>
+"""
+
+
+def _render_bet_pnl_text(pnl: dict) -> str:
+    if not pnl or not pnl.get("races"):
+        return ""
+    lines = [f"IF YOU BET EVERY TOP PICK ({pnl['races']} priced races)", "─" * 60]
+    for label, d in _bet_pnl_rows(pnl):
+        lines.append(
+            f"  {label:<24} staked ${d['staked']:>9,.2f}  returned ${d['returned']:>9,.2f}  "
+            f"net {'+' if d['net'] >= 0 else '-'}${abs(d['net']):>8,.2f}  ROI {d['roi']:+.1%}"
+        )
+    lines.append("  Settled at official payoffs (quoted per $2). No morning-line estimates.")
+    return "\n".join(lines) + "\n"
+
+
 def _render_trends_html(trends: dict) -> str:
     """Render the 7-day trend buckets as an HTML section for the digest email."""
     if not trends or not trends.get("block"):
@@ -2135,6 +2196,10 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
     show_hits = [p for p in predictions if getattr(p, "show_pick_correct", False)]
     place_pct = f"{len(place_hits)/total:.1%}" if total else "0.0%"
     show_pct = f"{len(show_hits)/total:.1%}" if total else "0.0%"
+
+    # Flat-bet P&L straight from official payoffs on these same races.
+    from app.services.bet_pnl import compute_flat_bet_pnl
+    bet_pnl = compute_flat_bet_pnl(predictions)
 
     # ── Build complete results table in Python (every race, no LLM needed) ──
     def _ps_segments(p):
@@ -2417,6 +2482,7 @@ SCORECARD
   Place pick     : {len(place_hits)} ({place_pct})
   Show pick      : {len(show_hits)} ({show_pct})
 
+{_render_bet_pnl_text(bet_pnl)}
 WHAT WENT RIGHT
 {what_right}
 
@@ -2453,7 +2519,7 @@ COMPLETE RESULTS ({total} races)
       <td style="text-align:center;color:#666;font-size:11px">Show Pick</td>
     </tr>
   </table>
-
+{_render_bet_pnl_html(bet_pnl)}
   <h2 style="color:#2d6a2d">✅ What Went Right</h2>
   {_bullets_to_html(what_right)}
 

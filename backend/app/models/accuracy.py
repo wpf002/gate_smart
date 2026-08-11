@@ -70,6 +70,13 @@ class RacePrediction(Base):
     favorite_odds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     favorite_num: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     top_pick_is_favorite: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    # OFFICIAL payoffs for the top pick, straight from the results chart, quoted
+    # per $2 wagered (US convention — the $2.10 minimum show payoff confirms the
+    # base). Null means the payoff wasn't available, NOT a losing bet, so P&L can
+    # exclude the race instead of silently scoring it as a loss.
+    top_pick_win_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    top_pick_place_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    top_pick_show_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Outcome flags
     top_pick_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
@@ -117,6 +124,15 @@ class DailyAccuracyReport(Base):
     show_rate: Mapped[float] = mapped_column(Float, default=0.0)
     best_call: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     worst_miss: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Flat-bet P&L from OFFICIAL payoffs (US convention: quoted per $2 wagered).
+    # `bet_races` is the number of races with payoff data — it can trail
+    # total_races, so the ROI denominator stays honest rather than assuming a
+    # missing payoff was a loss.
+    bet_races: Mapped[int] = mapped_column(Integer, default=0)
+    bet_win_staked: Mapped[float] = mapped_column(Float, default=0.0)
+    bet_win_returned: Mapped[float] = mapped_column(Float, default=0.0)
+    bet_atb_staked: Mapped[float] = mapped_column(Float, default=0.0)
+    bet_atb_returned: Mapped[float] = mapped_column(Float, default=0.0)
     by_mode: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     by_track: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     by_race_type: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

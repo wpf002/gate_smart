@@ -36,6 +36,14 @@ async def _ensure_columns(engine) -> None:
         "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS show_picks_correct INTEGER DEFAULT 0",
         "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS place_rate FLOAT DEFAULT 0.0",
         "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS show_rate FLOAT DEFAULT 0.0",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_win_payoff FLOAT",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_place_payoff FLOAT",
+        "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_show_payoff FLOAT",
+        "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS bet_races INTEGER DEFAULT 0",
+        "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS bet_win_staked FLOAT DEFAULT 0.0",
+        "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS bet_win_returned FLOAT DEFAULT 0.0",
+        "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS bet_atb_staked FLOAT DEFAULT 0.0",
+        "ALTER TABLE daily_accuracy_reports ADD COLUMN IF NOT EXISTS bet_atb_returned FLOAT DEFAULT 0.0",
     ]
     async with engine.begin() as conn:
         for stmt in ddl:
@@ -137,12 +145,21 @@ async def main(target_date: datetime.date, dry_run: bool):
             # Show pick: did predicted_third land in the top 3 (show pool)?
             show_correct = bool(pred.predicted_third and _norm(pred.predicted_third) in top3)
 
+            # Official payoffs for our top pick — the only honest basis for P&L.
+            # None when the chart isn't priced yet, so the race is excluded from
+            # ROI rather than counted as a loss.
+            from app.services.bet_pnl import extract_top_pick_payoffs
+            payoffs = extract_top_pick_payoffs(race_result, pred.predicted_first)
+
             settled.append({
                 "id": pred.id,
                 "race_id": pred.race_id,
                 "race_name": pred.race_name,
                 "analysis_mode": pred.analysis_mode,
                 "user_id": pred.user_id,
+                "top_pick_win_payoff": payoffs["win"] if payoffs else None,
+                "top_pick_place_payoff": payoffs["place"] if payoffs else None,
+                "top_pick_show_payoff": payoffs["show"] if payoffs else None,
                 "predicted": pred.predicted_first,
                 "predicted_second": pred.predicted_second,
                 "predicted_third": pred.predicted_third,
@@ -182,6 +199,9 @@ async def main(target_date: datetime.date, dry_run: bool):
                     "place_pick_correct": s["place_correct"],
                     "show_pick_correct": s["show_correct"],
                     "settled_at": now,
+                    "top_pick_win_payoff": s["top_pick_win_payoff"],
+                    "top_pick_place_payoff": s["top_pick_place_payoff"],
+                    "top_pick_show_payoff": s["top_pick_show_payoff"],
                 }
                 if s["result_race_type"] and not s["existing_race_type"]:
                     values["race_type"] = s["result_race_type"]
@@ -212,9 +232,19 @@ async def main(target_date: datetime.date, dry_run: bool):
     best_call = f"{best['race_name'] or best['race_id']}: {best['predicted']} won" if best else None
     worst_miss = f"{worst['race_name'] or worst['race_id']}: picked {worst['predicted']}, actual {worst['actual']}" if worst else None
 
+    # Flat-bet P&L on the same nightly-slate rows, priced from official payoffs.
+    from app.services.bet_pnl import compute_flat_bet_pnl
+    pnl = compute_flat_bet_pnl(report_set)
+
     print(
         f"\n  Summary: {wins}/{total} wins ({win_rate:.1%}), {itm_count} ITM ({itm_rate:.1%}), "
         f"place {place_count}/{total} ({place_rate:.1%}), show {show_count}/{total} ({show_rate:.1%})"
+    )
+    unpriced_note = f" ({pnl['unpriced_races']} unpriced)" if pnl["unpriced_races"] else ""
+    print(
+        f"  $2 flat bets on {pnl['races']} priced races{unpriced_note}: "
+        f"WIN {pnl['win']['net']:+.2f} ({pnl['win']['roi']:+.1%}), "
+        f"ATB {pnl['across_the_board']['net']:+.2f} ({pnl['across_the_board']['roi']:+.1%})"
     )
 
     # 5. Upsert DailyAccuracyReport
@@ -234,6 +264,11 @@ async def main(target_date: datetime.date, dry_run: bool):
         "show_rate": show_rate,
         "best_call": best_call,
         "worst_miss": worst_miss,
+        "bet_races": pnl["races"],
+        "bet_win_staked": pnl["win"]["staked"],
+        "bet_win_returned": pnl["win"]["returned"],
+        "bet_atb_staked": pnl["across_the_board"]["staked"],
+        "bet_atb_returned": pnl["across_the_board"]["returned"],
     }
 
     if not dry_run:
