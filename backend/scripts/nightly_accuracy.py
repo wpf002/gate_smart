@@ -288,10 +288,16 @@ async def main(target_date: datetime.date, dry_run: bool):
             )
             report_obj = rpt.scalar_one()
 
+            # Same nightly-slate filter as the scorecard (_report_scoring_set):
+            # live re-analyses and per-user rows must not feed the email's stats
+            # or its flat-bet P&L.
             preds_res = await db.execute(
                 select(RacePrediction).where(
                     RacePrediction.race_date == target_date,
                     RacePrediction.result_fetched == True,  # noqa: E712
+                    RacePrediction.analysis_mode == "auto_daily",
+                    RacePrediction.user_id.is_(None),
+                    RacePrediction.actual_first.isnot(None),
                 )
             )
             preds_list = preds_res.scalars().all()
