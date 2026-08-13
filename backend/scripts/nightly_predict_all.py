@@ -282,6 +282,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS alert_sent BOOLEAN DEFAULT FALSE"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS post_time_et VARCHAR(10)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lock_source VARCHAR(30)"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_fair_odds FLOAT"))
 
     ssl_ctx = ssl.create_default_context()
     client = anthropic.AsyncAnthropic(
@@ -491,6 +492,18 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         # Capture market context (favorite, pick odds, field size) so we can
         # later measure favorite-agreement and calibration of the picks.
         from app.services.odds import compute_market_context
+        # Secretariat's own fair price for the horse it picked. Persisted so
+        # value (fair price vs market price) can be measured later — it used to
+        # exist only in a 4-hour Redis key and was unrecoverable after that.
+        top_pick_fair_odds = None
+        if analysis:
+            from app.services.odds import parse_odds_to_decimal
+            _target = _norm_pick(first)
+            for _r in (analysis.get("runners") or []):
+                if _norm_pick(_r.get("horse_name") or _r.get("name")) == _target:
+                    top_pick_fair_odds = parse_odds_to_decimal(_r.get("fair_odds"))
+                    break
+
         market = compute_market_context(
             race.get("runners") or [], pick_name=first, pick_num=first_num
         )
@@ -557,6 +570,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 "favorite_odds": market["favorite_odds"],
                 "favorite_num": _clip(market["favorite_num"], 10),
                 "top_pick_is_favorite": market["top_pick_is_favorite"],
+                "top_pick_fair_odds": top_pick_fair_odds,
             }
             from sqlalchemy import or_ as _or_
             from sqlalchemy import update as _update

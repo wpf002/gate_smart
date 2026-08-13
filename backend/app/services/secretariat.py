@@ -2592,7 +2592,23 @@ async def get_calibration_context() -> str:
                 f"favorite you won only {mc['fade_win_rate']:.0%} — and you faded in "
                 f"{mc['fade_rate']:.0%} of races. "
             )
-            if mc.get("longshot_underperforms"):
+            # Prefer the realized ROI — a concrete dollar cost is far more
+            # actionable than "you underperform your price".
+            if mc.get("longshot_roi") is not None:
+                market_line += (
+                    f"Your picks at 7/2 or longer are your single most expensive habit: "
+                    f"{mc['longshot_roi_n']} such picks won only {mc.get('longshot_win_rate', 0):.0%} "
+                    f"and returned {mc['longshot_roi']:.0%} on flat win bets"
+                )
+                if mc.get("short_price_roi") is not None:
+                    market_line += (
+                        f", against {mc['short_price_roi']:.0%} on your picks at 7/2 or shorter"
+                    )
+                market_line += (
+                    ". Reaching for a big price is not paying off — when a longshot is only "
+                    "marginally preferable to a shorter-priced rival, take the shorter price. "
+                )
+            elif mc.get("longshot_underperforms"):
                 market_line += (
                     "Worse, your picks at 7/2 or longer win LESS often than their own "
                     "market price implies — so ranking a longshot over a shorter-priced "

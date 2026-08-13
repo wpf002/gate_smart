@@ -55,3 +55,45 @@ def test_longshot_beating_price_not_flagged():
              [_p(False, i < 12, 5.0) for i in range(40)])  # 30% win > implied
     mc = _market_calibration(preds)
     assert mc["longshot_underperforms"] is False
+
+
+def _pp(is_fav, correct, odds, payoff):
+    """Row with an official win payoff attached."""
+    r = _p(is_fav, correct, odds)
+    r.top_pick_win_payoff = payoff
+    return r
+
+
+def test_longshot_roi_computed_from_real_payoffs():
+    # 50 longshots at 5/1: 5 winners paying $12 each -> returned 60 on 100 staked
+    rows = ([_pp(False, True, 5.0, 12.0) for _ in range(5)]
+            + [_pp(False, False, 5.0, 0.0) for _ in range(45)]
+            + [_pp(True, True, 2.0, 6.0) for _ in range(30)]
+            + [_pp(True, False, 2.0, 0.0) for _ in range(30)])
+    mc = _market_calibration(rows)
+    assert mc["longshot_roi_n"] == 50
+    assert mc["longshot_roi"] == -0.4          # (60-100)/100
+    assert mc["longshot_win_rate"] == 0.1
+    # short-price group: 60 bets, 30 winners x $6 = 180 on 120 staked -> +50%
+    assert mc["short_price_roi_n"] == 60
+    assert mc["short_price_roi"] == 0.5
+
+
+def test_roi_omitted_when_sample_too_thin():
+    """Only 10 longshots — too thin to cite, so no longshot ROI is claimed."""
+    rows = ([_pp(True, False, 2.0, 0.0) for _ in range(40)]     # agree, short price
+            + [_pp(False, False, 2.0, 0.0) for _ in range(30)]  # fade, short price
+            + [_pp(False, True, 5.0, 12.0) for _ in range(10)])  # fade, longshot
+    mc = _market_calibration(rows)
+    assert mc is not None
+    assert "longshot_roi" not in mc
+    assert mc["short_price_roi_n"] == 70  # the short-price group is big enough
+
+
+def test_unpriced_rows_excluded_from_roi():
+    rows = ([_pp(False, True, 5.0, 12.0) for _ in range(5)]
+            + [_pp(False, False, 5.0, 0.0) for _ in range(45)]
+            + [_pp(False, False, 5.0, None) for _ in range(20)]   # unpriced
+            + [_pp(True, False, 2.0, 0.0) for _ in range(30)])
+    mc = _market_calibration(rows)
+    assert mc["longshot_roi_n"] == 50  # the 20 unpriced longshots don't count

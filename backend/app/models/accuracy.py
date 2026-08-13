@@ -74,6 +74,13 @@ class RacePrediction(Base):
     # per $2 wagered (US convention — the $2.10 minimum show payoff confirms the
     # base). Null means the payoff wasn't available, NOT a losing bet, so P&L can
     # exclude the race instead of silently scoring it as a loss.
+    # Secretariat's OWN fair-price estimate for its top pick, as a
+    # fractional-decimal scalar (5/2 -> 2.5). Compared against top_pick_odds
+    # (the market) this is what makes value measurable: a pick is an "overlay"
+    # when the market pays more than Secretariat thinks it should. Previously
+    # fair odds lived only in a 4-hour Redis key, so none of this was analysable
+    # after the fact.
+    top_pick_fair_odds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_win_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_place_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_show_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

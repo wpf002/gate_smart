@@ -71,7 +71,18 @@ def _market_calibration(predictions: list) -> dict | None:
         imp = sum(1.0 / (p.top_pick_odds + 1.0) for p in longshots) / len(longshots)
         longshot_note = real < imp  # our longshot picks underperform their own odds
 
-    return {
+    # Realized flat-bet ROI from official payoffs — the concrete cost of a habit,
+    # far more actionable to the model than "you underperform your price".
+    # Payoffs are quoted per $2, so a $2 bet returns the payoff as-is.
+    def _roi(rs):
+        priced = [p for p in rs if getattr(p, "top_pick_win_payoff", None) is not None]
+        if len(priced) < 40:
+            return None
+        staked = 2.0 * len(priced)
+        returned = sum(float(getattr(p, "top_pick_win_payoff", 0) or 0) for p in priced)
+        return {"n": len(priced), "roi": round((returned - staked) / staked, 3)}
+
+    out = {
         "sample": len(have),
         "agree_n": len(agree),
         "agree_win_rate": _wr(agree),
@@ -80,6 +91,16 @@ def _market_calibration(predictions: list) -> dict | None:
         "fade_rate": round(len(fade) / len(have), 3),
         "longshot_underperforms": longshot_note,
     }
+    longshot_roi = _roi(longshots)
+    if longshot_roi:
+        out["longshot_roi"] = longshot_roi["roi"]
+        out["longshot_roi_n"] = longshot_roi["n"]
+        out["longshot_win_rate"] = _wr(longshots)
+    short_roi = _roi([p for p in have if p.top_pick_odds and p.top_pick_odds <= 3.5])
+    if short_roi:
+        out["short_price_roi"] = short_roi["roi"]
+        out["short_price_roi_n"] = short_roi["n"]
+    return out
 
 
 def _categorise(data: dict, baseline: float, min_samples: int = 10, delta: float = 0.08):
