@@ -14,6 +14,7 @@ import ProfilePage from './pages/ProfilePage';
 import LoginPage from './pages/LoginPage';
 import AccuracyPage from './pages/AccuracyPage';
 import WatchlistPage from './pages/WatchlistPage';
+import LandingPage from './pages/LandingPage';
 import OnboardingFlow from './components/common/OnboardingFlow';
 import { useAppStore } from './store';
 
@@ -177,6 +178,11 @@ function AppShell() {
   const onboardingComplete = useAppStore((s) => s.onboardingComplete);
   const authToken = useAppStore((s) => s.authToken);
   const location = useLocation();
+  // Logged-out visitors get the landing page first instead of the app blurred
+  // behind a signup modal. The CTA opens the existing onboarding flow, so the
+  // sign-up path itself is unchanged.
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const signedOut = !onboardingComplete || !authToken;
 
   useEffect(() => {
     if (!window.gtag) return;
@@ -188,9 +194,19 @@ function AppShell() {
     });
   }, [location.pathname]);
 
+  if (signedOut) {
+    return (
+      <div className="app-shell">
+        <div className="page-content">
+          <LandingPage onGetStarted={() => setShowOnboarding(true)} />
+        </div>
+        {showOnboarding && <OnboardingFlow />}
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
-      {(!onboardingComplete || !authToken) && <OnboardingFlow />}
       <SideNav />
       <BetSlipToast />
       <ScrollToTop />

@@ -75,6 +75,22 @@ async def get_daily_accuracy(
         "email_sent": report.email_sent,
         "email_sent_at": report.email_sent_at.isoformat() if report.email_sent_at else None,
         "created_at": report.created_at.isoformat(),
+        # Flat-bet P&L from official payoffs. Exposed so the win rate is never
+        # shown without the money reality beside it. None on days with no
+        # priced races rather than a misleading 0.
+        "bet_races": getattr(report, "bet_races", 0) or 0,
+        "bet_win_roi": (
+            round(
+                (report.bet_win_returned - report.bet_win_staked) / report.bet_win_staked, 4
+            )
+            if getattr(report, "bet_win_staked", 0)
+            else None
+        ),
+        "bet_win_net": (
+            round(report.bet_win_returned - report.bet_win_staked, 2)
+            if getattr(report, "bet_win_staked", 0)
+            else None
+        ),
     }
 
 

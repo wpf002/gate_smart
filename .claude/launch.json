@@ -4,9 +4,15 @@
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "cwd": "/Users/willfoti/Documents/GitHub/gate_smart/frontend",
-      "port": 5173
+      "port": 5173,
+      "env": {
+        "DEV_API_PROXY": "https://backend-production-15e941.up.railway.app"
+      }
     }
   ]
 }
