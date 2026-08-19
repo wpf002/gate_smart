@@ -612,20 +612,34 @@ def compute_input_fingerprint(race_data: dict) -> str:
 
 
 def _slim_race_for_prompt(race_data: dict) -> dict:
-    """Strip bulky fields that add tokens without helping Claude handicap."""
+    """Strip bulky fields that add tokens without helping Claude handicap.
+
+    Deliberately KEEPS the handicapping angles the NA feed provides: post
+    position, equipment (blinker changes), medication, live tote odds beside the
+    morning line, claiming price, breed, and the eligibility conditions that
+    define a race's real class. Pedigree rides along in small fields, where it
+    is often the only form signal for a first-time starter.
+    """
     _RUNNER_DROP = {
+        # Duplicates of fields we keep, internal ids, and UK-only leftovers.
         "odds_list", "silk_url", "horse", "number", "draw", "ofr", "lbs",
-        "spotlight", "comment", "dob", "colour", "sex", "sire", "dam",
-        "dam_sire", "owner", "bred", "prize", "or_adjusted",
+        "spotlight", "comment", "dob", "colour", "sex", "owner", "bred",
+        "prize", "or_adjusted", "jockey_id", "trainer_id", "cloth_number",
+        "program_number", "win_pool", "finish_position", "position", "status",
+        "non_runner",
     }
-    # For large fields (10+ runners), drop even more to stay within token limits
+    # Large fields cost the most tokens — shed the niceties, never the angles.
     _RUNNER_DROP_LARGE = _RUNNER_DROP | {
-        "form", "weight", "stall_number", "cloth_number", "spotlight",
-        "trainer_14_days", "rpr", "ts", "distance_winner", "course_winner",
-        "going_winner", "headgear", "headgear_first_time",
+        "form", "weight", "stall_number", "trainer_14_days", "rpr", "ts",
+        "distance_winner", "course_winner", "going_winner", "headgear",
+        "headgear_first_time", "sire", "dam", "damsire", "coupled_type",
     }
-    _RACE_DROP = {"raw", "big_race", "type_of_race", "pattern",
-                  "age_band", "sex_restriction"}
+    _RACE_DROP = {
+        "raw", "big_race", "type_of_race", "pattern", "age_band",
+        # Operational/bookkeeping, not handicapping signal.
+        "wager_pools", "is_cancelled", "has_results", "minutes_to_post",
+        "region", "date", "time", "off_time", "course_id", "title",
+    }
     runners = race_data.get("runners", [])
     large_field = len(runners) > 10
     drop_set = _RUNNER_DROP_LARGE if large_field else _RUNNER_DROP
@@ -809,6 +823,26 @@ async def build_analyze_request(
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
 
+READING THE DATA — use these fields, they are the edge available to you:
+- `odds` is the LIVE tote price when the pool is up, otherwise the morning line;
+  `live_odds` vs `morning_line_odds` shows where the money has moved. Late money
+  toward a horse is real information; a drifting favorite is a warning.
+- `equipment` and `medication`: first-time blinkers, blinkers off, or a Lasix
+  change are classic form-turnaround angles. Say so when one is present.
+- `post_position` is the actual gate. Inside/outside draw matters most in
+  sprints, on turf, and in large fields.
+- `claiming_price` (and the race's claim range) is the clearest class signal in
+  US racing. A horse dropping in claim price is being placed to win; a sharp
+  rise is a class test.
+- `age_restriction` / `sex_restriction` / `race_restriction`: state-bred,
+  fillies-and-mares or restricted company is materially softer than open.
+- `breed`: if this is NOT Thoroughbred (Quarterhorse, Arabian), it is a short
+  dash where gate speed decides everything — do not apply thoroughbred pace or
+  closing logic.
+- `going` and `weather`: an off/muddy track or heavy precipitation upgrades
+  speed and pedigree suited to wet ground.
+- `sire`/`dam` matter most for first-time starters and maidens with no form.
+
 Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else '$100.00 (default)'}
 
 {stake_block}
@@ -896,6 +930,26 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
 
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
+
+READING THE DATA — use these fields, they are the edge available to you:
+- `odds` is the LIVE tote price when the pool is up, otherwise the morning line;
+  `live_odds` vs `morning_line_odds` shows where the money has moved. Late money
+  toward a horse is real information; a drifting favorite is a warning.
+- `equipment` and `medication`: first-time blinkers, blinkers off, or a Lasix
+  change are classic form-turnaround angles. Say so when one is present.
+- `post_position` is the actual gate. Inside/outside draw matters most in
+  sprints, on turf, and in large fields.
+- `claiming_price` (and the race's claim range) is the clearest class signal in
+  US racing. A horse dropping in claim price is being placed to win; a sharp
+  rise is a class test.
+- `age_restriction` / `sex_restriction` / `race_restriction`: state-bred,
+  fillies-and-mares or restricted company is materially softer than open.
+- `breed`: if this is NOT Thoroughbred (Quarterhorse, Arabian), it is a short
+  dash where gate speed decides everything — do not apply thoroughbred pace or
+  closing logic.
+- `going` and `weather`: an off/muddy track or heavy precipitation upgrades
+  speed and pedigree suited to wet ground.
+- `sire`/`dam` matter most for first-time starters and maidens with no form.
 
 Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else '$100.00 (default)'}
 

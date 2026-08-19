@@ -548,6 +548,57 @@ def _resolve_post_epoch_ms(post_time_long, meet_id: str) -> int | None:
     return resolved
 
 
+def _weather_summary(weather) -> str:
+    """Flatten the meet weather object into one line.
+
+    Rain matters to a handicapper because it changes the going (and can move a
+    turf race to dirt), so precipitation chance is kept alongside the description.
+    """
+    if isinstance(weather, str):
+        return weather
+    if not isinstance(weather, dict):
+        return ""
+    desc = weather.get("current_weather_description") or weather.get("forecast_weather_description") or ""
+    precip = weather.get("forecast_precipitation")
+    parts = [p for p in [desc] if p]
+    if precip not in (None, ""):
+        try:
+            parts.append(f"{int(precip)}% precip")
+        except (TypeError, ValueError):
+            pass
+    return ", ".join(parts)
+
+
+def _fraction_seconds(frac: dict | None) -> float | None:
+    """A fraction/winning-time object -> seconds as a float.
+
+    The feed gives each split as {minutes, seconds, hundredths}; hundredths is
+    the sub-second remainder (":24.52" arrives as seconds=24, hundredths=52).
+    """
+    if not isinstance(frac, dict):
+        return None
+    try:
+        minutes = int(frac.get("minutes") or 0)
+        seconds = int(frac.get("seconds") or 0)
+        hundredths = int(frac.get("hundredths") or 0)
+    except (TypeError, ValueError):
+        return None
+    total = minutes * 60 + seconds + hundredths / 100.0
+    return round(total, 2) if total > 0 else None
+
+
+def _extract_fractions(fraction: dict | None) -> list[float]:
+    """Ordered split times (seconds) for a race — the pace shape."""
+    if not isinstance(fraction, dict):
+        return []
+    out = []
+    for i in range(1, 6):
+        secs = _fraction_seconds(fraction.get(f"fraction_{i}"))
+        if secs:
+            out.append(secs)
+    return out
+
+
 def _normalize_na_race(race: dict, meet: dict) -> dict:
     """Normalize a NA race entry to match GateSmart's internal race schema."""
     from datetime import datetime
@@ -599,26 +650,59 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
             or entry.get("official_finish")
             or entry.get("position")
         )
+        # Live tote money. horse_data_pools carries the WIN pool amount and the
+        # current fractional odds — the price the public is actually betting,
+        # which is far more informative than the static morning line.
+        live_odds, win_pool = None, None
+        for pool in entry.get("horse_data_pools") or []:
+            if (pool.get("pool_type_name") or "").upper() == "WIN":
+                live_odds = pool.get("fractional_odds") or None
+                try:
+                    win_pool = float(pool.get("amount"))
+                except (TypeError, ValueError):
+                    win_pool = None
+                break
+        live_odds = entry.get("live_odds") or live_odds
+        ml = entry.get("morning_line_odds", "")
+
         runners.append({
             "horse_id": str(entry.get("registration_number", "")),
             "horse_name": entry.get("horse_name", ""),
             "horse": entry.get("horse_name", ""),
             "jockey": jockey_name,
+            "jockey_id": (jockey.get("id") if isinstance(jockey, dict) else None),
             "trainer": trainer_name,
+            "trainer_id": (trainer.get("id") if isinstance(trainer, dict) else None),
             "program_number": str(entry.get("program_number", "")),
             "number": str(entry.get("program_number", "")),
             "cloth_number": str(entry.get("program_number", "")),
+            # Post position is the actual gate — distinct from the saddle-cloth
+            # number once entries are coupled or horses scratch. Drives pace/trip.
+            "post_position": entry.get("post_pos"),
             "age": "",
             "sex": "",
             "weight": entry.get("weight", ""),
             "form": "",
-            "odds": entry.get("morning_line_odds", ""),
-            "sp": entry.get("morning_line_odds", ""),
+            # Live price when the tote is up, morning line as the fallback.
+            "odds": live_odds or ml,
+            "morning_line_odds": ml,
+            "live_odds": live_odds,
+            "win_pool": win_pool,
+            "sp": ml,
+            # Classic handicapping angles the feed had all along: equipment
+            # changes (blinkers on/off) and medication (Lasix).
+            "equipment": entry.get("equipment") or "",
+            "medication": entry.get("medication") or "",
+            # Pedigree — the only form signal available for first-time starters.
+            "sire": entry.get("sire_name") or "",
+            "dam": entry.get("dam_name") or "",
+            "damsire": entry.get("dam_sire_name") or "",
+            "coupled_type": entry.get("coupled_type") or "",
             "official_rating": None,
             "non_runner": is_scratched,
             "scratched": is_scratched,
             "status": "scratched" if is_scratched else "",
-            "claiming_price": entry.get("claiming_price"),
+            "claiming_price": entry.get("claiming") or entry.get("claiming_price"),
             "finish_position": finish_pos,
             "position": finish_pos,
         })
@@ -650,6 +734,33 @@ def _normalize_na_race(race: dict, meet: dict) -> dict:
         ),
         "pattern": race.get("grade", ""),
         "region": "usa",
+        # Thoroughbred vs Quarter Horse vs Arabian. Without this the model
+        # applies thoroughbred pace logic to 350-yard QH sprints, where it
+        # simply doesn't apply.
+        "breed": race.get("breed") or "",
+        # Eligibility conditions are real class context — a state-bred
+        # fillies-and-mares race is a materially softer spot than open company.
+        "age_restriction": race.get("age_restriction_description") or "",
+        "sex_restriction": race.get("sex_restriction_description") or "",
+        "race_restriction": race.get("race_restriction_description") or "",
+        "claim_price_min": race.get("min_claim_price") or race.get("minimum_claim_price"),
+        "claim_price_max": race.get("max_claim_price") or race.get("maximum_claim_price"),
+        # D / T / etc. — dirt vs turf vs inner track, finer than the description.
+        "course_type": race.get("course_type") or race.get("surface") or "",
+        "weather": _weather_summary(meet.get("weather")),
+        # Scratches / rider changes posted by the track.
+        "changes": [
+            c.get("text") for c in (race.get("changes") or [])
+            if c.get("text") and c.get("text") != "No Changes"
+        ],
+        # Which pools are actually offered — authoritative, so P&L never
+        # charges for a wager the track didn't run.
+        "wager_pools": [
+            p.get("pool_name") for p in (race.get("race_pools") or []) if p.get("pool_name")
+        ],
+        "minutes_to_post": race.get("mtp"),
+        "is_cancelled": bool(race.get("is_cancelled")),
+        "has_results": bool(race.get("has_results")),
         "runners": runners,
         "field_size": len(runners),
     }
@@ -902,6 +1013,11 @@ async def get_na_results_full(date: str = None) -> dict:
                         "place_payoff": r.get("place_payoff"),
                         "show_payoff": r.get("show_payoff"),
                         "sp": r.get("win_payoff"),
+                        "jockey": f"{r.get('jockey_first_name','')} {r.get('jockey_last_name','')}".strip(),
+                        "trainer": f"{r.get('trainer_first_name','')} {r.get('trainer_last_name','')}".strip(),
+                        "owner": (r.get("owner_last_name") or "").strip(),
+                        "sire": r.get("sire_name") or "",
+                        "weight_carried": r.get("weight_carried"),
                     })
 
                 all_results.append({
@@ -918,6 +1034,32 @@ async def get_na_results_full(date: str = None) -> dict:
                     ),
                     "surface": race.get("surface_description") or race.get("surface", ""),
                     "runners": runners,
+                    # Race shape: split times plus the winning time. This is the
+                    # only genuine pace data in the feed — how fast the race was
+                    # actually run — and the raw material for building our own
+                    # speed/pace baselines over time.
+                    "fractions": _extract_fractions(race.get("fraction")),
+                    "winning_time": _fraction_seconds((race.get("fraction") or {}).get("winning_time")),
+                    "distance": race.get("distance_description", ""),
+                    "distance_f": _parse_na_distance_furlongs(
+                        race.get("distance_description", ""),
+                        race.get("distance_value"),
+                        race.get("distance_unit", ""),
+                    ),
+                    "going": race.get("track_condition_description") or "",
+                    "breed": race.get("breed") or "",
+                    "purse": race.get("total_purse"),
+                    "race_class": race.get("race_class", ""),
+                    "off_time": race.get("off_time"),
+                    # Beyond the charted top 3 — the rest of the field, so we can
+                    # record that a horse ran and finished off the board.
+                    "also_ran": race.get("also_ran") or [],
+                    "scratches": race.get("scratches") or [],
+                    # Which wagers the track actually offered.
+                    "wager_types": [
+                        w.get("wager_description") for w in (race.get("wager_types") or [])
+                        if w.get("wager_description")
+                    ],
                     # Forwarded so post-race reflection (nightly_reflect.py) can
                     # reason about exotic structuring and value, not just W/L names.
                     "payoffs": race.get("payoffs") or [],

@@ -199,3 +199,50 @@ async def test_debrief_prediction_check_is_null_without_prior_analysis():
     assert result["prediction_check"] is None
 
 
+
+
+# ── Prompt payload must retain the NA handicapping angles ───────────────────
+# These fields exist in the feed and were previously dropped before reaching
+# the model. Locking them in so a future slimming pass can't silently discard
+# the edge again.
+
+def test_slim_race_keeps_na_handicapping_angles():
+    from app.services.secretariat import _slim_race_for_prompt
+    race = {
+        "race_id": "SAR_1-1", "course": "Saratoga", "breed": "Thoroughbred",
+        "going": "Muddy", "weather": "Rain Showers Likely, 54% precip",
+        "age_restriction": "3 Year Olds And Up", "sex_restriction": "Fillies and Mares",
+        "race_restriction": "State Bred", "claim_price_min": 10000, "course_type": "D",
+        "wager_pools": ["WIN", "SHOW"], "is_cancelled": False, "minutes_to_post": 12,
+        "runners": [{
+            "horse_name": "Test Horse", "post_position": "4",
+            "equipment": "Blinkers On", "medication": "L",
+            "odds": "3-1", "live_odds": "3-1", "morning_line_odds": "6-1",
+            "claiming_price": 10000, "sire": "Curlin", "jockey_id": "jky_na_1",
+        }],
+    }
+    slim = _slim_race_for_prompt(race)
+    for f in ("breed", "going", "weather", "age_restriction", "sex_restriction",
+              "race_restriction", "claim_price_min", "course_type"):
+        assert f in slim, f"race field {f} must reach the model"
+    # Operational noise is still stripped.
+    for f in ("wager_pools", "is_cancelled", "minutes_to_post"):
+        assert f not in slim
+    r = slim["runners"][0]
+    for f in ("post_position", "equipment", "medication", "live_odds",
+              "morning_line_odds", "claiming_price", "sire"):
+        assert f in r, f"runner field {f} must reach the model"
+    assert "jockey_id" not in r  # internal id, no handicapping value
+
+
+def test_slim_race_large_field_keeps_angles_drops_pedigree():
+    """Token pressure trims pedigree in big fields but never the live angles."""
+    from app.services.secretariat import _slim_race_for_prompt
+    runners = [{
+        "horse_name": f"H{i}", "post_position": str(i), "equipment": "Blinkers On",
+        "medication": "L", "live_odds": "5-1", "sire": "Curlin", "weight": "120",
+    } for i in range(12)]
+    slim = _slim_race_for_prompt({"race_id": "r", "runners": runners})
+    r = slim["runners"][0]
+    assert "equipment" in r and "medication" in r and "post_position" in r and "live_odds" in r
+    assert "sire" not in r and "weight" not in r
