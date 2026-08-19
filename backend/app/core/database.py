@@ -58,6 +58,7 @@ _STARTUP_MIGRATIONS: list[str] = [
     # Secretariat's own fair price for its top pick + the official payoffs it
     # returned — together these make value and real P&L measurable.
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_fair_odds DOUBLE PRECISION",
+    "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS pick_model VARCHAR(60)",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_win_payoff DOUBLE PRECISION",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_place_payoff DOUBLE PRECISION",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_show_payoff DOUBLE PRECISION",

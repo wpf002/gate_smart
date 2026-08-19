@@ -5,6 +5,7 @@ All race analysis, horse evaluation, and betting recommendations flow through he
 """
 import json
 import logging
+import os
 import re
 import ssl
 
@@ -82,6 +83,34 @@ def _parse_digest_sections(raw: str) -> dict[str, str]:
             cleaned.append(line)
         out[key] = "\n".join(cleaned).strip()
     return out
+
+
+# ── Pick-engine model A/B ───────────────────────────────────────────────────
+# The measured weakness is ORDERING, not finding contenders: the winner is in
+# Secretariat's top 4 in ~69% of races, but its #1 pick wins only ~21% while
+# picks 2/3/4 win ~16% each. Ranking four horses it already identified is a
+# reasoning task, so this tests whether a stronger model orders them better.
+#
+# Assignment is a stable hash of race_id, which matters more than it looks:
+#   - the same race always lands in the same arm, so a re-run or the
+#     --only-missing second pass can never flip a race mid-experiment
+#   - the split is independent of track, date, field size and post time, so
+#     neither arm gets the easier races
+PICK_MODEL_DEFAULT = "claude-haiku-4-5-20251001"
+PICK_MODEL_CHALLENGER = "claude-sonnet-4-6"
+# Set to 0 to end the experiment and send every race to the default model.
+PICK_MODEL_AB_PERCENT = int(os.getenv("PICK_MODEL_AB_PERCENT", "50"))
+
+
+def pick_model_for_race(race_id: str) -> str:
+    """Which model analyzes this race. Deterministic per race_id."""
+    if PICK_MODEL_AB_PERCENT <= 0 or not race_id:
+        return PICK_MODEL_DEFAULT
+    import hashlib
+    # md5 (not hash()) — Python salts hash() per process, which would reassign
+    # races on every run and destroy the experiment.
+    bucket = int(hashlib.md5(str(race_id).encode()).hexdigest()[:8], 16) % 100
+    return PICK_MODEL_CHALLENGER if bucket < PICK_MODEL_AB_PERCENT else PICK_MODEL_DEFAULT
 
 
 class SecretariatBusyError(Exception):
@@ -760,13 +789,13 @@ def _dedupe_predicted_finish(result: dict) -> dict:
     return result
 
 
-async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, experience_level: str = None, user_id: int | None = None) -> dict:
+async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float = None, experience_level: str = None, user_id: int | None = None, model: str | None = None) -> dict:
     """
     Full race analysis — Secretariat's core function.
     Returns structured analysis of all runners and recommended bets.
     """
     create_kwargs = await build_analyze_request(
-        race_data, mode=mode, bankroll=bankroll, experience_level=experience_level
+        race_data, mode=mode, bankroll=bankroll, experience_level=experience_level, model=model
     )
 
     try:
@@ -800,6 +829,7 @@ async def build_analyze_request(
     mode: str = "balanced",
     bankroll: float = None,
     experience_level: str = None,
+    model: str | None = None,
 ) -> dict:
     """Build the messages.create kwargs for a full race analysis.
 
@@ -898,7 +928,7 @@ Return this JSON exactly:
 }}"""
 
     return {
-        "model": "claude-haiku-4-5-20251001",
+        "model": model or PICK_MODEL_DEFAULT,
         "max_tokens": 5000,
         "temperature": 0.2,
         "system": _cached_system(cal_context),

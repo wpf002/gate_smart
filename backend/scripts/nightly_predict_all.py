@@ -179,6 +179,7 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
         build_analyze_request,
         extract_and_store_fair_prices,
         finish_analysis,
+        pick_model_for_race,
     )
 
     # Build one request per race. custom_id must be ^[a-zA-Z0-9_-]{1,64}$.
@@ -192,7 +193,10 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
             continue
         id_map[custom_id] = race_id
         try:
-            params = await build_analyze_request({**race, "race_id": race_id}, mode=mode)
+            params = await build_analyze_request(
+                {**race, "race_id": race_id}, mode=mode,
+                model=pick_model_for_race(race_id),
+            )
         except Exception as e:
             print(f"  batch: build failed for {race_id} ({e}); will run sync")
             continue
@@ -283,6 +287,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS post_time_et VARCHAR(10)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lock_source VARCHAR(30)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_fair_odds FLOAT"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS pick_model VARCHAR(60)"))
 
     ssl_ctx = ssl.create_default_context()
     client = anthropic.AsyncAnthropic(
@@ -392,7 +397,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
     # so repeat clicks return the locked nightly analysis verbatim — no live
     # LLM call unless inputs (scratch / jockey / ML) actually change.
     from app.core.cache import cache_set as _cache_set
-    from app.services.secretariat import analyze_race, compute_input_fingerprint
+    from app.services.secretariat import analyze_race, compute_input_fingerprint, pick_model_for_race
 
     # Mode used for the cached analysis. Frontend's default risk tolerance
     # is "medium" (see RaceDetailPage MODES const), so caching under "medium"
@@ -439,7 +444,10 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         if analysis is None:
             made_sync_call = True
             try:
-                analysis = await analyze_race({**race, "race_id": race_id}, mode=LOCK_MODE)
+                analysis = await analyze_race(
+                    {**race, "race_id": race_id}, mode=LOCK_MODE,
+                    model=pick_model_for_race(race_id),
+                )
             except Exception as e:
                 print(f"full analyze failed ({e}); fallback…", end=" ")
 
@@ -571,6 +579,8 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 "favorite_num": _clip(market["favorite_num"], 10),
                 "top_pick_is_favorite": market["top_pick_is_favorite"],
                 "top_pick_fair_odds": top_pick_fair_odds,
+                # Which model produced this pick — the A/B's dependent variable.
+                "pick_model": pick_model_for_race(race_id) if lock_source == "nightly" else None,
             }
             from sqlalchemy import or_ as _or_
             from sqlalchemy import update as _update

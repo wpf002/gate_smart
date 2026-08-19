@@ -246,3 +246,35 @@ def test_slim_race_large_field_keeps_angles_drops_pedigree():
     r = slim["runners"][0]
     assert "equipment" in r and "medication" in r and "post_position" in r and "live_odds" in r
     assert "sire" not in r and "weight" not in r
+
+
+# ── Pick-engine A/B split ───────────────────────────────────────────────────
+
+def test_ab_split_is_deterministic_and_balanced():
+    from app.services.secretariat import (
+        pick_model_for_race, PICK_MODEL_DEFAULT, PICK_MODEL_CHALLENGER,
+    )
+    ids = [f"TRK_{i}-{j}" for i in range(200) for j in range(1, 11)]
+    first = [pick_model_for_race(r) for r in ids]
+    # Stable: the same race must never switch arms between runs, or a re-run /
+    # the --only-missing second pass would corrupt the experiment.
+    assert first == [pick_model_for_race(r) for r in ids]
+    share = sum(1 for m in first if m == PICK_MODEL_CHALLENGER) / len(first)
+    assert 0.45 <= share <= 0.55, f"split skewed: {share:.1%}"
+    assert set(first) <= {PICK_MODEL_DEFAULT, PICK_MODEL_CHALLENGER}
+
+
+def test_ab_split_disabled_sends_everything_to_default():
+    import app.services.secretariat as sec
+    original = sec.PICK_MODEL_AB_PERCENT
+    try:
+        sec.PICK_MODEL_AB_PERCENT = 0
+        assert sec.pick_model_for_race("SAR_1-1") == sec.PICK_MODEL_DEFAULT
+    finally:
+        sec.PICK_MODEL_AB_PERCENT = original
+
+
+def test_ab_split_handles_missing_race_id():
+    from app.services.secretariat import pick_model_for_race, PICK_MODEL_DEFAULT
+    assert pick_model_for_race("") == PICK_MODEL_DEFAULT
+    assert pick_model_for_race(None) == PICK_MODEL_DEFAULT

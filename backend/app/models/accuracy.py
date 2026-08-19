@@ -81,6 +81,9 @@ class RacePrediction(Base):
     # fair odds lived only in a 4-hour Redis key, so none of this was analysable
     # after the fact.
     top_pick_fair_odds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Which model produced this pick. Populated for nightly picks so the
+    # pick-engine A/B can be scored on identical races.
+    pick_model: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     top_pick_win_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_place_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_show_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
