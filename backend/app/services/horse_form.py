@@ -14,6 +14,20 @@ log = logging.getLogger(__name__)
 MAX_LINES_PER_HORSE = 4
 
 
+def lines_for_field(field_size: int) -> int:
+    """How many past starts to show per horse, scaled to field size.
+
+    Form is the most valuable thing in the prompt, so it is trimmed last and
+    never to zero — but a 14-runner field at 4 lines each is ~56 lines, so
+    depth is traded for breadth as fields grow.
+    """
+    if field_size <= 8:
+        return MAX_LINES_PER_HORSE
+    if field_size <= 12:
+        return 3
+    return 2
+
+
 def horse_key(name: str) -> str:
     """Join key for a horse name — lowercase, punctuation stripped.
 

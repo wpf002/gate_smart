@@ -80,3 +80,14 @@ def test_render_block_labels_off_the_board():
     assert "A Horse" in block and "PAST FORM" in block
     # The model must not read "no lines" as "unraced".
     assert "NOT that it is unraced" in block
+
+
+def test_form_depth_scales_with_field_size():
+    """Form is trimmed last and never to zero — but depth yields to breadth as
+    fields grow, so a 14-runner card doesn't blow up the prompt."""
+    from app.services.horse_form import lines_for_field, MAX_LINES_PER_HORSE
+    assert lines_for_field(6) == MAX_LINES_PER_HORSE
+    assert lines_for_field(8) == MAX_LINES_PER_HORSE
+    assert lines_for_field(10) == 3
+    assert lines_for_field(14) == 2
+    assert lines_for_field(20) >= 1  # never zero

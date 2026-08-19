@@ -849,8 +849,12 @@ async def build_analyze_request(
     # Our own accumulated form lines — the NA feed ships every runner with an
     # empty `form`, so without this the model handicaps blind on recent record.
     try:
-        from app.services.horse_form import get_form_context, render_form_block
-        form_block = render_form_block(await get_form_context(runners))
+        from app.services.horse_form import (
+            get_form_context, lines_for_field, render_form_block,
+        )
+        form_block = render_form_block(
+            await get_form_context(runners, limit=lines_for_field(len(runners)))
+        )
     except Exception:
         form_block = ""
 
@@ -960,8 +964,12 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
     # Our own accumulated form lines — the NA feed ships every runner with an
     # empty `form`, so without this the model handicaps blind on recent record.
     try:
-        from app.services.horse_form import get_form_context, render_form_block
-        form_block = render_form_block(await get_form_context(runners))
+        from app.services.horse_form import (
+            get_form_context, lines_for_field, render_form_block,
+        )
+        form_block = render_form_block(
+            await get_form_context(runners, limit=lines_for_field(len(runners)))
+        )
     except Exception:
         form_block = ""
 
