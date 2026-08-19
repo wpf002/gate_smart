@@ -63,7 +63,7 @@ async def _process_date(d, dry_run: bool) -> int:
                 if dry_run:
                     rows += len(extract_form_rows(res, d))
                 else:
-                    rows += await record_race_form(res, d)
+                    rows += await record_race_form(res, d, raise_on_error=True)
             return rows
         except Exception as e:  # DNS blips, dropped pools, upstream 5xx
             last_err = e

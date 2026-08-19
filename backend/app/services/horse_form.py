@@ -94,8 +94,20 @@ def extract_form_rows(result: dict, race_date=None) -> list[dict]:
     return rows
 
 
-async def record_race_form(result: dict, race_date=None) -> int:
-    """Persist form lines for one settled race. Idempotent."""
+async def record_race_form(result: dict, race_date=None, raise_on_error: bool = False) -> int:
+    """Persist form lines for one settled race. Idempotent.
+
+    Retries transient database failures (dropped pooled connection, DNS blip on
+    a long backfill) before giving up. With `raise_on_error`, a persistent
+    failure propagates so a batch caller can retry the whole date rather than
+    silently banking a partial result — a partially-written date still looks
+    "covered" to the backfill, which would make the loss permanent.
+
+    During live settlement the default (swallow) is right: form is an
+    enhancement and must never break settling a race.
+    """
+    import asyncio
+
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     from app.core import database as _db
@@ -104,16 +116,25 @@ async def record_race_form(result: dict, race_date=None) -> int:
     rows = extract_form_rows(result, race_date)
     if not rows:
         return 0
-    try:
-        async with _db._AsyncSessionLocal() as db:
-            stmt = pg_insert(HorseFormLine).values(rows)
-            stmt = stmt.on_conflict_do_nothing(constraint="uq_form_horse_race")
-            await db.execute(stmt)
-            await db.commit()
-        return len(rows)
-    except Exception as e:
-        log.warning(f"[horse_form] record failed for {result.get('race_id')}: {e}")
-        return 0
+
+    last_err = None
+    for attempt in range(3):
+        try:
+            async with _db._AsyncSessionLocal() as db:
+                stmt = pg_insert(HorseFormLine).values(rows)
+                stmt = stmt.on_conflict_do_nothing(constraint="uq_form_horse_race")
+                await db.execute(stmt)
+                await db.commit()
+            return len(rows)
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                await asyncio.sleep(2 * (attempt + 1))
+
+    log.warning(f"[horse_form] record failed for {result.get('race_id')}: {last_err}")
+    if raise_on_error:
+        raise RuntimeError(f"{result.get('race_id')}: {last_err}")
+    return 0
 
 
 def _format_line(f) -> str:
