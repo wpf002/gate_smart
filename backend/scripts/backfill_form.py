@@ -115,10 +115,17 @@ if __name__ == "__main__":
     ap.add_argument("--since", type=str, default=None, help="YYYY-MM-DD; overrides --days")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--redo", action="store_true", help="re-process dates already recorded")
+    ap.add_argument("--dates-file", type=str, default=None,
+                    help="file of YYYY-MM-DD lines to repair; implies --redo. Use after purging "
+                         "bad rows, where a date keeps some rows and would otherwise look covered.")
     a = ap.parse_args()
 
     today = datetime.date.today()
-    if a.since:
+    if a.dates_file:
+        dates = [datetime.date.fromisoformat(x.strip())
+                 for x in open(a.dates_file) if x.strip()]
+        a.redo = True  # a partially-purged date still looks covered
+    elif a.since:
         start = datetime.date.fromisoformat(a.since)
         span = (today - start).days
         dates = [start + datetime.timedelta(days=i) for i in range(span)]
