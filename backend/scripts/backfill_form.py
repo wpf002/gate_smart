@@ -108,6 +108,22 @@ async def main(dates: list, dry_run: bool, redo: bool):
                 "GROUP BY horse_key HAVING COUNT(*) >= 3) x"))).scalar()
         print(f"Archive now: {lines} lines / {horses} horses ({multi} with 3+ starts).")
 
+        # Integrity gate. A string `also_ran` iterated as characters once wrote
+        # 517k single-letter "horses" and inflated field_size on every real
+        # runner in those races — and nothing failed, so it went unnoticed for
+        # hours. Fail loudly rather than bank corrupt history again.
+        async with _db._AsyncSessionLocal() as db:
+            junk = (await db.execute(T(
+                "SELECT COUNT(*) FROM horse_form_lines WHERE LENGTH(horse_key) <= 2"))).scalar()
+            huge = (await db.execute(T(
+                "SELECT COUNT(*) FROM horse_form_lines WHERE field_size > 30"))).scalar()
+        if junk or huge:
+            print(f"\n!! INTEGRITY FAILURE: {junk} rows with 1-2 char names, "
+                  f"{huge} rows with field_size > 30. Purge the affected races and "
+                  f"re-run with --dates-file before trusting this archive.")
+            sys.exit(1)
+        print("Integrity OK: no malformed names, no impossible field sizes.")
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Backfill horse form lines from results")
