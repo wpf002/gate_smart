@@ -846,12 +846,20 @@ async def build_analyze_request(
 
     cal_context = await get_calibration_context()
 
+    # Our own accumulated form lines — the NA feed ships every runner with an
+    # empty `form`, so without this the model handicaps blind on recent record.
+    try:
+        from app.services.horse_form import get_form_context, render_form_block
+        form_block = render_form_block(await get_form_context(runners))
+    except Exception:
+        form_block = ""
+
     exp_block = _experience_level_block(experience_level)
     stake_block = _stake_sizing_block(bankroll)
     prompt = f"""{exp_block}Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
-{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
+{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}{form_block}
 
 READING THE DATA — use these fields, they are the edge available to you:
 - `odds` is the LIVE tote price when the pool is up, otherwise the morning line;
@@ -949,6 +957,14 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
     # Secretariat still learns from its own history without re-billing the tokens.
     cal_context = await get_calibration_context()
 
+    # Our own accumulated form lines — the NA feed ships every runner with an
+    # empty `form`, so without this the model handicaps blind on recent record.
+    try:
+        from app.services.horse_form import get_form_context, render_form_block
+        form_block = render_form_block(await get_form_context(runners))
+    except Exception:
+        form_block = ""
+
     exp_block = _experience_level_block(experience_level)
     stake_block = _stake_sizing_block(bankroll)
     prompt = (
@@ -959,7 +975,7 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
         f"""Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
-{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}
+{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}{form_block}
 
 READING THE DATA — use these fields, they are the edge available to you:
 - `odds` is the LIVE tote price when the pool is up, otherwise the morning line;

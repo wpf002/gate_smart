@@ -145,6 +145,14 @@ async def main(target_date: datetime.date, dry_run: bool):
             # Show pick: did predicted_third land in the top 3 (show pool)?
             show_correct = bool(pred.predicted_third and _norm(pred.predicted_third) in top3)
 
+            # Archive every runner's line from this race — our own past-performance
+            # data, since no vendor will license PPs to an app.
+            try:
+                from app.services.horse_form import record_race_form
+                await record_race_form(race_result, target_date)
+            except Exception:
+                pass
+
             # Official payoffs for our top pick — the only honest basis for P&L.
             # None when the chart isn't priced yet, so the race is excluded from
             # ROI rather than counted as a loss.
