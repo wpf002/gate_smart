@@ -91,3 +91,39 @@ def test_form_depth_scales_with_field_size():
     assert lines_for_field(10) == 3
     assert lines_for_field(14) == 2
     assert lines_for_field(20) >= 1  # never zero
+
+
+# ── also_ran arrives in two shapes ──────────────────────────────────────────
+# Some meets return a list of names, others a single joined string. Treating a
+# string as a list iterates CHARACTERS — this wrote 517k single-letter "horses"
+# into the archive and inflated field_size on every real runner in those races.
+
+def test_also_ran_string_is_split_not_iterated():
+    from app.services.horse_form import parse_also_ran
+    assert parse_also_ran("Trango Tower  and   Pay the Bills (FR)") == [
+        "Trango Tower", "Pay the Bills (FR)"]
+    assert parse_also_ran("Shellac  and   Klimt Master") == ["Shellac", "Klimt Master"]
+    # single name, no separator — must stay one name, not 12 letters
+    assert parse_also_ran("Solo Runner") == ["Solo Runner"]
+
+
+def test_also_ran_list_still_works():
+    from app.services.horse_form import parse_also_ran
+    assert parse_also_ran(["Ms Nellie", "Roseisle Rose"]) == ["Ms Nellie", "Roseisle Rose"]
+    assert parse_also_ran([]) == []
+    assert parse_also_ran(None) == []
+
+
+def test_also_ran_comma_and_mixed_separators():
+    from app.services.horse_form import parse_also_ran
+    assert parse_also_ran("A Horse, B Horse and C Horse") == ["A Horse", "B Horse", "C Horse"]
+
+
+def test_field_size_correct_with_string_also_ran():
+    """The real bug's blast radius: a string also_ran inflated field_size for
+    every legitimately-charted horse in the race."""
+    res = _result(also_ran="Fourth Horse  and   Fifth Horse")
+    rows = extract_form_rows(res, None)
+    assert all(r["field_size"] == 5 for r in rows)      # 3 charted + 2 also-ran
+    assert len(rows) == 5
+    assert not any(len(r["horse_name"]) <= 2 for r in rows)

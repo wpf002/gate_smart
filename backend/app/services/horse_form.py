@@ -38,6 +38,31 @@ def horse_key(name: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", cleaned)).strip()[:160]
 
 
+def parse_also_ran(also_ran) -> list[str]:
+    """Names of horses that ran but finished outside the charted top 3.
+
+    The feed is inconsistent: some meets return a list of names, others a single
+    string joining them ("Trango Tower  and   Pay the Bills (FR)"). Iterating a
+    string yields characters, so this must never assume a list — doing so once
+    wrote 517k single-letter "horses" into the archive and inflated field_size
+    on every real runner in those races.
+    """
+    if not also_ran:
+        return []
+    if isinstance(also_ran, str):
+        parts = re.split(r",|\s+\band\b\s+", also_ran)
+    elif isinstance(also_ran, (list, tuple)):
+        parts = []
+        for item in also_ran:
+            if isinstance(item, str):
+                parts.extend(re.split(r",|\s+\band\b\s+", item))
+            elif isinstance(item, dict):
+                parts.append(item.get("horse_name") or item.get("horse") or "")
+    else:
+        return []
+    return [p.strip() for p in parts if p and p.strip()]
+
+
 def extract_form_rows(result: dict, race_date=None) -> list[dict]:
     """One dict per horse that ran in this result.
 
@@ -51,7 +76,7 @@ def extract_form_rows(result: dict, race_date=None) -> list[dict]:
         return rows
 
     charted = result.get("runners") or []
-    also_ran = result.get("also_ran") or []
+    also_ran = parse_also_ran(result.get("also_ran"))
     field_size = len(charted) + len(also_ran)
     common = {
         "race_id": race_id,
