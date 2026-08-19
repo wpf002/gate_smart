@@ -43,6 +43,11 @@ class HorseFormLine(Base):
     surface: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     going: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     race_class: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    # Connections. Stored now because backfilling them later means re-pulling
+    # every past result — and because trainer/jockey strike rate is a core
+    # handicapping angle we can only ever compute from our own archive.
+    jockey: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    trainer: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     breed: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     # Winner's time and the race's own splits — lets us compare how fast a race
     # was run relative to others at the same track/distance.

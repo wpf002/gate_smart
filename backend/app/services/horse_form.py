@@ -64,7 +64,9 @@ def extract_form_rows(result: dict, race_date=None) -> list[dict]:
         except (TypeError, ValueError):
             pos = None
         rows.append({**common, "horse_key": k, "horse_name": name[:160],
-                     "finish_pos": pos, "win_payoff": r.get("win_payoff")})
+                     "finish_pos": pos, "win_payoff": r.get("win_payoff"),
+                     "jockey": (r.get("jockey") or "")[:120] or None,
+                     "trainer": (r.get("trainer") or "")[:120] or None})
 
     for name in also_ran:
         name = (name or "").strip()
@@ -73,7 +75,8 @@ def extract_form_rows(result: dict, race_date=None) -> list[dict]:
             continue
         seen.add(k)
         rows.append({**common, "horse_key": k, "horse_name": name[:160],
-                     "finish_pos": None, "win_payoff": None})
+                     "finish_pos": None, "win_payoff": None,
+                     "jockey": None, "trainer": None})
     return rows
 
 
