@@ -114,9 +114,13 @@ def test_also_ran_list_still_works():
     assert parse_also_ran(None) == []
 
 
-def test_also_ran_comma_and_mixed_separators():
+def test_also_ran_comma_separated():
+    """Commas separate names. Note the single-spaced "and" case is covered in
+    test_single_spaced_and_is_part_of_a_horse_name — an earlier version of this
+    test wrongly assumed " and " always separates, which split real names."""
     from app.services.horse_form import parse_also_ran
-    assert parse_also_ran("A Horse, B Horse and C Horse") == ["A Horse", "B Horse", "C Horse"]
+    assert parse_also_ran("A Horse, B Horse, C Horse") == ["A Horse", "B Horse", "C Horse"]
+    assert parse_also_ran("A Horse, B Horse  and   C Horse") == ["A Horse", "B Horse", "C Horse"]
 
 
 def test_field_size_correct_with_string_also_ran():
@@ -127,3 +131,23 @@ def test_field_size_correct_with_string_also_ran():
     assert all(r["field_size"] == 5 for r in rows)      # 3 charted + 2 also-ran
     assert len(rows) == 5
     assert not any(len(r["horse_name"]) <= 2 for r in rows)
+
+
+def test_single_spaced_and_is_part_of_a_horse_name():
+    """Real feed string: 'Me and Chili, Ferdan, King Social  and   Forever Lasting'.
+    "Me and Chili" is ONE horse — only a multi-space "and" separates names.
+    Splitting on any " and " tore real names in half."""
+    from app.services.horse_form import parse_also_ran
+    assert parse_also_ran("Me and Chili, Ferdan, King Social  and   Forever Lasting") == [
+        "Me and Chili", "Ferdan", "King Social", "Forever Lasting"]
+    assert parse_also_ran("Rock and Roll") == ["Rock and Roll"]
+    assert parse_also_ran("Salt and Pepper  and   Other Horse") == [
+        "Salt and Pepper", "Other Horse"]
+
+
+def test_real_world_also_ran_strings():
+    from app.services.horse_form import parse_also_ran
+    assert parse_also_ran("Innova, Trew Violence  and   Superwolf") == [
+        "Innova", "Trew Violence", "Superwolf"]
+    got = parse_also_ran("Dom Wayne, Arimony, Mr. Big Rig, Big Mac Daddy  and   Farmer Fred R F")
+    assert got == ["Dom Wayne", "Arimony", "Mr. Big Rig", "Big Mac Daddy", "Farmer Fred R F"]

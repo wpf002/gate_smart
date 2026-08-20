@@ -38,24 +38,33 @@ def horse_key(name: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", cleaned)).strip()[:160]
 
 
+# Comma, or "and" fenced by 2+ spaces. A single-spaced "and" is part of a name.
+_ALSO_RAN_SPLIT = r",|\s{2,}and\s{2,}"
+
+
 def parse_also_ran(also_ran) -> list[str]:
     """Names of horses that ran but finished outside the charted top 3.
 
     The feed is inconsistent: some meets return a list of names, others a single
-    string joining them ("Trango Tower  and   Pay the Bills (FR)"). Iterating a
-    string yields characters, so this must never assume a list — doing so once
-    wrote 517k single-letter "horses" into the archive and inflated field_size
-    on every real runner in those races.
+    string joining them. Iterating a string yields characters, so this must
+    never assume a list — doing so once wrote 517k single-letter "horses" into
+    the archive and inflated field_size on every real runner in those races.
+
+    The string form is comma-separated with the final name joined by a
+    MULTI-SPACE "and":
+        'Me and Chili, Ferdan, King Social  and   Forever Lasting'
+    Splitting on any " and " tears real names apart — "Me and Chili" is one
+    horse. Only a run of 2+ spaces around "and" is a separator.
     """
     if not also_ran:
         return []
     if isinstance(also_ran, str):
-        parts = re.split(r",|\s+\band\b\s+", also_ran)
+        parts = re.split(_ALSO_RAN_SPLIT, also_ran)
     elif isinstance(also_ran, (list, tuple)):
         parts = []
         for item in also_ran:
             if isinstance(item, str):
-                parts.extend(re.split(r",|\s+\band\b\s+", item))
+                parts.extend(re.split(_ALSO_RAN_SPLIT, item))
             elif isinstance(item, dict):
                 parts.append(item.get("horse_name") or item.get("horse") or "")
     else:
