@@ -977,13 +977,31 @@ async def get_na_results_full(date: str = None) -> dict:
     meets_data = await get_na_meets(date)
     meets = meets_data.get("meets", [])
 
+    # Fetch each meet's chart concurrently. Sequentially this ran at roughly
+    # 0.4 req/sec against a 5 req/sec allowance — the bound was our own waiting,
+    # not the API. The semaphore keeps us comfortably inside the limit.
+    import asyncio as _asyncio
+    _sem = _asyncio.Semaphore(4)
+
+    async def _fetch(meet_id: str):
+        async with _sem:
+            try:
+                return meet_id, await get_na_meet_results(meet_id)
+            except Exception:
+                return meet_id, None
+
+    meet_ids = [m.get("meet_id", "") for m in meets if m.get("meet_id")]
+    fetched = dict(await _asyncio.gather(*(_fetch(mid) for mid in meet_ids)))
+
     all_results = []
     for meet in meets:
         meet_id = meet.get("meet_id", "")
         if not meet_id:
             continue
         try:
-            results_data = await get_na_meet_results(meet_id)
+            results_data = fetched.get(meet_id)
+            if not results_data:
+                continue
             races = results_data.get("races", [])
             for race in races:
                 # Build race_id using the same formula as _normalize_na_race
