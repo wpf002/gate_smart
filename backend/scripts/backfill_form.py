@@ -111,12 +111,16 @@ async def main(dates: list, dry_run: bool, redo: bool):
         # runner in those races — and nothing failed, so it went unnoticed for
         # hours. Fail loudly rather than bank corrupt history again.
         async with _db._AsyncSessionLocal() as db:
+            # Single-character names are the signature of the character-split
+            # bug. Two-character names are NOT corruption — "Jr", "Oh" and "Oz"
+            # are real horses in the feed, and an earlier version of this check
+            # failed a good run on them.
             junk = (await db.execute(T(
-                "SELECT COUNT(*) FROM horse_form_lines WHERE LENGTH(horse_key) <= 2"))).scalar()
+                "SELECT COUNT(*) FROM horse_form_lines WHERE LENGTH(horse_key) < 2"))).scalar()
             huge = (await db.execute(T(
                 "SELECT COUNT(*) FROM horse_form_lines WHERE field_size > 30"))).scalar()
         if junk or huge:
-            print(f"\n!! INTEGRITY FAILURE: {junk} rows with 1-2 char names, "
+            print(f"\n!! INTEGRITY FAILURE: {junk} single-character names, "
                   f"{huge} rows with field_size > 30. Purge the affected races and "
                   f"re-run with --dates-file before trusting this archive.")
             sys.exit(1)

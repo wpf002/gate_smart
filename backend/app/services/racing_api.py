@@ -11,6 +11,26 @@ from app.core.config import settings
 
 BASE_URL = "https://api.theracingapi.com/v1"
 
+# Upstream allows 5 req/sec. A bare semaphore still lets short bursts exceed
+# that when responses are fast — which returned 429s and failed 183 dates of a
+# backfill. This paces requests to a fixed minimum interval instead.
+_MIN_REQUEST_INTERVAL = 1 / 4.0
+_rate_lock = None
+_last_request_at = 0.0
+
+
+async def _rate_limit() -> None:
+    import asyncio
+    import time as _time
+    global _rate_lock, _last_request_at
+    if _rate_lock is None:
+        _rate_lock = asyncio.Lock()
+    async with _rate_lock:
+        wait = _MIN_REQUEST_INTERVAL - (_time.monotonic() - _last_request_at)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        _last_request_at = _time.monotonic()
+
 
 def _auth() -> tuple[str, str]:
     return (settings.RACING_API_USERNAME, settings.RACING_API_PASSWORD)
@@ -27,6 +47,7 @@ async def _get(
         if cached is not None:
             return cached
 
+    await _rate_limit()
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{BASE_URL}{path}",
@@ -424,6 +445,7 @@ async def get_na_meet_results(meet_id: str) -> dict:
     if cached is not None:
         return cached
 
+    await _rate_limit()
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{BASE_URL}/north-america/meets/{meet_id}/results",
