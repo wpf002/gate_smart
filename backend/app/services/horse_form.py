@@ -239,3 +239,43 @@ def render_form_block(form: dict[str, list[str]]) -> str:
     for name, ls in form.items():
         lines.append(f"  {name}: " + " | ".join(ls))
     return "\n".join(lines)
+
+
+async def record_many_races(results: list, race_date=None) -> int:
+    """Persist form lines for a whole day's results in ONE insert.
+
+    record_race_form opens a session per race. Over a remote connection that is
+    ~70 round-trips for a single race day, which dominated a multi-year backfill
+    (fetching a full day takes under a second; writing it took ~100). Batching
+    turns the day into a single statement.
+    """
+    import asyncio
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.core import database as _db
+    from app.models.form import HorseFormLine
+
+    rows: list[dict] = []
+    for res in results or []:
+        rows.extend(extract_form_rows(res, race_date))
+    if not rows:
+        return 0
+
+    # Postgres caps parameters per statement; chunk well inside it.
+    CHUNK = 500
+    last_err = None
+    for attempt in range(3):
+        try:
+            async with _db._AsyncSessionLocal() as db:
+                for i in range(0, len(rows), CHUNK):
+                    stmt = pg_insert(HorseFormLine).values(rows[i:i + CHUNK])
+                    stmt = stmt.on_conflict_do_nothing(constraint="uq_form_horse_race")
+                    await db.execute(stmt)
+                await db.commit()
+            return len(rows)
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                await asyncio.sleep(2 * (attempt + 1))
+    raise RuntimeError(f"batch insert failed for {race_date}: {last_err}")

@@ -48,7 +48,7 @@ async def _covered_dates() -> set:
 
 async def _process_date(d, dry_run: bool) -> int:
     """Record one date's results. Retries transient failures before giving up."""
-    from app.services.horse_form import extract_form_rows, record_race_form
+    from app.services.horse_form import extract_form_rows, record_many_races
     from app.services.racing_api import get_na_results_full
 
     last_err = None
@@ -58,13 +58,11 @@ async def _process_date(d, dry_run: bool) -> int:
             results = data.get("results", []) or []
             if not results:
                 return 0
-            rows = 0
-            for res in results:
-                if dry_run:
-                    rows += len(extract_form_rows(res, d))
-                else:
-                    rows += await record_race_form(res, d, raise_on_error=True)
-            return rows
+            if dry_run:
+                return sum(len(extract_form_rows(res, d)) for res in results)
+            # One statement per day rather than one per race — the write, not
+            # the fetch, was the bottleneck.
+            return await record_many_races(results, d)
         except Exception as e:  # DNS blips, dropped pools, upstream 5xx
             last_err = e
             if attempt < RETRIES - 1:
