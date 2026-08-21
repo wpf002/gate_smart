@@ -20,6 +20,7 @@ Usage:
     python scripts/nightly_reflect.py --dry-run
 """
 import argparse
+import re
 import asyncio
 import datetime
 import json
@@ -158,6 +159,63 @@ async def reflect_batch(client, races: list[dict]) -> list[dict]:
     except Exception as e:
         print(f"    reflect_batch error: {e}")
     return []
+
+
+
+# ── Market-discipline guardrail ─────────────────────────────────────────────
+# The reflect loop optimises for "explain yesterday's result", which reliably
+# mints lessons generalised from a single longshot winner — e.g. "elevate a
+# price horse ($10+) to my win pick ... because Colonel Vargo ($17)". Those
+# contradict the calibration the same prompt carries (fades win 17%, siding
+# with the favorite wins 34%), and in August 2026 they drove the favorite-pick
+# rate from 44% to 16% and the win rate from ~25% to ~16%.
+#
+# Value belongs in the BET, not in who is predicted to cross the wire first, so
+# lessons about structuring exotics around a price horse are allowed. What is
+# rejected is instructing a longer price — or the place/show pick, which is
+# longer-priced by construction — into the WIN slot.
+_WIN_SLOT = re.compile(
+    r"\b(win pick|win slot|win selection|win contender|top slot|top pick|"
+    r"predicted_finish\.first|on top|to win)\b", re.I)
+_PRICE_TERM = re.compile(
+    r"\b(price horse|longshot|long shot|longer shot|overlay|bigger price|"
+    r"\d+\s*-\s*1\s*(to|through|and|–|-)\s*\d+\s*-\s*1|\$\d{2,})", re.I)
+_PROMOTE_VERB = re.compile(
+    r"\b(elevate|promote|surface|include|must|move\b|put\b|back\b)", re.I)
+# Signals the lesson is pushing TOWARD the market rather than away from it —
+# "put the chalk on top", "override that instinct", "red flag".
+_PRO_CHALK = re.compile(
+    r"\b(chalk|favou?rite|even money|1-1|3-2|shorter price|short price|"
+    r"override|red flag|resist|justification)\b", re.I)
+_PLACE_SHOW_PROMOTION = re.compile(
+    r"\b(place|show)\b[^.]{0,80}\b(pick|selection)\b[^.]{0,80}"
+    r"\b(elevate|promote|move|to win|win slot|win pick)\b", re.I)
+
+
+def violates_market_discipline(lesson: str) -> bool:
+    """True when a lesson tells the model to put a longer price in the win slot."""
+    text = str(lesson or "")
+    if not text:
+        return False
+    # Pro-discipline lessons often mention longshots as the thing to resist.
+    # Direction matters more than vocabulary.
+    if _PRO_CHALK.search(text):
+        return False
+    if _PLACE_SHOW_PROMOTION.search(text):
+        return True
+    return bool(
+        _WIN_SLOT.search(text)
+        and _PRICE_TERM.search(text)
+        and _PROMOTE_VERB.search(text)
+    )
+
+
+def filter_lessons(lessons: list) -> tuple[list, list]:
+    """Split lessons into (kept, rejected) on the market-discipline rule."""
+    kept, rejected = [], []
+    for l in lessons or []:
+        (rejected if violates_market_discipline(l) else kept).append(l)
+    return kept, rejected
 
 
 async def curate_lessons(
@@ -509,6 +567,9 @@ async def main(target_date: datetime.date, dry_run: bool):
     print("  Synthesising lessons…")
     date_str = target_date.strftime("%B %d, %Y")
     lessons = await synthesise_lessons(client, all_reflections, date_str)
+    lessons, rejected = filter_lessons(lessons)
+    for r in rejected:
+        print(f"  ⚠️  rejected (contradicts market discipline): {str(r)[:120]}")
 
     if not lessons:
         print(
@@ -538,6 +599,10 @@ async def main(target_date: datetime.date, dry_run: bool):
                 trends_block = trends.get("block", "")
 
                 curated = await curate_lessons(client, merged, trends_block, date_str)
+                # Curation is an LLM call and can reintroduce a rejected idea.
+                curated, curated_rejected = filter_lessons(curated)
+                for r in curated_rejected:
+                    print(f"  ⚠️  curator reintroduced a price-promotion lesson, dropped: {str(r)[:110]}")
                 dropped = len(merged) - len(curated)
                 print(f"  Curated playbook: {len(merged)} candidates → {len(curated)} kept ({dropped} retired).")
 
