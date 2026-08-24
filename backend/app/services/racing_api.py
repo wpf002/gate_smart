@@ -50,6 +50,43 @@ async def _rate_limit() -> None:
         _last_request_at = _time.monotonic()
 
 
+def _auth() -> tuple[str, str]:
+    return (settings.RACING_API_USERNAME, settings.RACING_API_PASSWORD)
+
+
+async def _get(
+    path: str,
+    params: dict = None,
+    cache_key: str = None,
+    ttl: int = 300,
+) -> dict:
+    if cache_key:
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+    await _rate_limit()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"{BASE_URL}{path}",
+            params=params,
+            auth=_auth(),
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Racing API error: {resp.status_code}",
+        )
+
+    data = resp.json()
+
+    if cache_key:
+        await cache_set(cache_key, data, ex=ttl)
+
+    return data
+
+
 def _best_odds(odds_list: list) -> str:
     """Extract the best available price from the bookmaker odds array.
     API keys: fractional, decimal (not odds_fraction/odds_decimal).
