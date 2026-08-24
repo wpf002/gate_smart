@@ -9,7 +9,9 @@ def patched(monkeypatch):
     async def no_hardware(runners):
         return {}
 
-    async def fake_cal():
+    # Takes the race_id the builder now passes through — that argument is what
+    # selects the lesson-memory A/B arm for the race.
+    async def fake_cal(race_id=None):
         return "YOUR RECENT PERFORMANCE: 19% over 2404 races."
 
     monkeypatch.setattr(sec, "get_hardware_and_historical_context", no_hardware)

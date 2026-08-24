@@ -288,6 +288,8 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lock_source VARCHAR(30)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS top_pick_fair_odds FLOAT"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS pick_model VARCHAR(60)"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_arm VARCHAR(20)"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_ids JSONB"))
 
     ssl_ctx = ssl.create_default_context()
     client = anthropic.AsyncAnthropic(
@@ -557,6 +559,15 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 return v[:n] if isinstance(v, str) else v
 
             race_type_clipped = _clip(race_type, 120)
+            # Same helper the pick prompt used, so the stored provenance is
+            # exactly the set the model saw.
+            try:
+                from app.services.lesson_memory import lessons_for_race
+                lesson_arm, chosen_lessons = await lessons_for_race(race_id)
+                lesson_ids = [l.id for l in chosen_lessons]
+            except Exception:
+                lesson_arm, lesson_ids = None, None
+
             row = {
                 "race_id": _clip(race_id, 100),
                 "race_date": target_date,
@@ -581,6 +592,11 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 "top_pick_fair_odds": top_pick_fair_odds,
                 # Which model produced this pick — the A/B's dependent variable.
                 "pick_model": pick_model_for_race(race_id) if lock_source == "nightly" else None,
+                # Which lessons the prompt actually carried. Recorded from the
+                # same helper the prompt uses, so provenance cannot drift from
+                # what the model was told.
+                "lesson_arm": lesson_arm,
+                "lesson_ids": lesson_ids,
             }
             from sqlalchemy import or_ as _or_
             from sqlalchemy import update as _update

@@ -116,6 +116,10 @@ async def job_nightly_recalibration() -> None:
     await _run_script("nightly_recalibration.py")
 
 
+async def job_score_lessons() -> None:
+    await _run_script("score_lessons.py")
+
+
 async def job_race_alerts() -> None:
     try:
         from app.services.race_alerts import check_and_send_race_alerts
@@ -371,6 +375,19 @@ def create_scheduler() -> AsyncIOScheduler | None:
         CronTrigger(hour=14, minute=30),
         id="nightly_reflect",
         name="Nightly reflect (14:30 UTC, after accuracy settles)",
+        misfire_grace_time=3600,
+        max_instances=1,
+        coalesce=True,
+    )
+    # Scores each lesson against contemporaneous races in its own scope and
+    # retires the ones measurably worse than no lesson. Runs after reflect has
+    # written the night's playbook, so a lesson minted today is scoreable from
+    # tomorrow rather than a day later.
+    scheduler.add_job(
+        job_score_lessons,
+        CronTrigger(hour=15, minute=30),
+        id="score_lessons",
+        name="Score + retire lessons (15:30 UTC, after reflect)",
         misfire_grace_time=3600,
         max_instances=1,
         coalesce=True,

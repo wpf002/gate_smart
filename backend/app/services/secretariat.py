@@ -844,7 +844,7 @@ async def build_analyze_request(
     if ts_context:
         ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values())
 
-    cal_context = await get_calibration_context()
+    cal_context = await get_calibration_context(race_data.get("race_id"))
 
     # Our own accumulated form lines — the NA feed ships every runner with an
     # empty `form`, so without this the model handicaps blind on recent record.
@@ -959,7 +959,7 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
 
     # Rolling calibration rides as a cached system block (changes once daily) so
     # Secretariat still learns from its own history without re-billing the tokens.
-    cal_context = await get_calibration_context()
+    cal_context = await get_calibration_context(race_data.get("race_id"))
 
     # Our own accumulated form lines — the NA feed ships every runner with an
     # empty `form`, so without this the model handicaps blind on recent record.
@@ -2650,10 +2650,13 @@ COMPLETE RESULTS ({total} races)
 
 # ── Calibration Context ───────────────────────────────────────────────────────
 
-async def get_calibration_context() -> str:
+async def get_calibration_context(race_id: str | None = None) -> str:
     """
     Returns a context string injected into every analysis prompt.
     Returns empty string if < 20 samples or calibration row missing.
+
+    `race_id` selects the lesson-memory A/B arm. Passing None keeps the old
+    recency behaviour, which is what the non-race callers (digest, tooling) want.
     """
     try:
         from app.core.database import _AsyncSessionLocal
@@ -2683,7 +2686,22 @@ async def get_calibration_context() -> str:
             for spot in cal.strong_spots[:3]:
                 lines.append(f"  - {spot}")
 
-        if cal.lessons:
+        # Lessons come from the tracked playbook, ranked by measured record.
+        # This used to be `cal.lessons[:5]` against a newest-first list, which
+        # made memory a five-slot recency window: nine of fourteen lessons were
+        # curated, stored, shown in the digest, and never read by any pick.
+        lesson_block = ""
+        try:
+            from app.services.lesson_memory import lessons_for_race, render_lessons_block
+            _arm, chosen = await lessons_for_race(race_id) if race_id else (None, [])
+            lesson_block = render_lessons_block(chosen)
+        except Exception:
+            lesson_block = ""
+        if lesson_block:
+            lines.append(lesson_block)
+        elif cal.lessons:
+            # Playbook table not populated yet (first boot after deploy) — fall
+            # back to the legacy list so picks never lose their lessons entirely.
             lines.append("LESSONS FROM RECENT RACES (apply these now):")
             for lesson in cal.lessons[:5]:
                 lines.append(f"  - {lesson}")

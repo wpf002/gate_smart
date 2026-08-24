@@ -84,6 +84,11 @@ class RacePrediction(Base):
     # Which model produced this pick. Populated for nightly picks so the
     # pick-engine A/B can be scored on identical races.
     pick_model: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    # Which lesson-memory arm this pick used, and exactly which lessons its
+    # prompt carried. The ids are the provenance that makes a lesson's record
+    # measurable: an in-scope race that did NOT carry the lesson is its control.
+    lesson_arm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    lesson_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     top_pick_win_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_place_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_show_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

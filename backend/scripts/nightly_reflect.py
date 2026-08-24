@@ -622,6 +622,18 @@ async def main(target_date: datetime.date, dry_run: bool):
             await db.commit()
         print(f"\n✅ SecretariatCalibration.lessons updated ({len(lessons)} new this run).")
 
+        # Mirror the curated list into the tracked playbook, where each lesson
+        # carries a scope and accumulates a measured record. cal.lessons stays
+        # the digest's view; secretariat_lessons is what picks actually read.
+        from app.services.lesson_store import sync_lessons
+        async with _db._AsyncSessionLocal() as db:
+            cal = await db.get(SecretariatCalibration, 1)
+            playbook = await sync_lessons(list(cal.lessons or []) if cal else lessons)
+        print(f"  Playbook: {playbook['new']} new, {playbook['kept']} kept, "
+              f"{playbook['retired']} retired"
+              + (f", {playbook['protected']} PROVEN kept against the curator"
+                 if playbook.get("protected") else ""))
+
     if dry_run:
         print("\n[DRY RUN] No rows written.")
 
