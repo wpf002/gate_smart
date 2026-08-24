@@ -73,6 +73,10 @@ async def _process_date(d, dry_run: bool) -> int:
 async def main(dates: list, dry_run: bool, redo: bool):
     from app.core import database as _db
     await _db.init_db()
+    # Bulk job: throttle upstream calls. Live request handlers must not,
+    # or a fan-out request stalls behind the pacing lock.
+    from app.services.racing_api import set_bulk_mode
+    set_bulk_mode(True)
 
     covered = set() if redo else await _covered_dates()
     todo = [d for d in dates if d not in covered]

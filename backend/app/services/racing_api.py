@@ -3,6 +3,8 @@ The Racing API client — Standard plan.
 Endpoint docs: https://api.theracingapi.com
 Rate limit: 5 req/sec. Redis caching keeps us well within this.
 """
+import contextvars
+
 import httpx
 from fastapi import HTTPException
 
@@ -14,15 +16,31 @@ BASE_URL = "https://api.theracingapi.com/v1"
 # Upstream allows 5 req/sec. A bare semaphore still lets short bursts exceed
 # that when responses are fast — which returned 429s and failed 183 dates of a
 # backfill. This paces requests to a fixed minimum interval instead.
+#
+# It applies ONLY to bulk jobs. Applied globally it also throttled live user
+# requests: a "tomorrow" racecard fans out to ~48 upstream calls (track-recovery
+# probes plus entries), which at 4/sec meant 12 seconds of pure waiting and
+# produced read timeouts in production. Live traffic never caused the 429s —
+# a multi-thousand-request backfill did.
 _MIN_REQUEST_INTERVAL = 1 / 4.0
 _rate_lock = None
 _last_request_at = 0.0
+
+_bulk_mode: "contextvars.ContextVar[bool]" = contextvars.ContextVar("racing_api_bulk", default=False)
+
+
+def set_bulk_mode(enabled: bool = True) -> None:
+    """Throttle upstream calls. Backfills and other bulk jobs should enable this;
+    request handlers must not, or user-facing latency collapses."""
+    _bulk_mode.set(enabled)
 
 
 async def _rate_limit() -> None:
     import asyncio
     import time as _time
     global _rate_lock, _last_request_at
+    if not _bulk_mode.get():
+        return
     if _rate_lock is None:
         _rate_lock = asyncio.Lock()
     async with _rate_lock:
@@ -30,43 +48,6 @@ async def _rate_limit() -> None:
         if wait > 0:
             await asyncio.sleep(wait)
         _last_request_at = _time.monotonic()
-
-
-def _auth() -> tuple[str, str]:
-    return (settings.RACING_API_USERNAME, settings.RACING_API_PASSWORD)
-
-
-async def _get(
-    path: str,
-    params: dict = None,
-    cache_key: str = None,
-    ttl: int = 300,
-) -> dict:
-    if cache_key:
-        cached = await cache_get(cache_key)
-        if cached is not None:
-            return cached
-
-    await _rate_limit()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            f"{BASE_URL}{path}",
-            params=params,
-            auth=_auth(),
-        )
-
-    if resp.status_code != 200:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Racing API error: {resp.status_code}",
-        )
-
-    data = resp.json()
-
-    if cache_key:
-        await cache_set(cache_key, data, ex=ttl)
-
-    return data
 
 
 def _best_odds(odds_list: list) -> str:
@@ -332,16 +313,28 @@ async def _recover_missing_na_meets(union: dict, race_date: str) -> None:
     if not missing:
         return
 
-    for prefix in missing:
+    import asyncio as _asyncio
+    _probe_sem = _asyncio.Semaphore(6)
+
+    async def _probe(prefix: str):
         candidate = f"{prefix}_{utc_midnight_ms}"
         neg_key = f"na:probe:neg:{candidate}"
         if await cache_get(neg_key):
-            continue  # recently confirmed dark — don't hammer upstream
-        try:
-            entries = await get_na_meet_entries(candidate)
-        except Exception:
-            await cache_set(neg_key, 1, ex=1800)
-            continue
+            return prefix, None  # recently confirmed dark — don't hammer upstream
+        async with _probe_sem:
+            try:
+                return prefix, await get_na_meet_entries(candidate)
+            except Exception:
+                await cache_set(neg_key, 1, ex=1800)
+                return prefix, None
+
+    # Probed concurrently — sequentially this was ~39 round-trips on a cold
+    # "tomorrow" card and dominated the response.
+    probed = await _asyncio.gather(*(_probe(p) for p in missing))
+
+    for prefix, entries in probed:
+        candidate = f"{prefix}_{utc_midnight_ms}"
+        neg_key = f"na:probe:neg:{candidate}"
         races = entries.get("races") if isinstance(entries, dict) else None
         if races:
             # Real card recovered — add it so the entries loop downstream

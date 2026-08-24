@@ -117,6 +117,11 @@ async def backfill_date(target: datetime.date, dry_run: bool, force: bool) -> tu
 async def main(dates: list[datetime.date], dry_run: bool, force: bool):
     from app.core import database as _db
     await _db.init_db()
+    # Bulk job: throttle upstream calls. Live request handlers must not,
+    # or a fan-out request stalls behind the pacing lock.
+    from app.services.racing_api import set_bulk_mode
+    set_bulk_mode(True)
+
 
     # Columns may not exist yet if nightly_accuracy hasn't run since deploy.
     from sqlalchemy import text as _text
