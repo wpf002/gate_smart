@@ -2456,6 +2456,7 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
 
     # Cross-day trends — grounds "How I'm Evolving" in actual category movement
     trends = await _compute_category_trends(report.report_date, lookback_days=7)
+    playbook_status = await _playbook_status()
     trends_block = trends.get("block", "")
 
     # Load stored lessons so the email reflects what's actually being applied
@@ -2599,6 +2600,7 @@ WHAT WENT WRONG
 
 HOW I'M EVOLVING
 {evolving}
+{_render_playbook_text(playbook_status)}
 {trends_text_section}
 COMPLETE RESULTS ({total} races)
 {'─'*60}
@@ -2636,6 +2638,7 @@ COMPLETE RESULTS ({total} races)
 
   <h2 style="color:#c8a84b">🔄 How I'm Evolving</h2>
   {_bullets_to_html(evolving)}
+{_render_playbook_html(playbook_status)}
 {_render_trends_html(trends)}
   <h2>📋 Complete Results — All {total} Races</h2>
   {html_table}
@@ -2646,6 +2649,105 @@ COMPLETE RESULTS ({total} races)
 </div>"""
 
     return {"subject": subject, "html": html_body, "text": text_body}
+
+
+async def _playbook_status() -> dict:
+    """Deterministic state of the learning loop, for the digest.
+
+    Written from the database, never by the narrative model. The loop ran inert
+    for nineteen weeks and nothing in the daily email would have shown it — the
+    prose section happily discussed lessons that no pick had ever read. These are
+    counts and a running A/B, so they cannot be phrased around.
+    """
+    out = {"active": 0, "proven": 0, "failing": 0, "retired": 0, "pending": 0,
+           "injected": 0, "ab": None}
+    try:
+        from sqlalchemy import select, text as T
+
+        from app.core.database import _AsyncSessionLocal
+        from app.models.lesson import SecretariatLesson
+        from app.services.lesson_memory import LESSON_INJECT_LIMIT
+
+        if not _AsyncSessionLocal:
+            return out
+        async with _AsyncSessionLocal() as db:
+            lessons = list((await db.execute(select(SecretariatLesson))).scalars().all())
+            rows = (await db.execute(T("""
+                SELECT lesson_arm, COUNT(*) n,
+                       SUM(CASE WHEN top_pick_correct THEN 1 ELSE 0 END) w
+                FROM race_predictions
+                WHERE result_fetched AND analysis_mode = 'auto_daily' AND user_id IS NULL
+                  AND lesson_arm IS NOT NULL
+                  AND race_date >= CURRENT_DATE - INTERVAL '30 days'
+                GROUP BY lesson_arm
+            """))).all()
+
+        active = [l for l in lessons if l.status == "active"]
+        out["active"] = len(active)
+        out["retired"] = len(lessons) - len(active)
+        out["proven"] = sum(1 for l in active if l.verdict == "PROVEN")
+        out["pending"] = sum(1 for l in active if l.verdict == "PENDING")
+        out["failing"] = sum(1 for l in lessons if l.verdict == "FAILING")
+        out["injected"] = min(len(active), LESSON_INJECT_LIMIT)
+
+        arms = {a: (w or 0, n) for a, n, w in rows}
+        if "measured" in arms and "recency" in arms:
+            (mw, mn), (rw, rn) = arms["measured"], arms["recency"]
+            if mn and rn:
+                out["ab"] = {"measured_n": mn, "measured_rate": mw / mn,
+                             "recency_n": rn, "recency_rate": rw / rn,
+                             "diff": 100.0 * (mw / mn - rw / rn)}
+    except Exception:
+        pass
+    return out
+
+
+def _render_playbook_html(status: dict) -> str:
+    if not status or not status.get("active"):
+        return ""
+    ab = status.get("ab")
+    if ab:
+        readable = min(ab["measured_n"], ab["recency_n"]) >= 400
+        ab_line = (
+            f"Evidence-ranked playbook {ab['measured_rate']:.1%} "
+            f"({ab['measured_n']} races) vs old recency window "
+            f"{ab['recency_rate']:.1%} ({ab['recency_n']}): "
+            f"<b>{ab['diff']:+.1f} pts</b>"
+            + ("" if readable else " — too early to call")
+        )
+    else:
+        ab_line = "A/B collecting — both arms need settled races before this reads."
+    return f"""
+  <h2 style="color:#4a6a8a">📚 Playbook</h2>
+  <p style="font-size:13px;color:#444;margin:4px 0">
+    {status['active']} active lessons, {status['injected']} injected into every pick ·
+    {status['proven']} proven · {status['pending']} awaiting evidence ·
+    {status['retired']} retired
+  </p>
+  <p style="font-size:13px;color:#444;margin:4px 0">{ab_line}</p>"""
+
+
+def _render_playbook_text(status: dict) -> str:
+    if not status or not status.get("active"):
+        return ""
+    ab = status.get("ab")
+    lines = [
+        "",
+        "PLAYBOOK",
+        f"  {status['active']} active lessons, {status['injected']} injected into every pick",
+        f"  {status['proven']} proven | {status['pending']} awaiting evidence | "
+        f"{status['retired']} retired",
+    ]
+    if ab:
+        readable = min(ab["measured_n"], ab["recency_n"]) >= 400
+        lines.append(
+            f"  A/B: evidence-ranked {ab['measured_rate']:.1%} ({ab['measured_n']}) vs "
+            f"recency {ab['recency_rate']:.1%} ({ab['recency_n']}) = {ab['diff']:+.1f} pts"
+            + ("" if readable else " (too early to call)")
+        )
+    else:
+        lines.append("  A/B: collecting — both arms need settled races before this reads.")
+    return "\n".join(lines) + "\n"
 
 
 # ── Calibration Context ───────────────────────────────────────────────────────
