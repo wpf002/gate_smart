@@ -89,6 +89,8 @@ class RacePrediction(Base):
     # measurable: an in-scope race that did NOT carry the lesson is its control.
     lesson_arm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     lesson_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    # Named angle for diverging from the morning-line favorite; see fade_reason.py
+    fade_reason: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     top_pick_win_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_place_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_show_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

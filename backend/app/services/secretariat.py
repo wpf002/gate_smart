@@ -934,6 +934,7 @@ Return this JSON exactly:
     "trifecta":  "Say to teller: '$X Trifecta, N-M-K, race R'",
     "superfecta":"Say to teller: '$X Superfecta, N-M-K-J, race R'"
   }},
+  "fade_reason": "see FADE REASON above — the category, or sided_with_favorite",
   "overall_summary": "2-3 sentences — style follows USER EXPERIENCE LEVEL above. Complete sentences, do not cut off mid-thought.",
   "beginner_tip": "one concrete action a first-time bettor can take today — any stake mentioned must follow STAKE SIZING RULES",
   "confidence": "low/medium/high"
@@ -1054,6 +1055,7 @@ Return this JSON exactly:
     "trifecta":  "Say to teller: '$X Trifecta, N-M-K, race R'",
     "superfecta":"Say to teller: '$X Superfecta, N-M-K-J, race R'"
   }},
+  "fade_reason": "see FADE REASON above — the category, or sided_with_favorite",
   "overall_summary": "2-3 sentences — style follows USER EXPERIENCE LEVEL above. Complete sentences, do not cut off mid-thought.",
   "beginner_tip": "one concrete action a first-time bettor can take today — any stake mentioned must follow STAKE SIZING RULES",
   "confidence": "low/medium/high"
@@ -2865,6 +2867,11 @@ async def get_calibration_context(race_id: str | None = None) -> str:
                 "recommendations, never in who crosses the wire first."
             )
         lines.append(market_line)
+
+        # Makes every divergence from the market name itself, so fades become
+        # scoreable instead of one undifferentiated 17% bucket.
+        from app.services.fade_reason import prompt_block
+        lines.append(prompt_block())
 
         lines.append(
             "Use this to calibrate confidence. "

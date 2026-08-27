@@ -290,6 +290,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS pick_model VARCHAR(60)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_arm VARCHAR(20)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_ids JSONB"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS fade_reason VARCHAR(30)"))
 
     ssl_ctx = ssl.create_default_context()
     client = anthropic.AsyncAnthropic(
@@ -399,6 +400,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
     # so repeat clicks return the locked nightly analysis verbatim — no live
     # LLM call unless inputs (scratch / jockey / ML) actually change.
     from app.core.cache import cache_set as _cache_set
+    from app.services.fade_reason import normalize_fade_reason
     from app.services.secretariat import analyze_race, compute_input_fingerprint, pick_model_for_race
 
     # Mode used for the cached analysis. Frontend's default risk tolerance
@@ -460,6 +462,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
             third = _name(pf_full.get("third"))
             fourth = _name(pf_full.get("fourth"))
             first_num = _num(pf_full.get("first"))
+            raw_fade_reason = analysis.get("fade_reason")
             lock_source = "nightly"
         else:
             bucket_hint = _format_bucket_hint(track_code, race_type, surface, calibration)
@@ -473,6 +476,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
             third = pf.get("third")
             fourth = pf.get("fourth")
             first_num = None
+            raw_fade_reason = None  # the cheap fallback path does not produce one
             lock_source = "nightly_fallback"
 
         # Guarantee distinct horses across the 4 finish slots. The model
@@ -597,6 +601,10 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 # what the model was told.
                 "lesson_arm": lesson_arm,
                 "lesson_ids": lesson_ids,
+                # Which market-divergence angle was claimed. Scored later to find
+                # which fades are worth making at all.
+                "fade_reason": _clip(normalize_fade_reason(
+                    raw_fade_reason, market["top_pick_is_favorite"]), 30),
             }
             from sqlalchemy import or_ as _or_
             from sqlalchemy import update as _update
