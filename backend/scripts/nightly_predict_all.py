@@ -184,6 +184,8 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
 
     # Build one request per race. custom_id must be ^[a-zA-Z0-9_-]{1,64}$.
     requests, id_map = [], {}
+    # race_id -> race number, for the derived teller scripts on the way back out
+    race_numbers: dict = {}
     for race, _region in all_races:
         race_id = race.get("race_id") or race.get("id", "")
         if not race_id or not race.get("runners"):
@@ -192,6 +194,7 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
         if custom_id in id_map:
             continue
         id_map[custom_id] = race_id
+        race_numbers[race_id] = race.get("race_number")
         try:
             params = await build_analyze_request(
                 {**race, "race_id": race_id}, mode=mode,
@@ -249,7 +252,7 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
                 batch=True,
             )
             try:
-                analysis = finish_analysis(message.content[0].text)
+                analysis = finish_analysis(message.content[0].text, race_numbers.get(race_id))
             except Exception:
                 continue  # unparseable → sync fallback for this race
             if analysis and analysis.get("predicted_finish"):

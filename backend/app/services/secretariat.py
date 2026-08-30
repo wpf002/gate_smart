@@ -548,8 +548,18 @@ def _trunc(s: str, limit: int) -> str:
     return cut.rstrip('.,;') + '.'
 
 
-def _truncate_analysis(data: dict) -> dict:
-    """Hard-cap field lengths after Claude generation — prompt instructions can't guarantee this."""
+def _truncate_analysis(data: dict, race_number=None) -> dict:
+    """Hard-cap field lengths after Claude generation — prompt instructions can't guarantee this.
+
+    Also fills in the teller scripts and exacta box option. Those used to be in
+    the JSON schema, so Claude wrote six extra strings per race; output tokens
+    are ~70% of the cost of an analysis and none of that text is a judgement,
+    just the selections restated. Deriving them costs nothing and cannot drift
+    from the picks they describe.
+    """
+    from app.services.bet_scripts import attach_bet_scripts
+    attach_bet_scripts(data, race_number)
+
     SUMMARY = 600  # 2-3 sentence race/overall summaries
     SENT = 300     # single-sentence fields
     PHRASE = 60    # short phrases
@@ -810,7 +820,7 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
             raise SecretariatBusyError("Secretariat is busy right now. Try again in 30 seconds.")
         raise
 
-    result = finish_analysis(response.content[0].text)
+    result = finish_analysis(response.content[0].text, race_data.get("race_number"))
 
     try:
         await extract_and_store_fair_prices(race_data.get("race_id", ""), result)
@@ -819,9 +829,13 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
     return result
 
 
-def finish_analysis(raw_text: str) -> dict:
-    """Parse + sanitize a raw analysis response. Shared by sync and batch paths."""
-    return _dedupe_predicted_finish(_truncate_analysis(_parse_json(raw_text)))
+def finish_analysis(raw_text: str, race_number=None) -> dict:
+    """Parse + sanitize a raw analysis response. Shared by sync and batch paths.
+
+    `race_number` only feeds the derived teller scripts; omitting it drops the
+    ", race N" suffix rather than failing.
+    """
+    return _dedupe_predicted_finish(_truncate_analysis(_parse_json(raw_text), race_number))
 
 
 async def build_analyze_request(
@@ -924,15 +938,9 @@ Return this JSON exactly:
     "win":       {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
     "place":     {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
     "show":      {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
-    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above", "box_option": "Box #N-#M for $X more" }},
-    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above", "wheel_option": "optional wheel description" }},
+    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
+    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
     "superfecta":{{ "selection": "#N/#M/#K/#J", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }}
-  }},
-  "teller_script": {{
-    "win":       "Say to teller: '$X to Win on number N, race R'",
-    "exacta":    "Say to teller: '$X Exacta, N over M, race R'",
-    "trifecta":  "Say to teller: '$X Trifecta, N-M-K, race R'",
-    "superfecta":"Say to teller: '$X Superfecta, N-M-K-J, race R'"
   }},
   "fade_reason": "see FADE REASON above — the category, or sided_with_favorite",
   "overall_summary": "2-3 sentences — style follows USER EXPERIENCE LEVEL above. Complete sentences, do not cut off mid-thought.",
@@ -1045,15 +1053,9 @@ Return this JSON exactly:
     "win":       {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
     "place":     {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
     "show":      {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
-    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above", "box_option": "Box #N-#M for $X more" }},
-    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above", "wheel_option": "optional wheel description" }},
+    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
+    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
     "superfecta":{{ "selection": "#N/#M/#K/#J", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }}
-  }},
-  "teller_script": {{
-    "win":       "Say to teller: '$X to Win on number N, race R'",
-    "exacta":    "Say to teller: '$X Exacta, N over M, race R'",
-    "trifecta":  "Say to teller: '$X Trifecta, N-M-K, race R'",
-    "superfecta":"Say to teller: '$X Superfecta, N-M-K-J, race R'"
   }},
   "fade_reason": "see FADE REASON above — the category, or sided_with_favorite",
   "overall_summary": "2-3 sentences — style follows USER EXPERIENCE LEVEL above. Complete sentences, do not cut off mid-thought.",
