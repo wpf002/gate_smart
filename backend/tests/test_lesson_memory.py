@@ -231,3 +231,43 @@ def test_condition_clause_keeps_an_embedded_first_person_phrase():
     scope = parse_scope(lesson)
     assert set(scope["race_types"]) == {"CLAIMING", "MAIDEN CLAIMING"}
     assert scope["price_band"] == [2.10, 3.40]
+
+
+# ── Pick-depth experiment ───────────────────────────────────────────────────
+# A full analysis costs ~$0.037/race and writes ~3,470 output tokens; the cheap
+# predict path costs ~$0.001 and writes ~40. If the cheap path locks an equally
+# good pick, the write-up only needs generating when someone opens the race.
+# Whether it does is unmeasured, so the split has to be small and clean.
+
+def test_lean_share_matches_the_configured_percent():
+    from app.services.secretariat import PICK_DEPTH_LEAN_PERCENT, pick_depth_for_race
+
+    ids = [f"TRK_{i}-{i % 11}" for i in range(4000)]
+    lean = sum(pick_depth_for_race(r) == "lean" for r in ids) / len(ids)
+    assert abs(lean * 100 - PICK_DEPTH_LEAN_PERCENT) < 4
+
+
+def test_depth_is_stable_and_independent_of_the_other_experiments():
+    from app.services.lesson_memory import ARM_MEASURED, lesson_arm_for_race
+    from app.services.secretariat import pick_depth_for_race, pick_model_for_race
+
+    assert len({pick_depth_for_race("SAR_9-2") for _ in range(20)}) == 1
+
+    ids = [f"T_{i}-{i % 7}" for i in range(3000)]
+    # Independent of the lesson arm: a lean race must be no likelier to be in
+    # one lesson arm than the other, or the experiments confound each other.
+    lean = [r for r in ids if pick_depth_for_race(r) == "lean"]
+    measured = sum(lesson_arm_for_race(r) == ARM_MEASURED for r in lean) / len(lean)
+    assert 0.4 < measured < 0.6
+    # Independent of the model arm too. Asserted against the configured percent
+    # rather than a fixed number, since that percent is set per deployment.
+    from app.services.secretariat import PICK_MODEL_AB_PERCENT
+    challenger = sum(pick_model_for_race(r) != "claude-haiku-4-5-20251001" for r in lean) / len(lean)
+    assert abs(challenger * 100 - PICK_MODEL_AB_PERCENT) < 6
+
+
+def test_no_race_id_never_lands_in_the_lean_arm():
+    from app.services.secretariat import pick_depth_for_race
+
+    assert pick_depth_for_race("") == "full"
+    assert pick_depth_for_race(None) == "full"

@@ -113,6 +113,32 @@ def pick_model_for_race(race_id: str) -> str:
     return PICK_MODEL_CHALLENGER if bucket < PICK_MODEL_AB_PERCENT else PICK_MODEL_DEFAULT
 
 
+# ── Pick-depth experiment ────────────────────────────────────────────────────
+# A full analysis costs ~$0.037 a race and writes ~3,470 output tokens; the
+# lightweight predict path costs ~$0.001 and writes ~40. Output is ~70% of the
+# bill, so if the cheap path locks an equally good PICK, the expensive write-up
+# only needs generating when someone actually opens the race — /analyze already
+# does that on a cache miss, so nothing is lost either way.
+#
+# Whether the cheap pick is as accurate is unmeasured (31 settled races), which
+# is exactly the accuracy trade not worth making blind. So: measure it. Start
+# small, because every lean race is one that skipped the better path.
+PICK_DEPTH_LEAN_PERCENT = int(os.getenv("PICK_DEPTH_LEAN_PERCENT", "20"))
+
+
+def pick_depth_for_race(race_id: str) -> str:
+    """"lean" (cheap predict) or "full" (complete analysis). Deterministic.
+
+    Its own md5 salt, so this stays independent of the model and lesson
+    experiments rather than confounding them.
+    """
+    if PICK_DEPTH_LEAN_PERCENT <= 0 or not race_id:
+        return "full"
+    import hashlib
+    bucket = int(hashlib.md5(f"depth:{race_id}".encode()).hexdigest()[:8], 16) % 100
+    return "lean" if bucket < PICK_DEPTH_LEAN_PERCENT else "full"
+
+
 class SecretariatBusyError(Exception):
     """Raised when Claude returns HTTP 529 (overloaded)."""
 

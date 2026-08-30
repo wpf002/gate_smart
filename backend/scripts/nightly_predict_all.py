@@ -179,6 +179,7 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
         build_analyze_request,
         extract_and_store_fair_prices,
         finish_analysis,
+        pick_depth_for_race,
         pick_model_for_race,
     )
 
@@ -189,6 +190,10 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
     for race, _region in all_races:
         race_id = race.get("race_id") or race.get("id", "")
         if not race_id or not race.get("runners"):
+            continue
+        # Lean-arm races never enter the batch — the whole point is not paying
+        # for the write-up.
+        if pick_depth_for_race(race_id) == "lean":
             continue
         custom_id = _re.sub(r"[^a-zA-Z0-9_-]", "_", race_id)[:64]
         if custom_id in id_map:
@@ -404,7 +409,9 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
     # LLM call unless inputs (scratch / jockey / ML) actually change.
     from app.core.cache import cache_set as _cache_set
     from app.services.fade_reason import normalize_fade_reason
-    from app.services.secretariat import analyze_race, compute_input_fingerprint, pick_model_for_race
+    from app.services.secretariat import (
+        analyze_race, compute_input_fingerprint, pick_depth_for_race, pick_model_for_race,
+    )
 
     # Mode used for the cached analysis. Frontend's default risk tolerance
     # is "medium" (see RaceDetailPage MODES const), so caching under "medium"
@@ -448,7 +455,12 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         # if analyze_race fails (e.g., oversized field), so we never lose a pick.
         analysis = batch_analyses.get(race_id)
         made_sync_call = False
-        if analysis is None:
+        # Lean arm: lock the pick from the cheap predict path and skip the
+        # write-up entirely. /analyze still generates it on first view, so a
+        # visitor sees the same page — it is just paid for on demand instead of
+        # for every race on the card.
+        is_lean = pick_depth_for_race(race_id) == "lean"
+        if analysis is None and not is_lean:
             made_sync_call = True
             try:
                 analysis = await analyze_race(
@@ -479,8 +491,10 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
             third = pf.get("third")
             fourth = pf.get("fourth")
             first_num = None
-            raw_fade_reason = None  # the cheap fallback path does not produce one
-            lock_source = "nightly_fallback"
+            raw_fade_reason = None  # the cheap path does not produce one
+            # Distinguish a deliberate lean pick from a full analysis that
+            # errored — otherwise the experiment is polluted by failures.
+            lock_source = "nightly_lean" if is_lean else "nightly_fallback"
 
         # Guarantee distinct horses across the 4 finish slots. The model
         # occasionally repeats a horse (e.g. first == second), which would render
