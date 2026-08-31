@@ -77,3 +77,35 @@ def test_whole_dollar_stakes_are_not_mangled():
     assert _stake_dollars({"stake_suggestion": "$100 across"}) == "100"
     assert _stake_dollars({"stake_suggestion": "$12.50 exacta"}) == "12.5"
     assert _stake_dollars({"stake_suggestion": "no dollar amount"}) == "2"
+
+
+# ── Cache-key alignment ─────────────────────────────────────────────────────
+
+def test_nightly_locks_at_the_experience_level_the_app_requests():
+    """The analysis cache key carries mode AND experience level. The nightly job
+    warmed "default" while the frontend sends "beginner" for every new user, so
+    the warmed analysis was never served — each race view regenerated from
+    scratch, ~30s and a second full charge for work already paid for overnight.
+
+    Asserted here because the two values live in different files and nothing
+    else would notice them drifting apart again.
+    """
+    import re
+    from pathlib import Path
+
+    nightly = (Path(__file__).resolve().parent.parent
+               / "scripts" / "nightly_predict_all.py").read_text()
+
+    assert 'BATCH_EXPERIENCE = "beginner"' in nightly
+    assert "LOCK_EXPERIENCE = BATCH_EXPERIENCE" in nightly
+
+    # The cache key must be built from the constants, never a literal again.
+    key_line = re.search(r'cache_key = f"ai_analysis:\{race_id\}:([^"]+)"', nightly)
+    assert key_line, "analysis cache key moved or changed shape"
+    assert "{LOCK_MODE}" in key_line.group(1)
+    assert "{LOCK_EXPERIENCE}" in key_line.group(1)
+    assert "default" not in key_line.group(1)
+
+    # Both generation paths must pass it, or they warm a key nobody reads.
+    assert nightly.count("experience_level=BATCH_EXPERIENCE") == 1
+    assert nightly.count("experience_level=LOCK_EXPERIENCE") == 1

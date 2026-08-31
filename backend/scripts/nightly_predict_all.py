@@ -164,6 +164,11 @@ _BATCH_POLL_SECONDS = 30
 _BATCH_TIMEOUT_SECONDS = 45 * 60  # past this, unfinished races fall back to sync
 
 
+# Must match main()'s LOCK_EXPERIENCE — the cache key carries experience level,
+# so a batch generated at a different level warms a key nobody reads.
+BATCH_EXPERIENCE = "beginner"
+
+
 async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
     """Analyze every race in one Message Batch (50% off all tokens).
 
@@ -203,6 +208,7 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
         try:
             params = await build_analyze_request(
                 {**race, "race_id": race_id}, mode=mode,
+                experience_level=BATCH_EXPERIENCE,
                 model=pick_model_for_race(race_id),
             )
         except Exception as e:
@@ -418,6 +424,13 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
     # gives a first-click cache hit for users who haven't changed their
     # default risk setting. Other modes fall through to live re-analysis.
     LOCK_MODE = "medium"
+    # ...and the cache key also carries experience level, which this job was
+    # leaving at "default" while the app sends "beginner" for every new user
+    # (store default). One mismatched key segment meant the warmed analysis was
+    # never served: every race a user opened regenerated from scratch — ~30s of
+    # waiting and a second full charge for work already paid for overnight.
+    # Generating at the level users actually get keeps the styling correct too.
+    LOCK_EXPERIENCE = BATCH_EXPERIENCE
 
     # Phase 1: analyze the whole card via the Batches API (50% off all tokens).
     # Any race the batch misses falls back to the original sync call below, so
@@ -465,6 +478,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
             try:
                 analysis = await analyze_race(
                     {**race, "race_id": race_id}, mode=LOCK_MODE,
+                    experience_level=LOCK_EXPERIENCE,
                     model=pick_model_for_race(race_id),
                 )
             except Exception as e:
@@ -567,7 +581,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 analysis["locked_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 analysis["input_fingerprint"] = fp
                 analysis["lock_source"] = "nightly"
-                cache_key = f"ai_analysis:{race_id}:{LOCK_MODE}:default:{fp}"
+                cache_key = f"ai_analysis:{race_id}:{LOCK_MODE}:{LOCK_EXPERIENCE}:{fp}"
                 try:
                     await _cache_set(cache_key, analysis, ex=86400)  # 24h
                 except Exception as e:
