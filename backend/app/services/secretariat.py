@@ -2732,18 +2732,40 @@ async def _playbook_status() -> dict:
     return out
 
 
+def _ab_verdict(ab: dict) -> str:
+    """How much weight the arm difference can carry.
+
+    A gap is readable when it clears significance, not when the arms pass some
+    race count. The first version gated on 400 races per arm and so printed a
+    bare "+2.9 pts" while p was 0.31 — a difference that size needs thousands of
+    races, and reporting it unqualified invites acting on noise.
+    """
+    from scripts.score_lessons import two_proportion_p
+
+    m_w = round(ab["measured_rate"] * ab["measured_n"])
+    r_w = round(ab["recency_rate"] * ab["recency_n"])
+    p = two_proportion_p(m_w, ab["measured_n"], r_w, ab["recency_n"])
+    if p is None:
+        return " — not readable yet"
+    if p < 0.05:
+        return f" (p={p:.3f}, significant)"
+    return f" (p={p:.2f} — not significant yet, treat as no difference)"
+
+
 def _render_playbook_html(status: dict) -> str:
     if not status or not status.get("active"):
         return ""
     ab = status.get("ab")
     if ab:
-        readable = min(ab["measured_n"], ab["recency_n"]) >= 400
+        # Significance, not sample size. Gating the caveat on "400 races per arm"
+        # dropped it while p was still 0.31 — presenting a coin-flip difference
+        # as if it had been established.
         ab_line = (
             f"Evidence-ranked playbook {ab['measured_rate']:.1%} "
             f"({ab['measured_n']} races) vs old recency window "
             f"{ab['recency_rate']:.1%} ({ab['recency_n']}): "
             f"<b>{ab['diff']:+.1f} pts</b>"
-            + ("" if readable else " — too early to call")
+            + _ab_verdict(ab)
         )
     else:
         ab_line = "A/B collecting — both arms need settled races before this reads."
@@ -2769,11 +2791,10 @@ def _render_playbook_text(status: dict) -> str:
         f"{status['retired']} retired",
     ]
     if ab:
-        readable = min(ab["measured_n"], ab["recency_n"]) >= 400
         lines.append(
             f"  A/B: evidence-ranked {ab['measured_rate']:.1%} ({ab['measured_n']}) vs "
             f"recency {ab['recency_rate']:.1%} ({ab['recency_n']}) = {ab['diff']:+.1f} pts"
-            + ("" if readable else " (too early to call)")
+            + _ab_verdict(ab)
         )
     else:
         lines.append("  A/B: collecting — both arms need settled races before this reads.")

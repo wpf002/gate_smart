@@ -66,3 +66,25 @@ def test_report_handles_a_lesson_with_no_control_group():
     assert wilson(0, 0) == (0.0, 0.0)
     lo, hi = wilson(5, 20)
     assert 0.0 <= lo < 0.25 < hi <= 1.0
+
+
+def test_ab_verdict_gates_on_significance_not_sample_size():
+    """The digest printed a bare "+2.9 pts" for the playbook A/B because the
+    caveat was gated on 400 races per arm. At that point p was 0.31 — a
+    coin-flip difference presented as an established result, in the one place
+    the numbers get read every morning."""
+    from app.services.secretariat import _ab_verdict
+
+    # The exact shape that shipped wrong: big samples, tiny gap.
+    noisy = _ab_verdict({"measured_rate": 0.269, "measured_n": 475,
+                         "recency_rate": 0.240, "recency_n": 458})
+    assert "not significant" in noisy and "no difference" in noisy
+
+    # A real, large gap must read as significant rather than being hedged away.
+    real = _ab_verdict({"measured_rate": 0.30, "measured_n": 4000,
+                        "recency_rate": 0.22, "recency_n": 4000})
+    assert "significant" in real and "not significant" not in real
+
+    # Degenerate input must not crash the digest.
+    assert _ab_verdict({"measured_rate": 0, "measured_n": 0,
+                        "recency_rate": 0, "recency_n": 0})
