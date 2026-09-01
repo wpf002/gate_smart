@@ -31,6 +31,34 @@ def lesson_type_of(text: str) -> str:
     return "change"
 
 
+# A lesson needs this many in-scope races it was actually carried into before
+# its record means anything. Mirrors score_lessons.MIN_TREATED.
+MIN_TREATED_FOR_VERDICT = 80
+
+
+def _protect_reason(row) -> str | None:
+    """Why this lesson survives the curator dropping it, or None to retire it.
+
+    The curator is an LLM judging lessons on how they read, and it minted ~8 new
+    ones a night while dropping older ones — so 33 lessons were retired, every
+    one of them "curated out", none on evidence, and nothing ever reached a
+    verdict. Lessons were dying faster than they could be measured, which makes
+    the whole measurement apparatus decorative.
+
+    So narrative can no longer retire a lesson that is still earning its verdict.
+    A lesson that was never injected gets no such protection — it has no claim to
+    a fair hearing it never took, and without that exception the active list
+    would grow without bound.
+    """
+    if getattr(row, "verdict", None) == "PROVEN":
+        return "PROVEN"
+    if getattr(row, "verdict", None) == "FAILING":
+        return None  # measured harmful; let it go
+    if getattr(row, "was_injected", False) and (row.scope_races or 0) < MIN_TREATED_FOR_VERDICT:
+        return f"still gathering evidence ({row.scope_races or 0}/{MIN_TREATED_FOR_VERDICT} races)"
+    return None
+
+
 async def sync_lessons(texts: list[str]) -> dict:
     """Reconcile the playbook table with the curator's list.
 
@@ -89,10 +117,11 @@ async def sync_lessons(texts: list[str]) -> dict:
             for h, row in existing.items():
                 if h in wanted or row.status != "active":
                     continue
-                if row.verdict == "PROVEN":
-                    # Measured to work. The curator does not get to drop it.
+                keep_reason = _protect_reason(row)
+                if keep_reason:
                     summary["protected"] += 1
-                    log.info(f"[lesson_store] kept PROVEN lesson the curator dropped: {row.text[:70]}")
+                    log.info(f"[lesson_store] kept lesson the curator dropped "
+                             f"({keep_reason}): {row.text[:70]}")
                     continue
                 row.status = "retired"
                 row.retired_at = now
