@@ -2507,7 +2507,7 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
         pass
 
     analysis_prompt = f"""Date: {today_str}
-Races: {total} | Win pick {len(hits)} ({win_pct}) | ITM {report.in_the_money} ({itm_pct}) | Place {len(place_hits)} ({place_pct}) | Show {len(show_hits)} ({show_pct})
+Races: {total} | Win pick {len(hits)} ({win_pct}) | ITM {len(itm_list)} ({itm_pct}) | Place {len(place_hits)} ({place_pct}) | Show {len(show_hits)} ({show_pct})
 
 By track: {_fmt_bucket(by_track)}
 By race type: {_fmt_bucket(by_type)}
@@ -2617,7 +2617,7 @@ or hot day is noise, not a trend). If nothing genuinely shifted, write one bulle
 SCORECARD
   Races analyzed : {total}
   Win pick (1st) : {len(hits)} ({win_pct})
-  Win pick ITM   : {report.in_the_money} ({itm_pct})
+  Win pick ITM   : {len(itm_list)} ({itm_pct})
   Place pick     : {len(place_hits)} ({place_pct})
   Show pick      : {len(show_hits)} ({show_pct})
 
@@ -2696,7 +2696,7 @@ async def _playbook_status() -> dict:
 
         from app.core.database import _AsyncSessionLocal
         from app.models.lesson import SecretariatLesson
-        from app.services.lesson_memory import LESSON_INJECT_LIMIT
+        from app.services.lesson_memory import LESSON_CONTROL_LIMIT, LESSON_INJECT_LIMIT
 
         if not _AsyncSessionLocal:
             return out
@@ -2718,7 +2718,11 @@ async def _playbook_status() -> dict:
         out["proven"] = sum(1 for l in active if l.verdict == "PROVEN")
         out["pending"] = sum(1 for l in active if l.verdict == "PENDING")
         out["failing"] = sum(1 for l in lessons if l.verdict == "FAILING")
+        # Per arm, because half the races get the old five-slot behaviour. A
+        # single number from LESSON_INJECT_LIMIT read as "every pick carries N",
+        # which was untrue for the recency arm and independent of the data.
         out["injected"] = min(len(active), LESSON_INJECT_LIMIT)
+        out["injected_recency"] = min(len(active), LESSON_CONTROL_LIMIT)
 
         arms = {a: (w or 0, n) for a, n, w in rows}
         if "measured" in arms and "recency" in arms:
@@ -2785,24 +2789,41 @@ def _playbook_sentences(status: dict) -> list[str]:
     nothing about whether that is good or expected. These say what the numbers
     mean for the picks being made today.
     """
-    lines = [
-        f"Secretariat is carrying {status['injected']} lessons into every pick, "
-        f"chosen from {status['active']} it currently believes."
-    ]
+    recency = status.get("injected_recency")
+    if recency and recency != status["injected"]:
+        opening = (
+            f"Secretariat is carrying {status['injected']} lessons into about half "
+            f"its picks and {recency} into the rest, chosen from "
+            f"{status['active']} it currently believes — the two are being compared."
+        )
+    else:
+        opening = (
+            f"Secretariat is carrying {status['injected']} lessons into every pick, "
+            f"chosen from {status['active']} it currently believes."
+        )
+    lines = [opening]
     if status["proven"]:
+        n = status["proven"]
         lines.append(
-            f"{status['proven']} have now won often enough, in the races they apply to, "
-            f"to count as proven."
+            f"{n} {'has' if n == 1 else 'have'} now won often enough, in the races "
+            f"{'it applies' if n == 1 else 'they apply'} to, to count as proven."
         )
     else:
         lines.append(
             f"None have earned a verdict yet — {status['pending']} are still "
             f"gathering the races needed to judge them."
         )
-    if status["retired"]:
+    unproven = max(0, status["active"] - status["proven"] - status["pending"])
+    if unproven:
         lines.append(
-            f"{status['retired']} have been dropped along the way."
+            f"{unproven} {'has' if unproven == 1 else 'have'} been measured and did not "
+            f"beat the races {'it was' if unproven == 1 else 'they were'} withheld from."
         )
+    if status["retired"]:
+        failing = status.get("failing") or 0
+        detail = (f", {failing} of them for measurably hurting results"
+                  if failing else "")
+        lines.append(f"{status['retired']} have been dropped along the way{detail}.")
     return lines
 
 

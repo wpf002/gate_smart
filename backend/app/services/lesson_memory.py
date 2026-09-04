@@ -147,6 +147,21 @@ _cached_lessons: list | None = None
 _cached_at: float = 0.0
 
 
+# When frozen, the snapshot never refreshes for the life of the process. A
+# nightly run builds its prompts, submits a batch, and polls for up to 45
+# minutes before writing rows — and score_lessons runs on its own schedule in
+# between, rewriting the very verdict/lift/status fields the ranking reads. With
+# a plain TTL the write-time lookup was guaranteed to be a different query than
+# the prompt-time one, so races got credited to lessons they never carried.
+_frozen = False
+
+
+def freeze_lessons(frozen: bool = True) -> None:
+    """Pin the active set for this process. Batch jobs must call this at start."""
+    global _frozen
+    _frozen = frozen
+
+
 def _invalidate_cache() -> None:
     global _cached_lessons, _cached_at
     _cached_lessons, _cached_at = None, 0.0
@@ -157,6 +172,8 @@ async def _active_lessons_cached() -> list:
 
     global _cached_lessons, _cached_at
     now = time.monotonic()
+    if _cached_lessons is not None and _frozen:
+        return _cached_lessons
     if _cached_lessons is None or (now - _cached_at) > _CACHE_TTL_SECONDS:
         _cached_lessons = await load_active_lessons()
         _cached_at = now

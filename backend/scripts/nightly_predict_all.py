@@ -418,6 +418,11 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
     # so repeat clicks return the locked nightly analysis verbatim — no live
     # LLM call unless inputs (scratch / jockey / ML) actually change.
     from app.core.cache import cache_set as _cache_set
+    # Pin the playbook for this whole run: prompts are built now, rows are
+    # written up to 45 minutes later, and score_lessons rewrites the ranking
+    # fields in between.
+    from app.services.lesson_memory import freeze_lessons
+    freeze_lessons(True)
     from app.services.fade_reason import normalize_fade_reason
     from app.services.secretariat import (
         analyze_race, compute_input_fingerprint, pick_depth_for_race, pick_model_for_race,
@@ -600,12 +605,19 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
             race_type_clipped = _clip(race_type, 120)
             # Same helper the pick prompt used, so the stored provenance is
             # exactly the set the model saw.
-            try:
-                from app.services.lesson_memory import lessons_for_race
-                lesson_arm, chosen_lessons = await lessons_for_race(race_id)
-                lesson_ids = [l.id for l in chosen_lessons]
-            except Exception:
-                lesson_arm, lesson_ids = None, None
+            # Only picks that actually went through the lesson-bearing prompt
+            # carry provenance. Lean-arm and fallback picks come from
+            # predict_race(), whose prompt contains no lessons at all — stamping
+            # them was filing ~20% of the slate as evidence for lessons they
+            # never saw, attenuating every measured lift toward zero.
+            lesson_arm, lesson_ids = None, None
+            if lock_source == "nightly":
+                try:
+                    from app.services.lesson_memory import lessons_for_race
+                    lesson_arm, chosen_lessons = await lessons_for_race(race_id)
+                    lesson_ids = [l.id for l in chosen_lessons]
+                except Exception:
+                    lesson_arm, lesson_ids = None, None
 
             row = {
                 "race_id": _clip(race_id, 100),

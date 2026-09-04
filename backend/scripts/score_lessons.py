@@ -15,7 +15,12 @@ and which A/B arm it was in. So for one lesson we can compare, over the SAME
 days and only within the races that lesson claims to govern:
 
     treated — in-scope races whose prompt carried this lesson
-    control — in-scope races over the same period that did not
+    control — in-scope races ON THE SAME DAYS whose prompt did not
+
+Restricting both sides to the days the lesson was actually carried is what makes
+this contemporaneous. An earlier version bounded only the start, so the control
+kept growing after the lesson stopped being injected and a single good day could
+be scored against a month of baseline.
 
 That is a contemporaneous comparison, not a before/after one, so it is not
 confounded by seasonal form, track mix, or any other change shipped in the
@@ -126,14 +131,26 @@ async def main(dry_run: bool) -> None:
 
     now = datetime.now(timezone.utc)
     changed = []
+    failed_texts: list[str] = []
 
     for lesson in lessons:
         scope = lesson.scope or {}
-        activated = lesson.activated_at
-        t_n = t_w = c_n = c_w = 0
 
+        # Both groups are restricted to the days this lesson was actually
+        # carried by at least one pick. Without that, only a lower bound applied
+        # and the control kept absorbing races for the rest of the table's life:
+        # a lesson's treated count freezes the night it drops out of the top
+        # slots, so one good day ends up compared against a month-long baseline
+        # and returns a confident PROVEN. Same days on both sides is what makes
+        # this the contemporaneous comparison it always claimed to be.
+        injected_dates = {
+            race_date for _t, _s, _c, lesson_ids, race_date in rows
+            if race_date and lesson.id in (lesson_ids or [])
+        }
+
+        t_n = t_w = c_n = c_w = 0
         for race_type, surface, correct, lesson_ids, race_date in rows:
-            if activated and race_date and race_date < activated.date():
+            if race_date not in injected_dates:
                 continue
             if not race_matches_scope(race_type, surface, scope):
                 continue
@@ -163,6 +180,11 @@ async def main(dry_run: bool) -> None:
                 lesson.retire_reason = (
                     f"measured {lift:+.1f} pts vs control over {t_n} in-scope races (p={p:.3f})"
                 )
+                # Also evict it from the calibration list, which is the curator's
+                # candidate pool. Leaving it there let the next reflect run hand
+                # the same text straight back, reactivating the lesson and
+                # resetting the very evidence that condemned it.
+                failed_texts.append(lesson.text)
 
         tag = f"{was}->{verdict}" if was != verdict else verdict
         detail = (f"treated {t_w}/{t_n} vs control {c_w}/{c_n}"
@@ -176,6 +198,15 @@ async def main(dry_run: bool) -> None:
         async with _db._AsyncSessionLocal() as db:
             for lesson in lessons:
                 await db.merge(lesson)
+            if failed_texts:
+                from app.models.accuracy import SecretariatCalibration
+                cal = await db.get(SecretariatCalibration, 1)
+                if cal and cal.lessons:
+                    kept = [l for l in cal.lessons if l not in failed_texts]
+                    if len(kept) != len(cal.lessons):
+                        cal.lessons = kept
+                        print(f"  evicted {len(cal.lessons) - len(kept)} failed lesson(s) "
+                              f"from the curator's candidate pool")
             await db.commit()
         from app.services.lesson_memory import _invalidate_cache
         _invalidate_cache()

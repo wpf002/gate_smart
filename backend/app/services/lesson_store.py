@@ -71,7 +71,7 @@ async def sync_lessons(texts: list[str]) -> dict:
     from app.models.lesson import SecretariatLesson
     from app.services.lesson_scope import parse_scope
 
-    summary = {"new": 0, "kept": 0, "retired": 0, "protected": 0}
+    summary = {"new": 0, "kept": 0, "retired": 0, "protected": 0, "blocked": 0}
     if not _AsyncSessionLocal:
         return summary
 
@@ -106,12 +106,26 @@ async def sync_lessons(texts: list[str]) -> dict:
                     summary["new"] += 1
                 else:
                     if row.status != "active":
-                        # The curator brought a retired lesson back. Restart its
-                        # record rather than blending two separate lifetimes.
+                        if row.verdict == "FAILING":
+                            # Measured worse than its own control. The curator
+                            # does not get to bring it back — and reactivating
+                            # would reset activated_at, discarding the very races
+                            # that condemned it and laundering the verdict back
+                            # to PENDING on the next scoring pass.
+                            summary["blocked"] = summary.get("blocked", 0) + 1
+                            log.info(f"[lesson_store] refused to resurrect FAILING lesson: "
+                                     f"{row.text[:70]}")
+                            continue
+                        # Otherwise restart its record rather than blending two
+                        # separate lifetimes.
                         row.status = "active"
                         row.activated_at = now
                         row.retired_at = None
                         row.retire_reason = None
+                        row.scope_races = row.scope_wins = 0
+                        row.baseline_races = row.baseline_wins = 0
+                        row.lift = row.p_value = None
+                        row.verdict = "PENDING"
                     summary["kept"] += 1
 
             for h, row in existing.items():
