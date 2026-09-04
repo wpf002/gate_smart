@@ -152,6 +152,16 @@ _PREDICT_ALL_HEALTHY_THRESHOLD = 10
 _PREDICT_ALL_COOLDOWN_MIN = 60
 _predict_all_last_attempt: datetime.datetime | None = None
 
+# Hard ceiling on catchup launches per day. The 60-min cooldown alone still
+# permits ~8 full-slate runs across the 8-hour band; at ~$2.75 a slate that is
+# ~$22/day of silent re-spend when a run keeps failing for a NON-cost reason
+# (upstream feed short, DB write error). Three attempts is enough to ride out a
+# transient failure; beyond that the run is broken and re-firing only burns
+# credits. Resets daily (and on container restart, which is desirable).
+_PREDICT_ALL_MAX_ATTEMPTS_PER_DAY = 3
+_predict_all_attempts_today: int = 0
+_predict_all_attempts_date: "datetime.date | None" = None
+
 
 async def job_predict_all_catchup() -> None:
     """Self-healing predict-all check. Runs every 15 min between 8 AM–4 PM ET.
@@ -179,6 +189,22 @@ async def job_predict_all_catchup() -> None:
         if age_min < _PREDICT_ALL_COOLDOWN_MIN:
             return
 
+    # Daily attempt ceiling — stops an endlessly-failing run from re-billing
+    # the full slate every cooldown window.
+    global _predict_all_attempts_today, _predict_all_attempts_date
+    _today_et = datetime.now(et).date()
+    if _predict_all_attempts_date != _today_et:
+        _predict_all_attempts_date = _today_et
+        _predict_all_attempts_today = 0
+    if _predict_all_attempts_today >= _PREDICT_ALL_MAX_ATTEMPTS_PER_DAY:
+        log.error(
+            "[scheduler] predict_all catchup exhausted %d attempts today — "
+            "not re-firing. Slate is failing for a non-transient reason; "
+            "investigate rather than letting it re-bill.",
+            _PREDICT_ALL_MAX_ATTEMPTS_PER_DAY,
+        )
+        return
+
     today = now_et.date()
     try:
         async with _db._AsyncSessionLocal() as db:
@@ -199,6 +225,7 @@ async def job_predict_all_catchup() -> None:
 
     print(f"[scheduler] catchup: only {count} predictions for {today.isoformat()} — firing predict_all", flush=True)
     _predict_all_last_attempt = datetime.now(timezone.utc)
+    _predict_all_attempts_today += 1
     await _run_script("nightly_predict_all.py")
 
 

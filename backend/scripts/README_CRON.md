@@ -62,6 +62,12 @@ Generate a Gmail App Password at: <https://myaccount.google.com/apppasswords>
 
 ## Cost Estimate
 
+> **STALE — do not trust the figures below.** They were written for a Haiku-only,
+> pre-batch, pre-A/B world and understate real spend by roughly 20x. A 50% Sonnet 4.6
+> A/B (`PICK_MODEL_AB_PERCENT`) and full-analysis writes landed later. Measured burn is
+> ~$75-190/month. Get the real number from `GET /api/admin/cost/summary`, which reads
+> the `llm_call_log` table.
+
 - `nightly_predict_all.py`: ~$0.15/day (149 races × claude-haiku at ~$0.001/race)
 - `nightly_accuracy.py` email generation: ~$0.02/day (1 claude-sonnet call)
 - Total: ~$0.17/day, ~$5/month

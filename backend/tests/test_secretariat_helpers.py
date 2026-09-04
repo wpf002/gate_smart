@@ -259,8 +259,13 @@ def test_ab_split_is_deterministic_and_balanced():
     # Stable: the same race must never switch arms between runs, or a re-run /
     # the --only-missing second pass would corrupt the experiment.
     assert first == [pick_model_for_race(r) for r in ids]
+    # Asserted against the configured percent, not a hardcoded 50/50 — the
+    # split is an env var and the model experiment has since been concluded at
+    # 100% challenger, which made a fixed expectation fail for no real reason.
+    from app.services.secretariat import PICK_MODEL_AB_PERCENT
     share = sum(1 for m in first if m == PICK_MODEL_CHALLENGER) / len(first)
-    assert 0.45 <= share <= 0.55, f"split skewed: {share:.1%}"
+    assert abs(share * 100 - PICK_MODEL_AB_PERCENT) < 5, (
+        f"split {share:.1%} does not match configured {PICK_MODEL_AB_PERCENT}%")
     assert set(first) <= {PICK_MODEL_DEFAULT, PICK_MODEL_CHALLENGER}
 
 

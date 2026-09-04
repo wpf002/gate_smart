@@ -6,9 +6,31 @@ LLM call writes a row to `llm_call_log`. Daily burn is then a single SQL query.
 """
 import datetime
 import logging
+import os
+import time
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+
+# --- Daily spend circuit breaker -------------------------------------------
+# Normal burn is ~$3-6/day. The cap exists to stop RUNAWAY spend (a catchup
+# loop re-firing the slate, or an unbounded admin trigger), not to throttle
+# normal operation, so the default sits well above a healthy day. Set
+# LLM_DAILY_CAP_USD=0 to disable entirely.
+LLM_DAILY_CAP_USD = float(os.getenv("LLM_DAILY_CAP_USD", "25"))
+_BUDGET_CACHE_TTL_SECONDS = 60
+
+# (spend_usd, fetched_at_monotonic, date) — avoids a DB round-trip per call.
+_budget_cache: tuple[float, float, datetime.date] | None = None
+
+
+class LLMBudgetExceeded(RuntimeError):
+    """Raised when today's estimated Anthropic spend has hit LLM_DAILY_CAP_USD.
+
+    Treated like an upstream-unavailable condition: the caller skips the LLM
+    step rather than crashing. Deterministic (non-LLM) paths keep working.
+    """
 
 
 # Anthropic public pricing (USD per 1M tokens). Update if Anthropic raises prices.
@@ -119,6 +141,54 @@ async def log_call(
         log.warning("llm_cost.log_call failed: %s", e)
 
 
+async def today_spend_usd(*, use_cache: bool = True) -> float:
+    """Sum est_cost_usd from llm_call_log for today. Fails OPEN (returns 0.0).
+
+    Cost accounting must never take the app down, so any DB problem here is
+    logged and treated as "no spend recorded" — the call proceeds.
+    """
+    global _budget_cache
+    today = datetime.date.today()
+    if use_cache and _budget_cache is not None:
+        spend, fetched_at, cached_day = _budget_cache
+        if cached_day == today and (time.monotonic() - fetched_at) < _BUDGET_CACHE_TTL_SECONDS:
+            return spend
+    try:
+        from sqlalchemy import func, select
+
+        from app.core.database import _AsyncSessionLocal
+        from app.models.accuracy import LLMCallLog
+
+        async with _AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(func.coalesce(func.sum(LLMCallLog.est_cost_usd), 0.0)).where(
+                    LLMCallLog.call_date == today
+                )
+            )
+            spend = float(result.scalar() or 0.0)
+        _budget_cache = (spend, time.monotonic(), today)
+        return spend
+    except Exception as e:
+        log.warning("llm_cost.today_spend_usd failed (failing open): %s", e)
+        return 0.0
+
+
+async def enforce_daily_cap(endpoint: str) -> None:
+    """Raise LLMBudgetExceeded if today's spend has reached the cap."""
+    if LLM_DAILY_CAP_USD <= 0:
+        return
+    spend = await today_spend_usd()
+    if spend >= LLM_DAILY_CAP_USD:
+        log.error(
+            "llm_cost: DAILY CAP HIT — $%.2f >= $%.2f cap; refusing %s. "
+            "Raise LLM_DAILY_CAP_USD or investigate runaway spend.",
+            spend, LLM_DAILY_CAP_USD, endpoint,
+        )
+        raise LLMBudgetExceeded(
+            f"Daily Anthropic spend ${spend:.2f} reached cap ${LLM_DAILY_CAP_USD:.2f}"
+        )
+
+
 async def tracked_create(client, *, endpoint: str, user_id: int | None = None, **create_kwargs) -> Any:
     """Drop-in wrapper for `client.messages.create(...)` that logs cost.
 
@@ -126,6 +196,7 @@ async def tracked_create(client, *, endpoint: str, user_id: int | None = None, *
     Pass `user_id` so per-user usage can be attributed (omit for background jobs).
     All other kwargs are forwarded verbatim.
     """
+    await enforce_daily_cap(endpoint)
     response = await client.messages.create(**create_kwargs)
     usage = getattr(response, "usage", None)
     in_tok = getattr(usage, "input_tokens", 0) if usage else 0
@@ -143,4 +214,6 @@ async def tracked_create(client, *, endpoint: str, user_id: int | None = None, *
         cache_write_tokens=cache_write or 0,
         web_searches=_count_web_searches(response),
     )
+    global _budget_cache
+    _budget_cache = None  # force a fresh read on the next cap check
     return response

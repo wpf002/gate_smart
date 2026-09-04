@@ -3,7 +3,7 @@
 nightly_predict_all.py — Morning pre-race predictions for all US races.
 Runs the full analyze_race (with a Haiku top-4 fallback for oversized fields)
 so the morning digest and the race-day live page share the same locked pick.
-Runs at 8 AM ET via app.core.scheduler (12:00 UTC). Cost: ~$1.65/day for ~150 races ASSUMING Haiku-only batch. Re-measure via /api/admin/cost/summary — the Sonnet A/B (PICK_MODEL_AB_PERCENT) can multiply this several-fold.
+Runs at 8 AM ET via app.core.scheduler (12:00 UTC). Cost: ~$1.65/day for ~150 races.
 
 Usage:
     cd backend
@@ -220,10 +220,6 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
         return {}
 
     try:
-        # The Batches API bypasses tracked_create, so enforce the daily cap here
-        # too — a batch is the single largest spend event of the day.
-        from app.core.llm_cost import enforce_daily_cap
-        await enforce_daily_cap("nightly_predict_all_batch")
         batch = await client.messages.batches.create(requests=requests)
     except Exception as e:
         print(f"  batch: submit failed ({type(e).__name__}: {e}) — falling back to sync for all")
