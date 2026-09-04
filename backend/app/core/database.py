@@ -77,6 +77,7 @@ _STARTUP_MIGRATIONS: list[str] = [
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_arm VARCHAR(20)",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_ids JSONB",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS fade_reason VARCHAR(30)",
+    "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_applied BOOLEAN DEFAULT FALSE",
     "CREATE INDEX IF NOT EXISTS ix_race_predictions_lesson_arm ON race_predictions (lesson_arm)",
 ]
 

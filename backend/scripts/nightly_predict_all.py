@@ -309,6 +309,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_arm VARCHAR(20)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_ids JSONB"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS fade_reason VARCHAR(30)"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_applied BOOLEAN DEFAULT FALSE"))
 
     ssl_ctx = ssl.create_default_context()
     client = anthropic.AsyncAnthropic(
@@ -562,6 +563,23 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
             race.get("runners") or [], pick_name=first, pick_num=first_num
         )
 
+        # Deterministic re-rank: when the top pick is priced at least 2x the
+        # favorite, Secretariat's own second choice beats it (12.9% vs 20.4%
+        # over 4,318 races, holding out of sample at +7.7 pts). Applied after
+        # the model so the stored pick, the cached analysis and the UI all agree.
+        from app.services.rerank import apply_deep_fade_demotion
+        rerank_applied = False
+        if analysis and second:
+            rerank_applied = apply_deep_fade_demotion(analysis, market)
+            if rerank_applied:
+                first, second = second, first
+                first_num = _num((analysis.get("predicted_finish") or {}).get("first"))
+                # The market context describes the TOP PICK, so it has to be
+                # recomputed for the horse now in that slot.
+                market = compute_market_context(
+                    race.get("runners") or [], pick_name=first, pick_num=first_num
+                )
+
         if not dry_run:
             # Extract HH:MM post time from off_dt (ISO) or time string
             post_time_et = None
@@ -646,6 +664,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 # Which lessons the prompt actually carried. Recorded from the
                 # same helper the prompt uses, so provenance cannot drift from
                 # what the model was told.
+                "rerank_applied": rerank_applied,
                 "lesson_arm": lesson_arm,
                 "lesson_ids": lesson_ids,
                 # Which market-divergence angle was claimed. Scored later to find
