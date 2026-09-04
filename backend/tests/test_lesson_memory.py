@@ -261,8 +261,8 @@ def test_depth_is_stable_and_independent_of_the_other_experiments():
     assert 0.4 < measured < 0.6
     # Independent of the model arm too. Asserted against the configured percent
     # rather than a fixed number, since that percent is set per deployment.
-    from app.services.secretariat import PICK_MODEL_AB_PERCENT
-    challenger = sum(pick_model_for_race(r) != "claude-haiku-4-5-20251001" for r in lean) / len(lean)
+    from app.services.secretariat import PICK_MODEL_AB_PERCENT, PICK_MODEL_CHALLENGER
+    challenger = sum(pick_model_for_race(r) == PICK_MODEL_CHALLENGER for r in lean) / len(lean)
     assert abs(challenger * 100 - PICK_MODEL_AB_PERCENT) < 6
 
 

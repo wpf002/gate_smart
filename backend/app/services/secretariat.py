@@ -96,9 +96,19 @@ def _parse_digest_sections(raw: str) -> dict[str, str]:
 #     --only-missing second pass can never flip a race mid-experiment
 #   - the split is independent of track, date, field size and post time, so
 #     neither arm gets the easier races
-PICK_MODEL_DEFAULT = "claude-haiku-4-5-20251001"
-PICK_MODEL_CHALLENGER = "claude-sonnet-4-6"
-# Set to 0 to end the experiment and send every race to the default model.
+# THE EXPERIMENT IS OVER AND SONNET WON: 24.5% vs 15.7% over ~1,100 concurrent
+# races, +8.8 points, p=0.001, and the gap held in every subgroup with enough
+# sample. So Sonnet is the DEFAULT, not the challenger.
+#
+# It was the other way round, and that cost real accuracy. With the loser as the
+# default, "no env var set" silently meant "ship the worse model" — and when
+# PICK_MODEL_AB_PERCENT was reset to 0 outside this repo, production ran 100%
+# Haiku from 2026-09-02 onward without anything failing or alerting. The safe
+# fallback has to be the better model.
+PICK_MODEL_DEFAULT = "claude-sonnet-4-6"
+PICK_MODEL_CHALLENGER = "claude-haiku-4-5-20251001"
+# 0 means every race goes to the default (Sonnet). Raise it only to run a new
+# experiment against the incumbent.
 PICK_MODEL_AB_PERCENT = int(os.getenv("PICK_MODEL_AB_PERCENT", "0"))
 
 

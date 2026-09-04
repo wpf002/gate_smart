@@ -264,6 +264,8 @@ def test_ab_split_is_deterministic_and_balanced():
     # 100% challenger, which made a fixed expectation fail for no real reason.
     from app.services.secretariat import PICK_MODEL_AB_PERCENT
     share = sum(1 for m in first if m == PICK_MODEL_CHALLENGER) / len(first)
+    # With the experiment concluded (percent 0) every race goes to the default,
+    # which is now the model that won it.
     assert abs(share * 100 - PICK_MODEL_AB_PERCENT) < 5, (
         f"split {share:.1%} does not match configured {PICK_MODEL_AB_PERCENT}%")
     assert set(first) <= {PICK_MODEL_DEFAULT, PICK_MODEL_CHALLENGER}

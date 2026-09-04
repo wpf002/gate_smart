@@ -44,7 +44,11 @@ async def test_builder_prompt_contains_race_data_not_calibration(patched):
     assert "Alpha" in prompt and "Bravo" in prompt
     # calibration moved to the cached system block — must not be re-billed in the prompt
     assert "YOUR RECENT PERFORMANCE" not in prompt
-    assert kwargs["model"].startswith("claude-haiku")
+    # The builder defaults to whichever model currently wins the pick engine,
+    # not a hardcoded family — Sonnet took that slot after beating Haiku by
+    # +8.8 points over ~1,100 concurrent races.
+    from app.services.secretariat import PICK_MODEL_DEFAULT
+    assert kwargs["model"] == PICK_MODEL_DEFAULT
     assert kwargs["max_tokens"] == 5000
 
 
