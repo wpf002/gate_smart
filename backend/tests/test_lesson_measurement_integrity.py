@@ -71,3 +71,20 @@ def test_the_playbook_is_pinned_for_the_length_of_a_run():
     assert "def freeze_lessons" in MEMORY
     assert "_frozen" in MEMORY
     assert "freeze_lessons(True)" in NIGHTLY
+
+
+def test_the_activation_day_is_excluded_from_evidence():
+    """Two predict passes run for the same race_date (12:00 UTC, then 15:00
+    --only-missing) with reflect minting lessons at 14:30 between them. On a
+    lesson's first day, treated is whatever the second pass covered and control
+    whatever the first did — split by feed timing and which tracks posted late,
+    not by the race_id hash. That day cannot be counted as contemporaneous."""
+    assert "injected_dates.discard(lesson.activated_at.date())" in SCORE
+
+
+def test_the_eviction_count_is_computed_before_the_assignment():
+    """`cal.lessons = kept` first, then `len(cal.lessons) - len(kept)` is always
+    zero — the log claimed nothing was pruned every time it pruned something."""
+    block = SCORE[SCORE.index("kept = [l for l in cal.lessons"):]
+    assert "removed = len(cal.lessons) - len(kept)" in block[:300]
+    assert block.index("removed =") < block.index("cal.lessons = kept")

@@ -147,6 +147,15 @@ async def main(dry_run: bool) -> None:
             race_date for _t, _s, _c, lesson_ids, race_date in rows
             if race_date and lesson.id in (lesson_ids or [])
         }
+        # A lesson's activation date is not one playbook regime. Two predict
+        # passes run for the same race_date (12:00 UTC, then 15:00 --only-missing)
+        # with reflect minting lessons at 14:30 in between, so on that day the
+        # split is not the race_id hash at all: treated is whatever the second
+        # pass happened to cover, control whatever the first did. Which races
+        # land in which pass depends on feed timing and which tracks posted late
+        # — exactly the track/card confound the hash split exists to remove.
+        if lesson.activated_at:
+            injected_dates.discard(lesson.activated_at.date())
 
         t_n = t_w = c_n = c_w = 0
         for race_type, surface, correct, lesson_ids, race_date in rows:
@@ -203,10 +212,11 @@ async def main(dry_run: bool) -> None:
                 cal = await db.get(SecretariatCalibration, 1)
                 if cal and cal.lessons:
                     kept = [l for l in cal.lessons if l not in failed_texts]
-                    if len(kept) != len(cal.lessons):
+                    removed = len(cal.lessons) - len(kept)
+                    if removed:
                         cal.lessons = kept
-                        print(f"  evicted {len(cal.lessons) - len(kept)} failed lesson(s) "
-                              f"from the curator's candidate pool")
+                        print(f"  evicted {removed} failed lesson(s) from the "
+                              f"curator's candidate pool")
             await db.commit()
         from app.services.lesson_memory import _invalidate_cache
         _invalidate_cache()
