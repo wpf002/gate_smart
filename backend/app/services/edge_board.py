@@ -113,7 +113,11 @@ async def compute_edge_board(
             continue
 
         fp = compute_input_fingerprint(race)
-        analysis = await cache_get(f"ai_analysis:{race_id}:{_LOCK_MODE}:{fp}")
+        # Was missing the experience segment entirely, so this read could never
+        # hit the entry the nightly job writes.
+        from app.services.analysis_cache import LOCK_EXPERIENCE, analysis_cache_key
+        analysis = await cache_get(
+            analysis_cache_key(race_id, _LOCK_MODE, LOCK_EXPERIENCE, fp))
         if not analysis:
             continue
 

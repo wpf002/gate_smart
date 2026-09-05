@@ -158,9 +158,23 @@ _predict_all_last_attempt: datetime.datetime | None = None
 # (upstream feed short, DB write error). Three attempts is enough to ride out a
 # transient failure; beyond that the run is broken and re-firing only burns
 # credits. Resets daily (and on container restart, which is desirable).
+#
+# --only-missing does NOT make this ceiling redundant: it skips races that
+# already have a race_predictions row, and the failure mode this guards against
+# is precisely the one where no row gets written (nightly_predict_all.py logs
+# "DB write failed" and continues), so every retry re-analyzes and re-pays for
+# the whole slate. Restored after being removed on that mistaken reasoning.
 _PREDICT_ALL_MAX_ATTEMPTS_PER_DAY = 3
 _predict_all_attempts_today: int = 0
 _predict_all_attempts_date: "datetime.date | None" = None
+
+# A catchup awaits the subprocess to completion, and one run can outlive the
+# 60-min cooldown (45-min batch timeout + cancel drain + a sync fallback over
+# ~150 races). Without this flag the next 15-min tick launches a SECOND
+# nightly_predict_all on top of the one still running and pays for the slate
+# twice. This refuses nothing: the in-flight run is already doing the work, and
+# the next tick after it finishes re-evaluates from scratch.
+_predict_all_running: bool = False
 
 
 async def job_predict_all_catchup() -> None:
@@ -170,7 +184,7 @@ async def job_predict_all_catchup() -> None:
     _PREDICT_ALL_HEALTHY_THRESHOLD auto_daily rows AND no predict_all attempt
     has fired in the last _PREDICT_ALL_COOLDOWN_MIN minutes.
     """
-    global _predict_all_last_attempt
+    global _predict_all_last_attempt, _predict_all_running
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
 
@@ -182,6 +196,12 @@ async def job_predict_all_catchup() -> None:
     et = ZoneInfo("America/New_York")
     now_et = datetime.now(et)
     if now_et.hour < 8 or now_et.hour >= 16:
+        return
+
+    # A previous catchup is still executing — let it finish rather than paying
+    # for a duplicate concurrent slate.
+    if _predict_all_running:
+        log.info("[scheduler] predict_all catchup already running — skipping this tick")
         return
 
     if _predict_all_last_attempt is not None:
@@ -226,7 +246,15 @@ async def job_predict_all_catchup() -> None:
     print(f"[scheduler] catchup: only {count} predictions for {today.isoformat()} — firing predict_all", flush=True)
     _predict_all_last_attempt = datetime.now(timezone.utc)
     _predict_all_attempts_today += 1
-    await _run_script("nightly_predict_all.py")
+    # --only-missing skips races that already have a row for today, so a re-fire
+    # pays only for what is genuinely missing. It does NOT replace the attempt
+    # ceiling above: a race whose DB write failed leaves no row, so that failure
+    # mode still re-buys the whole slate on every retry.
+    _predict_all_running = True
+    try:
+        await _run_script("nightly_predict_all.py", ["--only-missing"])
+    finally:
+        _predict_all_running = False
 
 
 # --- accuracy catchup (self-healing) -------------------------------------

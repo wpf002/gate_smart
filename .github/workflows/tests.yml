@@ -1,0 +1,32 @@
+# Railway deploys on push to main, and until now nothing ran the 366 backend
+# tests first — the wire between "the suite passes locally" and "this is safe to
+# ship" simply did not exist. This is that wire.
+#
+# It cannot block a Railway deploy (Railway watches the branch directly), so
+# treat a red run as "roll back or fix forward now", not as "it was prevented".
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+      - name: Run tests
+        run: python -m pytest -q

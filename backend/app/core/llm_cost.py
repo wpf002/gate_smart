@@ -13,24 +13,15 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 
-# --- Daily spend circuit breaker -------------------------------------------
-# Normal burn is ~$3-6/day. The cap exists to stop RUNAWAY spend (a catchup
-# loop re-firing the slate, or an unbounded admin trigger), not to throttle
-# normal operation, so the default sits well above a healthy day. Set
-# LLM_DAILY_CAP_USD=0 to disable entirely.
-LLM_DAILY_CAP_USD = float(os.getenv("LLM_DAILY_CAP_USD", "25"))
+# --- Daily spend observability ---------------------------------------------
+# Alert-only. Nothing here ever blocks a call: functionality always wins, and
+# cost is controlled by routing + caching + idempotent retries instead.
+# Set LLM_SOFT_ALERT_USD=0 to silence.
+LLM_SOFT_ALERT_USD = float(os.getenv("LLM_SOFT_ALERT_USD", "25"))
 _BUDGET_CACHE_TTL_SECONDS = 60
 
 # (spend_usd, fetched_at_monotonic, date) — avoids a DB round-trip per call.
 _budget_cache: tuple[float, float, datetime.date] | None = None
-
-
-class LLMBudgetExceeded(RuntimeError):
-    """Raised when today's estimated Anthropic spend has hit LLM_DAILY_CAP_USD.
-
-    Treated like an upstream-unavailable condition: the caller skips the LLM
-    step rather than crashing. Deterministic (non-LLM) paths keep working.
-    """
 
 
 # Anthropic public pricing (USD per 1M tokens). Update if Anthropic raises prices.
@@ -173,19 +164,20 @@ async def today_spend_usd(*, use_cache: bool = True) -> float:
         return 0.0
 
 
-async def enforce_daily_cap(endpoint: str) -> None:
-    """Raise LLMBudgetExceeded if today's spend has reached the cap."""
-    if LLM_DAILY_CAP_USD <= 0:
+async def warn_if_over_soft_budget(endpoint: str) -> None:
+    """Log loudly if today's spend passes the soft alert threshold.
+
+    Deliberately NEVER blocks a call — this is an alarm, not a valve. Spend
+    control comes from routing and caching, not from refusing work.
+    """
+    if LLM_SOFT_ALERT_USD <= 0:
         return
     spend = await today_spend_usd()
-    if spend >= LLM_DAILY_CAP_USD:
+    if spend >= LLM_SOFT_ALERT_USD:
         log.error(
-            "llm_cost: DAILY CAP HIT — $%.2f >= $%.2f cap; refusing %s. "
-            "Raise LLM_DAILY_CAP_USD or investigate runaway spend.",
-            spend, LLM_DAILY_CAP_USD, endpoint,
-        )
-        raise LLMBudgetExceeded(
-            f"Daily Anthropic spend ${spend:.2f} reached cap ${LLM_DAILY_CAP_USD:.2f}"
+            "llm_cost: SOFT BUDGET ALERT — $%.2f today (threshold $%.2f), still serving %s. "
+            "Investigate if unexpected; nothing has been blocked.",
+            spend, LLM_SOFT_ALERT_USD, endpoint,
         )
 
 
@@ -196,7 +188,6 @@ async def tracked_create(client, *, endpoint: str, user_id: int | None = None, *
     Pass `user_id` so per-user usage can be attributed (omit for background jobs).
     All other kwargs are forwarded verbatim.
     """
-    await enforce_daily_cap(endpoint)
     response = await client.messages.create(**create_kwargs)
     usage = getattr(response, "usage", None)
     in_tok = getattr(usage, "input_tokens", 0) if usage else 0

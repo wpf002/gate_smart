@@ -1409,6 +1409,11 @@ async def score_race(race_data: dict, user_id: int | None = None) -> dict:
                 "error": str(e)
             }
 
+    # Fan the whole field out at once. Serializing the first horse to warm the
+    # shared ~5.5k-token cached system block was tried and reverted: score_race
+    # is awaited inline by POST /score-race, so the extra round-trip is latency
+    # a user waits through on every cold scorecard. A cache discount is not
+    # worth delaying a user-facing request.
     scorecards = await asyncio.gather(*[_score_safe(h) for h in runners])
 
     result = {

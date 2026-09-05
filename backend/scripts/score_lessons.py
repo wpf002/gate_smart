@@ -120,7 +120,10 @@ async def main(dry_run: bool) -> None:
             SELECT race_type, surface, top_pick_correct, lesson_ids, race_date
             FROM race_predictions
             WHERE result_fetched AND analysis_mode = 'auto_daily' AND user_id IS NULL
-              AND lesson_ids IS NOT NULL
+              -- jsonb null is NOT sql NULL: a row written with a JSON `null`
+              -- passes `IS NOT NULL`, decodes to None, and was silently counted
+              -- as CONTROL evidence for every lesson it never carried.
+              AND lesson_ids IS NOT NULL AND jsonb_typeof(lesson_ids) = 'array'
         """))).all()
 
     print(f"[score_lessons] {len(lessons)} lessons | {len(rows)} scored races with provenance")

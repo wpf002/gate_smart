@@ -162,6 +162,14 @@ async def predict_race(
 
 _BATCH_POLL_SECONDS = 30
 _BATCH_TIMEOUT_SECONDS = 45 * 60  # past this, unfinished races fall back to sync
+# How long to wait for a cancelled batch to reach a terminal state before giving
+# up and sending every race to the sync fallback. Deliberately short: this is
+# dead time bolted onto the front of the fallback, and the fallback is what
+# actually gets the slate picked. Two minutes is enough for a cancel to settle
+# in practice; past that we stop waiting and behave exactly as before this path
+# existed. Recovering the finished results saves far more wall-clock than this
+# window costs, and losing the race is never worth the discount.
+_BATCH_CANCEL_DRAIN_SECONDS = 120
 
 
 # Must match main()'s LOCK_EXPERIENCE — the cache key carries experience level,
@@ -220,10 +228,56 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
         return {}
 
     try:
-        # The Batches API bypasses tracked_create, so enforce the daily cap here
-        # too — a batch is the single largest spend event of the day.
-        from app.core.llm_cost import enforce_daily_cap
-        await enforce_daily_cap("nightly_predict_all_batch")
+        # Batches bypass tracked_create; surface today's spend before the
+        # single largest billing event of the day. Never blocks.
+        from app.core.llm_cost import tracked_create, warn_if_over_soft_budget
+        await warn_if_over_soft_budget("nightly_predict_all_batch")
+
+        # Pre-warm each distinct cached system prefix before submitting. Batch
+        # requests run with real concurrency, so the first wave to hit a cold
+        # prefix all miss and each pays the 1.25x cache write; once a prefix is
+        # warm every later request bills it at 0.1x. There are only ever a
+        # handful of distinct prefixes (pick model x lesson arm), so this trades
+        # a few cheap writes for ~150 of them.
+        # Dedupe on the WHOLE cached prefix — model plus every system block in
+        # order, serialized verbatim. A cache entry is keyed by the full prefix,
+        # so hashing only the last block (or a slice of it) would collapse two
+        # genuinely different prefixes into one key and leave one of them cold.
+        # build_analyze_request sends no `tools`, so model + system is the
+        # complete prefix; if tools are ever added they must join this key.
+        try:
+            import hashlib
+            warmed: set = set()
+            for _req in requests:
+                _params = _req["params"]
+                _system = _params.get("system") or []
+                if not _system:
+                    continue
+                _key = (_params["model"], hashlib.md5(
+                    json.dumps(_system, sort_keys=True).encode("utf-8")
+                ).hexdigest())
+                if _key in warmed:
+                    continue
+                warmed.add(_key)
+                try:
+                    await tracked_create(
+                        client,
+                        endpoint="batch_prewarm",
+                        model=_params["model"],
+                        max_tokens=1,
+                        system=_system,
+                        messages=[{"role": "user", "content": "."}],
+                    )
+                except Exception as e:
+                    # Fail open — an unwarmed prefix just pays the write inside
+                    # the batch, exactly as it does today.
+                    print(f"  batch: pre-warm failed for {_params['model']} "
+                          f"({type(e).__name__}: {e}); continuing")
+            if warmed:
+                print(f"  batch: pre-warmed {len(warmed)} cached prefix(es)", flush=True)
+        except Exception as e:
+            print(f"  batch: pre-warm skipped ({type(e).__name__}: {e})")
+
         batch = await client.messages.batches.create(requests=requests)
     except Exception as e:
         print(f"  batch: submit failed ({type(e).__name__}: {e}) — falling back to sync for all")
@@ -242,7 +296,38 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
         if batch.processing_status == "ended":
             break
     else:
-        print(f"  batch: timed out after {waited}s — consuming whatever finished", flush=True)
+        # Timeout used to fall straight through to results(), which raises while
+        # the batch is still processing — so every finished result was thrown
+        # away and all ~150 races were re-bought at full sync price while the
+        # batch kept running and billing at 50%: 150% of a slate for 50% of the
+        # work. Cancelling ends the batch instead: requests that had not started
+        # are never billed, and the ones that already succeeded become fetchable
+        # and get consumed rather than paid for a second time.
+        print(f"  batch: timed out after {waited}s — cancelling to collect what finished", flush=True)
+        try:
+            await client.messages.batches.cancel(batch.id)
+        except Exception as e:
+            print(f"  batch: cancel failed ({type(e).__name__}: {e}); trying results anyway")
+        drained = 0
+        while drained < _BATCH_CANCEL_DRAIN_SECONDS:
+            await asyncio.sleep(_BATCH_POLL_SECONDS)
+            drained += _BATCH_POLL_SECONDS
+            try:
+                batch = await client.messages.batches.retrieve(batch.id)
+            except Exception as e:
+                print(f"  batch: post-cancel poll error ({e}); retrying")
+                continue
+            if batch.processing_status == "ended":
+                break
+
+    if batch.processing_status != "ended":
+        # results() raises unless the batch has ended ('ended' is the only
+        # terminal processing_status the SDK defines; a cancel lands there via
+        # 'canceling'). Stop waiting and leave every race to the sync fallback,
+        # exactly as before this cancel path existed.
+        print(f"  batch: still '{batch.processing_status}' after cancel drain — "
+              f"sync fallback for all", flush=True)
+        return {}
 
     analyses: dict = {}
     try:
@@ -608,7 +693,8 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 analysis["locked_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
                 analysis["input_fingerprint"] = fp
                 analysis["lock_source"] = "nightly"
-                cache_key = f"ai_analysis:{race_id}:{LOCK_MODE}:{LOCK_EXPERIENCE}:{fp}"
+                from app.services.analysis_cache import analysis_cache_key
+                cache_key = analysis_cache_key(race_id, LOCK_MODE, LOCK_EXPERIENCE, fp)
                 try:
                     await _cache_set(cache_key, analysis, ex=86400)  # 24h
                 except Exception as e:

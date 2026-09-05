@@ -26,7 +26,8 @@ def _is_billing_error(exc: Exception) -> bool:
 # server logs carry the real exception so ops can tell billing from an outage.
 _AI_UNAVAILABLE_MSG = "Secretariat is temporarily unavailable — please try again shortly."
 
-from app.core.cache import cache_get, cache_incr, cache_set
+from app.core.cache import cache_get, cache_incr, cache_keys, cache_set
+from app.services.analysis_cache import analysis_cache_key
 from app.core.limiter import limiter
 from app.services import racing_api, secretariat
 
@@ -101,7 +102,7 @@ async def analyze_race(request: Request) -> JSONResponse:
 
     fp = secretariat.compute_input_fingerprint(race_data)
     exp = req.experience_level or "default"
-    cache_key = f"ai_analysis:{req.race_id}:{req.mode}:{exp}:{fp}"
+    cache_key = analysis_cache_key(req.race_id, req.mode, exp, fp)
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
@@ -242,7 +243,7 @@ async def analyze_race_stream(request: Request) -> StreamingResponse:
 
             fp = secretariat.compute_input_fingerprint(race_data)
             exp = req.experience_level or "default"
-            cache_key = f"ai_analysis:{req.race_id}:{req.mode}:{exp}:{fp}"
+            cache_key = analysis_cache_key(req.race_id, req.mode, exp, fp)
 
             cached = await cache_get(cache_key)
             if cached is not None:
@@ -560,7 +561,14 @@ async def race_debrief(request: Request) -> JSONResponse:
             status_code=202,
         )
 
-    prior_analysis = await cache_get(f"ai_analysis:{req.race_id}:balanced")
+    # A two-segment key that can never match anything written — the real keys
+    # carry mode, experience level and a fingerprint. This silently passed None
+    # as prior context to every debrief. Take whichever analysis we actually have.
+    prior_analysis = None
+    for _k in (await cache_keys(f"ai_analysis:{req.race_id}:*") or []):
+        prior_analysis = await cache_get(_k)
+        if prior_analysis:
+            break
 
     try:
         result = await secretariat.debrief_race(req.race_id, race_data, race_result, prior_analysis)

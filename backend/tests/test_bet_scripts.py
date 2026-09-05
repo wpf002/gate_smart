@@ -99,12 +99,11 @@ def test_nightly_locks_at_the_experience_level_the_app_requests():
     assert 'BATCH_EXPERIENCE = "beginner"' in nightly
     assert "LOCK_EXPERIENCE = BATCH_EXPERIENCE" in nightly
 
-    # The cache key must be built from the constants, never a literal again.
-    key_line = re.search(r'cache_key = f"ai_analysis:\{race_id\}:([^"]+)"', nightly)
-    assert key_line, "analysis cache key moved or changed shape"
-    assert "{LOCK_MODE}" in key_line.group(1)
-    assert "{LOCK_EXPERIENCE}" in key_line.group(1)
-    assert "default" not in key_line.group(1)
+    # The key is now built by one shared function rather than an f-string in
+    # each caller — it had drifted into four files in three different shapes,
+    # and two of those could never match what the nightly job writes.
+    assert "analysis_cache_key(race_id, LOCK_MODE, LOCK_EXPERIENCE, fp)" in nightly
+    assert 'f"ai_analysis:' not in nightly, "cache key must not be rebuilt inline"
 
     # Both generation paths must pass it, or they warm a key nobody reads.
     assert nightly.count("experience_level=BATCH_EXPERIENCE") == 1
