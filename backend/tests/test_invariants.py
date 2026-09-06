@@ -169,3 +169,21 @@ async def test_an_upstream_outage_does_not_double_alert(monkeypatch):
 
     monkeypatch.setattr("app.services.racing_api.get_na_racecards_full", boom)
     assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 73)])) is None
+
+
+def test_a_naive_heartbeat_still_computes_an_age():
+    """The smoke check stamps datetime.utcnow(), which carries no timezone.
+    Subtracting that from an aware now() raises TypeError, and the health
+    endpoint's broad except would have swallowed it — leaving the field
+    permanently null and the external dead-man's switch permanently red for a
+    reason that had nothing to do with the scheduler."""
+    import datetime as dt
+    from pathlib import Path
+
+    naive = dt.datetime.utcnow().isoformat()
+    parsed = dt.datetime.fromisoformat(naive)
+    assert parsed.tzinfo is None, "precondition: the stamp really is naive"
+
+    main_src = (Path(__file__).resolve().parent.parent / "main.py").read_text()
+    assert "if last.tzinfo is None:" in main_src
+    assert "last.replace(tzinfo=_dt.timezone.utc)" in main_src

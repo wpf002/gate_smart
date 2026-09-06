@@ -107,6 +107,12 @@ async def health():
         stamp = await cache_get("smoke:last_run_at")
         if stamp:
             last = _dt.datetime.fromisoformat(stamp)
+            # The smoke check stamps datetime.utcnow(), which is NAIVE. Comparing
+            # that to an aware now() raises, and the except below would have
+            # swallowed it — leaving the field permanently null and the
+            # dead-man's switch permanently red for the wrong reason.
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=_dt.timezone.utc)
             smoke_age = int((_dt.datetime.now(_dt.timezone.utc) - last).total_seconds())
     except Exception:
         pass
