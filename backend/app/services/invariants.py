@@ -162,12 +162,57 @@ async def check_cost_per_pick(db) -> str | None:
     return None
 
 
+async def check_feed_coverage(db) -> str | None:
+    """Every race the feed offered should have a pick.
+
+    A silent gap is indistinguishable from a light card by looking at the slate
+    alone — 73 races on a Monday is normal, 73 races when the feed offered 168
+    is a third of the day missing. The only way to tell them apart is to ask the
+    feed what it had.
+
+    Compares the most recently REPORTED day, so the slate is final. Returns None
+    when the feed cannot be reached: an upstream outage is the smoke check's
+    problem, and reporting it here too would double-alert on one fault.
+    """
+    rows = await _fetch(db, """
+        SELECT race_date, COUNT(*) n FROM race_predictions
+        WHERE analysis_mode = 'auto_daily' AND user_id IS NULL
+          AND race_date = (SELECT MAX(report_date) FROM daily_accuracy_reports)
+        GROUP BY 1
+    """)
+    if not rows:
+        return None
+    race_date, predicted = rows[0]
+    if predicted < _MIN_PLAUSIBLE_SLATE:
+        return None
+
+    try:
+        from app.services.racing_api import get_na_racecards_full
+        data = await get_na_racecards_full(date=race_date.isoformat())
+        offered = len(data.get("racecards") or [])
+    except Exception as e:
+        log.info(f"[invariants] feed coverage skipped, upstream unreachable: {e}")
+        return None
+    if not offered:
+        return None
+
+    missing = offered - predicted
+    # 5% slack: a race can legitimately be dropped (cancelled after the slate
+    # was built, no runners, an unparseable card), and flagging one missing race
+    # out of 200 would make this alert noise.
+    if missing > 0 and missing / offered > 0.05:
+        return (f"{race_date}: the feed offered {offered} races but only {predicted} "
+                f"were picked — {missing} missing ({missing/offered:.0%} of the card)")
+    return None
+
+
 CHECKS = (
     ("pick model mix", check_pick_model_mix),
     ("lesson provenance shape", check_provenance_shape),
     ("form archive integrity", check_form_archive_integrity),
     ("grading self-consistency", check_grading_self_consistency),
     ("slate coverage", check_slate_coverage),
+    ("feed coverage", check_feed_coverage),
     ("cost per pick", check_cost_per_pick),
 )
 

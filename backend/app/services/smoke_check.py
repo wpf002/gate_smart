@@ -339,3 +339,12 @@ async def run_smoke_check() -> None:
             _last_alert_at = None
 
     _last_status = current
+
+    # Heartbeat for the external dead-man's switch. If the scheduler stops, this
+    # stops advancing — and because the thing that would normally alert lives in
+    # the same process that just died, only something OUTSIDE Railway can notice.
+    try:
+        from app.core.cache import cache_set
+        await cache_set("smoke:last_run_at", now.isoformat(), ex=86400)
+    except Exception:
+        pass

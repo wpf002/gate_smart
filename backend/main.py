@@ -95,10 +95,27 @@ async def health():
     from app.core.database import db_status
     db_ok = await db_status()
 
+    # Age of the last smoke-check run, in seconds. The scheduler owns every
+    # nightly job and the smoke check itself, so if it dies the process keeps
+    # serving HTTP and nothing complains. An external watcher reads this to tell
+    # "up" apart from "up but doing nothing".
+    smoke_age = None
+    try:
+        import datetime as _dt
+
+        from app.core.cache import cache_get
+        stamp = await cache_get("smoke:last_run_at")
+        if stamp:
+            last = _dt.datetime.fromisoformat(stamp)
+            smoke_age = int((_dt.datetime.now(_dt.timezone.utc) - last).total_seconds())
+    except Exception:
+        pass
+
     return {
         "status": "ok",
         "environment": settings.ENVIRONMENT,
         "redis": "connected" if redis_ok else "disconnected",
         "database": db_ok,
+        "scheduler_age_seconds": smoke_age,
         "version": "1.0.0",
     }

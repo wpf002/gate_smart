@@ -128,3 +128,44 @@ def test_every_check_is_registered():
         if n.startswith("check_") and callable(getattr(invariants, n))
     }
     assert defined == registered, "every check_* must appear in CHECKS"
+
+
+@pytest.mark.asyncio
+async def test_a_missing_third_of_the_card_is_caught(monkeypatch):
+    """A silent gap looks exactly like a light card from the slate alone. The
+    only way to tell them apart is to ask the feed what it offered."""
+    import datetime
+
+    async def fake_feed(date=None):
+        return {"racecards": [{} for _ in range(168)]}
+
+    monkeypatch.setattr("app.services.racing_api.get_na_racecards_full", fake_feed)
+    db = FakeDB([(datetime.date(2026, 9, 4), 73)])
+    msg = await invariants.check_feed_coverage(db)
+    assert msg and "missing" in msg
+
+
+@pytest.mark.asyncio
+async def test_a_full_card_and_a_rounding_gap_are_silent(monkeypatch):
+    import datetime
+
+    async def fake_feed(date=None):
+        return {"racecards": [{} for _ in range(168)]}
+
+    monkeypatch.setattr("app.services.racing_api.get_na_racecards_full", fake_feed)
+    assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 168)])) is None
+    # One cancelled race out of 168 must not fire.
+    assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 165)])) is None
+
+
+@pytest.mark.asyncio
+async def test_an_upstream_outage_does_not_double_alert(monkeypatch):
+    """The smoke check already owns "the feed is down". Reporting it here too
+    would fire two alarms for one fault."""
+    import datetime
+
+    async def boom(date=None):
+        raise RuntimeError("upstream 503")
+
+    monkeypatch.setattr("app.services.racing_api.get_na_racecards_full", boom)
+    assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 73)])) is None

@@ -1,0 +1,41 @@
+# Dead-man's switch.
+#
+# The smoke check catches a broken app, but it runs INSIDE the app — from the
+# same APScheduler that owns every nightly job. If that scheduler dies the
+# process keeps serving HTTP, /health keeps returning ok, and the thing that
+# would normally raise the alarm is the thing that died. Nothing on Railway can
+# notice that; the watcher has to live somewhere else.
+#
+# GitHub Actions is that somewhere else, and it is free.
+name: deadman
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Backend responds and its scheduler is alive
+        run: |
+          set -euo pipefail
+          BODY=$(curl -fsS --max-time 30 https://backend-production-15e941.up.railway.app/health)
+          echo "$BODY"
+
+          AGE=$(echo "$BODY" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("scheduler_age_seconds") or -1)')
+
+          # The smoke check runs every 5 minutes. Allow an hour before calling
+          # it dead: a deploy restart resets the heartbeat, and one missed run
+          # is not an outage. Anything past that means the scheduler stopped and
+          # no nightly job is running either.
+          if [ "$AGE" -lt 0 ]; then
+            echo "::error::No scheduler heartbeat. Either the app just restarted, or the scheduler never started."
+            exit 1
+          fi
+          if [ "$AGE" -gt 3600 ]; then
+            echo "::error::Scheduler heartbeat is ${AGE}s old — APScheduler has stopped. Nightly jobs are NOT running."
+            exit 1
+          fi
+          echo "Scheduler heartbeat ${AGE}s old — healthy."
