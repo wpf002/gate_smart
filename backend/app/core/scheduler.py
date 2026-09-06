@@ -120,6 +120,10 @@ async def job_score_lessons() -> None:
     await _run_script("score_lessons.py")
 
 
+async def job_daily_invariants() -> None:
+    await _run_script("daily_invariants.py")
+
+
 async def job_race_alerts() -> None:
     try:
         from app.services.race_alerts import check_and_send_race_alerts
@@ -438,6 +442,18 @@ def create_scheduler() -> AsyncIOScheduler | None:
     # retires the ones measurably worse than no lesson. Runs after reflect has
     # written the night's playbook, so a lesson minted today is scoreable from
     # tomorrow rather than a day later.
+    # Asserts production is doing the right thing, not merely that it is up.
+    # Runs after accuracy has settled yesterday's slate, so coverage and grading
+    # checks see a complete day.
+    scheduler.add_job(
+        job_daily_invariants,
+        CronTrigger(hour=16, minute=0),
+        id="daily_invariants",
+        name="Daily production invariants (16:00 UTC)",
+        misfire_grace_time=3600,
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.add_job(
         job_score_lessons,
         CronTrigger(hour=15, minute=30),

@@ -88,7 +88,10 @@ class RacePrediction(Base):
     # prompt carried. The ids are the provenance that makes a lesson's record
     # measurable: an in-scope race that did NOT carry the lesson is its control.
     lesson_arm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    lesson_ids: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    # none_as_null: without it a Python None is stored as a JSON `null`, which
+    # passes `IS NOT NULL`, decodes back to None, and was silently counted as
+    # control evidence for lessons the race never carried.
+    lesson_ids: Mapped[Optional[list]] = mapped_column(JSON(none_as_null=True), nullable=True)
     # Named angle for diverging from the morning-line favorite; see fade_reason.py
     fade_reason: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     # True when the deep-fade re-ranker promoted the model's second choice.
