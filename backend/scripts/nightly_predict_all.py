@@ -395,6 +395,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_ids JSONB"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS fade_reason VARCHAR(30)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_applied BOOLEAN DEFAULT FALSE"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_eligible BOOLEAN DEFAULT FALSE"))
 
     ssl_ctx = ssl.create_default_context()
     client = anthropic.AsyncAnthropic(
@@ -652,10 +653,17 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         # favorite, Secretariat's own second choice beats it (12.9% vs 20.4%
         # over 4,318 races, holding out of sample at +7.7 pts). Applied after
         # the model so the stored pick, the cached analysis and the UI all agree.
-        from app.services.rerank import apply_deep_fade_demotion
+        from app.services.rerank import apply_deep_fade_demotion, should_demote
         rerank_applied = False
+        # Eligible = this race met the deep-fade condition, whichever arm it
+        # landed in. Without it the control arm is invisible and the only
+        # available comparison is re-ranked races against ordinary ones — which
+        # are not comparable, since deep-fade races are the hard ones.
+        rerank_eligible = bool(analysis and second and should_demote(
+            market.get("top_pick_odds"), market.get("favorite_odds"),
+            market.get("top_pick_is_favorite")))
         if analysis and second:
-            rerank_applied = apply_deep_fade_demotion(analysis, market)
+            rerank_applied = apply_deep_fade_demotion(analysis, market, race_id)
             if rerank_applied:
                 first, second = second, first
                 first_num = _num((analysis.get("predicted_finish") or {}).get("first"))
@@ -751,6 +759,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 # same helper the prompt uses, so provenance cannot drift from
                 # what the model was told.
                 "rerank_applied": rerank_applied,
+                "rerank_eligible": rerank_eligible,
                 "lesson_arm": lesson_arm,
                 "lesson_ids": lesson_ids,
                 # Which market-divergence angle was claimed. Scored later to find

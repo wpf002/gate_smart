@@ -96,6 +96,9 @@ class RacePrediction(Base):
     fade_reason: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     # True when the deep-fade re-ranker promoted the model's second choice.
     rerank_applied: Mapped[Optional[bool]] = mapped_column(Boolean, default=False)
+    # Met the deep-fade condition, whichever A/B arm it landed in — this is what
+    # makes the control group identifiable.
+    rerank_eligible: Mapped[Optional[bool]] = mapped_column(Boolean, default=False)
     top_pick_win_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_place_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     top_pick_show_payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

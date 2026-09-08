@@ -12,7 +12,14 @@ cutoff, +7.7 after (n=2,039, p<0.0001). Pick #2 wins 20.4%, nowhere near the
 ~33.9% a favorite wins, so this reorders two horses Secretariat already chose
 rather than surrendering to the market.
 """
-from app.services.rerank import DEEP_FADE_RATIO, apply_deep_fade_demotion, should_demote
+from app.services.rerank import (
+    DEEP_FADE_RATIO, apply_deep_fade_demotion, rerank_arm_for_race, should_demote,
+)
+
+
+def _on_arm() -> str:
+    """A race id that lands in the treatment arm, so the swap tests exercise it."""
+    return next(f"R{i}" for i in range(500) if rerank_arm_for_race(f"R{i}") == "on")
 
 
 def _analysis():
@@ -27,7 +34,7 @@ def _analysis():
 def test_a_deep_fade_yields_to_its_own_second_choice():
     a = _analysis()
     assert apply_deep_fade_demotion(a, {
-        "top_pick_odds": 10.0, "favorite_odds": 2.0, "top_pick_is_favorite": False})
+        "top_pick_odds": 10.0, "favorite_odds": 2.0, "top_pick_is_favorite": False}, _on_arm())
     assert a["predicted_finish"]["first"]["horse_name"] == "Second Choice"
     assert a["predicted_finish"]["second"]["horse_name"] == "Longshot"
 
@@ -37,7 +44,7 @@ def test_only_the_top_two_slots_move():
     was measured about third and fourth, so nothing there is touched."""
     a = _analysis()
     apply_deep_fade_demotion(a, {
-        "top_pick_odds": 10.0, "favorite_odds": 2.0, "top_pick_is_favorite": False})
+        "top_pick_odds": 10.0, "favorite_odds": 2.0, "top_pick_is_favorite": False}, _on_arm())
     assert a["predicted_finish"]["third"]["horse_name"] == "Third"
     assert a["predicted_finish"]["fourth"]["horse_name"] == "Fourth"
 
@@ -84,3 +91,23 @@ def test_the_nightly_job_recomputes_market_context_after_a_swap():
     after = src[src.index("if rerank_applied:"):]
     assert "first, second = second, first" in after[:400]
     assert "market = compute_market_context(" in after[:900]
+
+
+def test_the_control_arm_leaves_an_eligible_race_alone():
+    """Half the deep-fade races are deliberately untouched. Without a control
+    the only comparison available is re-ranked races against ordinary ones —
+    and those are not comparable, since deep-fade races are the hard ones."""
+    off = next(f"R{i}" for i in range(500) if rerank_arm_for_race(f"R{i}") == "off")
+    a = _analysis()
+    assert not apply_deep_fade_demotion(a, {
+        "top_pick_odds": 10.0, "favorite_odds": 2.0, "top_pick_is_favorite": False}, off)
+    assert a["predicted_finish"]["first"]["horse_name"] == "Longshot"
+
+
+def test_the_arm_split_is_stable_and_roughly_even():
+    from app.services.rerank import RERANK_AB_PERCENT
+
+    ids = [f"TRK_{i}-{i % 9}" for i in range(3000)]
+    assert len({rerank_arm_for_race("SAR_4-2") for _ in range(20)}) == 1
+    on = sum(rerank_arm_for_race(r) == "on" for r in ids) / len(ids)
+    assert abs(on * 100 - RERANK_AB_PERCENT) < 5

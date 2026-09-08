@@ -37,6 +37,25 @@ log = logging.getLogger(__name__)
 # number of affected races falls; 2.0 was the best trade of the two.
 DEEP_FADE_RATIO = float(os.getenv("DEEP_FADE_RATIO", "2.0"))
 
+# The rule was justified on win rate alone, and win rate was the only thing the
+# data could support: the demoted horse's price was never stored, so the ROI
+# effect of promoting a shorter-priced second choice was literally unmeasurable.
+# Promoting pick #2 takes a shorter price by construction, so a win-rate gain
+# can coexist with a money loss. Until that is measured, the rule runs on half
+# the eligible races and the other half is left alone as a control.
+RERANK_AB_PERCENT = int(os.getenv("RERANK_AB_PERCENT", "50"))
+
+
+def rerank_arm_for_race(race_id: str) -> str:
+    """"on" or "off" for a deep-fade race. Deterministic, own salt."""
+    if RERANK_AB_PERCENT >= 100:
+        return "on"
+    if RERANK_AB_PERCENT <= 0 or not race_id:
+        return "off"
+    import hashlib
+    bucket = int(hashlib.md5(f"rerank:{race_id}".encode()).hexdigest()[:8], 16) % 100
+    return "on" if bucket < RERANK_AB_PERCENT else "off"
+
 
 def should_demote(top_pick_odds, favorite_odds, top_pick_is_favorite) -> bool:
     """Whether this race's top pick is a deep fade that should yield to pick #2."""
@@ -51,7 +70,7 @@ def should_demote(top_pick_odds, favorite_odds, top_pick_is_favorite) -> bool:
     return top / fav >= DEEP_FADE_RATIO
 
 
-def apply_deep_fade_demotion(analysis: dict, market: dict) -> bool:
+def apply_deep_fade_demotion(analysis: dict, market: dict, race_id: str = "") -> bool:
     """Swap predicted_finish first and second when the top pick is a deep fade.
 
     Mutates `analysis` in place. Returns True when a swap happened, so callers
@@ -67,6 +86,8 @@ def apply_deep_fade_demotion(analysis: dict, market: dict) -> bool:
         market.get("favorite_odds"),
         market.get("top_pick_is_favorite"),
     ):
+        return False
+    if rerank_arm_for_race(race_id) != "on":
         return False
 
     finish = analysis.get("predicted_finish")
