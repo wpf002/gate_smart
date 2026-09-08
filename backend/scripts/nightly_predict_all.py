@@ -218,6 +218,12 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
                 {**race, "race_id": race_id}, mode=mode,
                 experience_level=BATCH_EXPERIENCE,
                 model=pick_model_for_race(race_id),
+                # A ~150-race batch drains over far more than five minutes, so
+                # the default cache entry kept expiring mid-run and every few
+                # races paid to write the ~5.5k-token system prefix again. The
+                # 1h TTL holds it for the whole batch. Same prompt, same model,
+                # same output — only the cache lifetime changes.
+                cache_ttl="1h",
             )
         except Exception as e:
             print(f"  batch: build failed for {race_id} ({e}); will run sync")

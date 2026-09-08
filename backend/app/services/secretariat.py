@@ -362,25 +362,36 @@ INTERNAL CONSISTENCY RULE: Within a single response, the horse you name as predi
 Always respond in valid JSON as specified in each prompt. No markdown inside string values. No extra text outside the JSON object."""
 
 
-def _cached_system(extra: str = "") -> list[dict]:
+def _cached_system(extra: str = "", ttl: str | None = None) -> list[dict]:
     """System param with prompt caching enabled.
 
     SECRETARIAT_SYSTEM is ~5.5k tokens and was being re-billed at full price on
     every call (95% of all spend flows through it). As a cached block it bills at
-    0.1x on every hit; the nightly run makes 100+ calls inside the 5-minute cache
-    TTL, so hits are near-guaranteed. `extra` (e.g. the calibration/lessons block,
-    which changes once per day) becomes a second cached block layered on top.
+    0.1x on every hit; the nightly run makes 100+ calls inside the cache TTL, so
+    hits are near-guaranteed. `extra` (e.g. the calibration/lessons block, which
+    changes once per day) becomes a second cached block layered on top.
+
+    `ttl` picks the cache lifetime: None/"5m" is the default, "1h" the extended
+    one. The nightly batch needs "1h" — a ~150-race batch takes far longer than
+    five minutes to drain, so entries kept expiring mid-run and were rewritten.
+    Measured over 2026-09-05..08: 2.12M cache-write tokens against 1.79M reads,
+    i.e. only 46% of cache traffic was hits, and a write bills at 1.25x (2x at
+    1h) versus 0.1x for a read. Interactive calls stay on 5m, where a longer
+    (and pricier-to-write) entry would not pay for itself.
     """
+    cc: dict = {"type": "ephemeral"}
+    if ttl:
+        cc["ttl"] = ttl
     blocks = [{
         "type": "text",
         "text": SECRETARIAT_SYSTEM,
-        "cache_control": {"type": "ephemeral"},
+        "cache_control": cc,
     }]
     if extra:
         blocks.append({
             "type": "text",
             "text": extra,
-            "cache_control": {"type": "ephemeral"},
+            "cache_control": dict(cc),
         })
     return blocks
 
@@ -880,6 +891,7 @@ async def build_analyze_request(
     bankroll: float = None,
     experience_level: str = None,
     model: str | None = None,
+    cache_ttl: str | None = None,
 ) -> dict:
     """Build the messages.create kwargs for a full race analysis.
 
@@ -988,7 +1000,7 @@ Return this JSON exactly:
         "model": model or PICK_MODEL_DEFAULT,
         "max_tokens": 5000,
         "temperature": 0.2,
-        "system": _cached_system(cal_context),
+        "system": _cached_system(cal_context, ttl=cache_ttl),
         "messages": [{"role": "user", "content": prompt}],
     }
 
