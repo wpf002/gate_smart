@@ -234,10 +234,15 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
         return {}
 
     try:
-        # Batches bypass tracked_create; surface today's spend before the
-        # single largest billing event of the day. Never blocks.
-        from app.core.llm_cost import tracked_create, warn_if_over_soft_budget
+        # Batches bypass tracked_create, so the cap has to be checked here by
+        # hand — this submit is the single largest billing event of the day and
+        # would otherwise be the one thing the cap could not stop.
+        from app.core.llm_cost import (
+            DailyBudgetExceeded, enforce_daily_cap, tracked_create,
+            warn_if_over_soft_budget,
+        )
         await warn_if_over_soft_budget("nightly_predict_all_batch")
+        await enforce_daily_cap("nightly_predict_all_batch")
 
         # Pre-warm each distinct cached system prefix before submitting. Batch
         # requests run with real concurrency, so the first wave to hit a cold
@@ -285,6 +290,11 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
             print(f"  batch: pre-warm skipped ({type(e).__name__}: {e})")
 
         batch = await client.messages.batches.create(requests=requests)
+    except DailyBudgetExceeded:
+        # Must NOT be swallowed by the generic handler below: its fallback is to
+        # analyze every race synchronously, which bills MORE than the batch we
+        # just refused. Propagate and let main() end the run.
+        raise
     except Exception as e:
         print(f"  batch: submit failed ({type(e).__name__}: {e}) — falling back to sync for all")
         return {}
@@ -520,6 +530,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
     from app.services.secretariat import (
         analyze_race, compute_input_fingerprint, pick_depth_for_race, pick_model_for_race,
     )
+    from app.core.llm_cost import DailyBudgetExceeded, enforce_daily_cap
 
     # Mode used for the cached analysis. Frontend's default risk tolerance
     # is "medium" (see RaceDetailPage MODES const), so caching under "medium"
@@ -539,6 +550,15 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
     # this can only reduce cost, never cost us a pick.
     try:
         batch_analyses = await run_batch_analyses(client, all_races, LOCK_MODE)
+    except DailyBudgetExceeded as e:
+        # Same trap as inside run_batch_analyses: the generic handler's fallback
+        # is "run all races sync", which costs more than the batch just refused.
+        # The cap means stop, not spend differently.
+        print(f"\n⛔ {e}")
+        print(f"   Nothing analyzed for {target_date.isoformat()}. Existing picks "
+              f"are untouched and /analyze still serves a write-up on first view. "
+              f"Raise LLM_DAILY_CAP_USD and re-run with --only-missing to resume.")
+        return
     except Exception as e:
         print(f"  batch phase failed entirely ({e}); running all races sync")
         batch_analyses = {}
@@ -576,6 +596,18 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         # for every race on the card.
         is_lean = pick_depth_for_race(race_id) == "lean"
         if analysis is None and not is_lean:
+            # analyze_race is shared with the user-facing /analyze route, so the
+            # cap is applied here rather than inside it — a visitor waiting on a
+            # race must never be refused, only this unattended sweep.
+            try:
+                await enforce_daily_cap("nightly_predict_all_sync")
+            except DailyBudgetExceeded as e:
+                print(f"\n⛔ {e}")
+                print(f"   Stopping the sweep with {len(all_races) - i} races unanalyzed. "
+                      f"They keep their existing picks, and /analyze still generates "
+                      f"a write-up on first view. Re-run with --only-missing after "
+                      f"raising LLM_DAILY_CAP_USD or once the day rolls over.")
+                break
             made_sync_call = True
             try:
                 analysis = await analyze_race(

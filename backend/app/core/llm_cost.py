@@ -20,6 +20,53 @@ log = logging.getLogger(__name__)
 LLM_SOFT_ALERT_USD = float(os.getenv("LLM_SOFT_ALERT_USD", "25"))
 _BUDGET_CACHE_TTL_SECONDS = 60
 
+# --- Daily hard cap (UNATTENDED work only) ---------------------------------
+# The soft alert above never blocks, on the principle that functionality wins.
+# That principle holds for anything a person is waiting on, and this cap does
+# not touch those calls — open a race and you still get your analysis.
+#
+# It exists because the principle does not extend to unattended batch work. The
+# nightly slate analyzes the entire NA racecard whether or not anyone opens a
+# single race, so an unbounded failure there bills a full slate per retry with
+# nobody watching. This is the valve for exactly that case.
+#
+# Default 0 = disabled, so nothing changes for a deployment that never sets it.
+LLM_DAILY_CAP_USD = float(os.getenv("LLM_DAILY_CAP_USD", "0"))
+
+
+class DailyBudgetExceeded(RuntimeError):
+    """Raised when unattended work would push today's spend past the hard cap.
+
+    Only ever raised for calls marked interactive=False. Callers are expected to
+    stop the current batch cleanly rather than treat this as a failure to retry —
+    retrying is the behaviour the cap exists to stop.
+    """
+
+    def __init__(self, spend: float, cap: float, endpoint: str) -> None:
+        self.spend, self.cap, self.endpoint = spend, cap, endpoint
+        super().__init__(
+            f"daily LLM cap reached: ${spend:.2f} of ${cap:.2f} spent today; "
+            f"blocked unattended call to {endpoint}"
+        )
+
+
+async def enforce_daily_cap(endpoint: str) -> None:
+    """Raise DailyBudgetExceeded if today's spend is at or over the hard cap.
+
+    Fails OPEN via today_spend_usd() — a database problem must not be able to
+    halt the slate, so an unreadable ledger reads as $0 spent and work proceeds.
+    """
+    if LLM_DAILY_CAP_USD <= 0:
+        return
+    spend = await today_spend_usd()
+    if spend >= LLM_DAILY_CAP_USD:
+        log.error(
+            "llm_cost: DAILY CAP REACHED — $%.2f of $%.2f today. Blocking "
+            "unattended call to %s. User-facing requests are unaffected.",
+            spend, LLM_DAILY_CAP_USD, endpoint,
+        )
+        raise DailyBudgetExceeded(spend, LLM_DAILY_CAP_USD, endpoint)
+
 # (spend_usd, fetched_at_monotonic, date) — avoids a DB round-trip per call.
 _budget_cache: tuple[float, float, datetime.date] | None = None
 
@@ -181,13 +228,22 @@ async def warn_if_over_soft_budget(endpoint: str) -> None:
         )
 
 
-async def tracked_create(client, *, endpoint: str, user_id: int | None = None, **create_kwargs) -> Any:
+async def tracked_create(
+    client, *, endpoint: str, user_id: int | None = None,
+    interactive: bool = True, **create_kwargs,
+) -> Any:
     """Drop-in wrapper for `client.messages.create(...)` that logs cost.
 
     Pass `endpoint="analyze_race"` (or similar) so daily breakdowns can group by feature.
     Pass `user_id` so per-user usage can be attributed (omit for background jobs).
+    Pass `interactive=False` for unattended work (nightly slate, catchup jobs) to
+    subject it to the daily hard cap; it raises DailyBudgetExceeded once spend is
+    over. Interactive calls — anything a person is waiting on — default to True
+    and are never blocked.
     All other kwargs are forwarded verbatim.
     """
+    if not interactive:
+        await enforce_daily_cap(endpoint)
     response = await client.messages.create(**create_kwargs)
     usage = getattr(response, "usage", None)
     in_tok = getattr(usage, "input_tokens", 0) if usage else 0
