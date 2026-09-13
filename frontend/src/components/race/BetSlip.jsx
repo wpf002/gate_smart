@@ -39,10 +39,7 @@ function Leg({ leg, settled }) {
   }[tone];
 
   return (
-    <div style={{
-      display: 'flex', gap: 12, padding: '12px 14px',
-      borderLeft: `3px solid ${bar}`, borderBottom: '1px dashed var(--border-subtle)',
-    }}>
+    <div className="ticket-leg" style={{ display: 'flex', gap: 12, padding: '12px 14px', '--leg-bar': bar }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-primary)' }}>
@@ -125,7 +122,9 @@ export default function BetSlip({ raceId, raceFinished = false, onPlaceBet }) {
         </span>
       </div>
 
-      {legs.map((leg) => <Leg key={leg.type} leg={leg} settled={settled} />)}
+      <div className="ticket-legs">
+        {legs.map((leg) => <Leg key={leg.type} leg={leg} settled={settled} />)}
+      </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', gap: 10 }}>
         {settled && summary ? (

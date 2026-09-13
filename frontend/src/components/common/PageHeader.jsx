@@ -5,7 +5,7 @@ export default function PageHeader({ title, subtitle, showBack = false, right = 
   const navigate = useNavigate();
 
   return (
-    <div style={{
+    <div className="page-header" style={{
       display: 'flex',
       alignItems: 'center',
       gap: 10,

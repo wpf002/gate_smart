@@ -94,20 +94,25 @@ export default function ContestPick({ raceId, raceDate, runners = [], raceFinish
   };
 
   return (
-    <Shell column>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
-          BEAT SECRETARIAT
-        </span>
-        <button onClick={() => navigate('/contest')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>
-          Leaderboard →
-        </button>
+    <div className="contest-pick" style={{
+      marginBottom: 16, padding: '12px 14px', background: 'var(--bg-card)',
+      border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
+    }}>
+      <div className="contest-pick-intro">
+        <div className="contest-pick-title">
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
+            BEAT SECRETARIAT
+          </span>
+          <button onClick={() => navigate('/contest')} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}>
+            Leaderboard →
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+          Pick the winner. 10 points if you're right, +5 if Secretariat is wrong.
+          {secretariatPick ? ` Secretariat has ${secretariatPick}.` : ''}
+        </div>
       </div>
-      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-        Pick the winner. 10 points if you're right, +5 if Secretariat is wrong.
-        {secretariatPick ? ` Secretariat has ${secretariatPick}.` : ''}
-      </span>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className="contest-pick-form">
         <select
           value={choice || mine?.horse_name || ''}
           onChange={(e) => setChoice(e.target.value)}
@@ -121,28 +126,25 @@ export default function ContestPick({ raceId, raceDate, runners = [], raceFinish
         </select>
         <button
           className="btn btn-primary"
-          style={{ fontSize: 12, padding: '6px 14px' }}
+          style={{ fontSize: 12, padding: '6px 14px', flexShrink: 0 }}
           disabled={saving || !choice || choice === mine?.horse_name}
           onClick={submit}
         >
           {mine ? 'Change' : 'Lock It In'}
         </button>
       </div>
-      {mine && !choice && <span style={{ fontSize: 12, color: 'var(--accent-green-bright)' }}>Locked in: {mine.horse_name}</span>}
-      {error && <span style={{ fontSize: 12, color: 'var(--accent-red-bright)' }}>{error}</span>}
-    </Shell>
+      {mine && !choice && <span className="contest-pick-note" style={{ fontSize: 12, color: 'var(--accent-green-bright)' }}>Locked in: {mine.horse_name}</span>}
+      {error && <span className="contest-pick-note" style={{ fontSize: 12, color: 'var(--accent-red-bright)' }}>{error}</span>}
+    </div>
   );
 }
 
-function Shell({ children, column = false }) {
+function Shell({ children }) {
   return (
     <div style={{
       marginBottom: 16, padding: '12px 14px', background: 'var(--bg-card)',
       border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
-      display: 'flex', gap: 10,
-      flexDirection: column ? 'column' : 'row',
-      justifyContent: column ? 'flex-start' : 'space-between',
-      alignItems: column ? 'stretch' : 'center',
+      display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center',
     }}>
       {children}
     </div>

@@ -40,21 +40,41 @@ const CURVE = {
   total_bets: 458, staked: 916.0, net: -9.18, roi: -0.01, unpriced_excluded: 2,
 };
 
+// Trimmed /api/races/today racecards. "Now" in these tests is 18:00 UTC.
+const NOW = Date.parse('2026-09-13T18:00:00Z');
+const card = (race_id, off_dt, extra = {}) => ({
+  race_id, off_dt, course: 'Churchill Downs', field_size: 9, is_cancelled: false, has_results: false, ...extra,
+});
+const TODAY = {
+  racecards: [
+    card('CD_1789257600000-9', '2026-09-13T22:00:00+00:00'),
+    card('CD_1789257600000-2', '2026-09-13T17:00:00+00:00', { has_results: true }),
+    card('CD_1789257600000-5', '2026-09-13T18:20:00+00:00'),
+    card('CD_1789257600000-6', '2026-09-13T19:00:00+00:00', { is_cancelled: true }),
+    card('GP_1789257600000-7', '2026-09-13T18:45:00+00:00', { course: 'Gulfstream Park' }),
+  ],
+};
+
 const api = {
   getLeaderboard: vi.fn(() => Promise.resolve(BOARD)),
   getContestProgress: vi.fn(() => Promise.resolve(ME)),
   setDisplayName: vi.fn(() => Promise.resolve({ display_name: 'Chalk Eater' })),
   getBetCurve: vi.fn(() => Promise.resolve(CURVE)),
+  getRacesToday: vi.fn(() => Promise.resolve({ racecards: [] })),
+  getRacesByDate: vi.fn(() => Promise.resolve({ racecards: [] })),
 };
 vi.mock('../utils/api', () => ({
   getLeaderboard: (...a) => api.getLeaderboard(...a),
   getContestProgress: (...a) => api.getContestProgress(...a),
   setDisplayName: (...a) => api.setDisplayName(...a),
   getBetCurve: (...a) => api.getBetCurve(...a),
+  getRacesToday: (...a) => api.getRacesToday(...a),
+  getRacesByDate: (...a) => api.getRacesByDate(...a),
 }));
 
 import ContestPage from '../pages/ContestPage';
 import BetCurve from '../components/accuracy/BetCurve';
+import NextToPost from '../components/contest/NextToPost';
 
 function wrap(node) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -65,6 +85,8 @@ function wrap(node) {
 
 beforeEach(() => {
   Object.values(api).forEach((f) => f.mockClear());
+  api.getRacesToday.mockImplementation(() => Promise.resolve({ racecards: [] }));
+  api.getRacesByDate.mockImplementation(() => Promise.resolve({ racecards: [] }));
   useAppStore.setState({ authToken: null });
 });
 
@@ -91,9 +113,9 @@ describe('ContestPage', () => {
   it('shows streaks and totals for a signed-in player', async () => {
     useAppStore.setState({ authToken: 'token' });
     wrap(<ContestPage />);
-    expect(await screen.findByText('Day streak')).toBeInTheDocument();
-    expect(screen.getByText('Beat streak')).toBeInTheDocument();
-    expect(screen.getByText('4/8')).toBeInTheDocument();
+    expect(await screen.findByText('4/8')).toBeInTheDocument();
+    expect(screen.getByText('Day Streak')).toBeInTheDocument();
+    expect(screen.getByText('Beat Streak')).toBeInTheDocument();
   });
 
   it('switches between today and this week', async () => {
@@ -101,6 +123,35 @@ describe('ContestPage', () => {
     await screen.findByText('Longshot Larry');
     fireEvent.click(screen.getByText('Today'));
     await waitFor(() => expect(api.getLeaderboard).toHaveBeenCalledWith('day'));
+  });
+});
+
+describe('NextToPost', () => {
+  it('lists only races still open for a pick, soonest first', async () => {
+    api.getRacesToday.mockImplementation(() => Promise.resolve(TODAY));
+    wrap(<NextToPost now={NOW} />);
+    expect(await screen.findByText('NEXT TO POST')).toBeInTheDocument();
+    // Race 2 already has results and race 6 is cancelled.
+    expect(screen.getAllByText(/^Race \d/).map((el) => el.textContent)).toEqual([
+      'Race 5 · 9 runners', 'Race 7 · 9 runners', 'Race 9 · 9 runners',
+    ]);
+    expect(screen.getByText('in 20 min')).toBeInTheDocument();
+    expect(api.getRacesByDate).not.toHaveBeenCalled();
+  });
+
+  it("falls back to tomorrow's card once today's last race is off", async () => {
+    api.getRacesToday.mockImplementation(() => Promise.resolve({ racecards: [card('CD_1789257600000-2', '2026-09-13T17:00:00+00:00')] }));
+    api.getRacesByDate.mockImplementation(() => Promise.resolve({ racecards: [card('SA_1789344000000-1', '2026-09-14T20:00:00+00:00', { course: 'Santa Anita' })] }));
+    wrap(<NextToPost now={NOW} />);
+    expect(await screen.findByText('Santa Anita')).toBeInTheDocument();
+    expect(screen.getByText('Tomorrow')).toBeInTheDocument();
+    expect(api.getRacesByDate).toHaveBeenCalledWith('tomorrow', 'usa');
+  });
+
+  it('renders nothing when no race is open', async () => {
+    const { container } = wrap(<NextToPost now={NOW} />);
+    await waitFor(() => expect(api.getRacesByDate).toHaveBeenCalled());
+    expect(container.textContent).toBe('');
   });
 });
 

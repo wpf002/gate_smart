@@ -1,53 +1,19 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getContestProgress, getLeaderboard, setDisplayName } from '../utils/api';
+import { useQuery } from '@tanstack/react-query';
+import { getContestProgress, getLeaderboard } from '../utils/api';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
+import NameEditor from '../components/contest/NameEditor';
+import NextToPost from '../components/contest/NextToPost';
 
 function Stat({ value, label, highlight = false }) {
   return (
-    <div style={{ textAlign: 'center', padding: '10px 4px' }}>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: highlight ? 'var(--accent-gold-bright)' : 'var(--text-primary)' }}>
+    <div className="contest-stat">
+      <div className="contest-stat-value" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: highlight ? 'var(--accent-gold-bright)' : 'var(--text-primary)' }}>
         {value}
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{label}</div>
-    </div>
-  );
-}
-
-function NameEditor({ current }) {
-  const queryClient = useQueryClient();
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState('');
-  const [error, setError] = useState('');
-
-  const save = async () => {
-    setError('');
-    try {
-      await setDisplayName(value);
-      setEditing(false);
-      queryClient.invalidateQueries({ queryKey: ['contest-me'] });
-      queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
-    } catch (e) {
-      setError(e?.response?.data?.detail || 'Could not save that name');
-    }
-  };
-
-  if (!editing) {
-    return (
-      <button onClick={() => { setValue(current.startsWith('Handicapper ') ? '' : current); setEditing(true); }}
-        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', padding: 0 }}>
-        {current} · Edit Name
-      </button>
-    );
-  }
-  return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-      <input value={value} maxLength={40} onChange={(e) => setValue(e.target.value)} placeholder="Leaderboard name" style={{ flex: 1, minWidth: 140 }} />
-      <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={save}>Save</button>
-      <button className="btn btn-ghost" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => setEditing(false)}>Cancel</button>
-      {error && <span style={{ width: '100%', fontSize: 12, color: 'var(--accent-red-bright)' }}>{error}</span>}
     </div>
   );
 }
@@ -66,25 +32,25 @@ export default function ContestPage() {
     <div>
       <PageHeader title="BEAT SECRETARIAT" subtitle="CALL THE WINNER BEFORE POST · FREE TO PLAY" />
 
-      <div style={{ padding: 16 }}>
+      <div className="contest-body">
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
           10 points for the winner, +5 more when Secretariat is wrong. No betting, no money.
         </div>
 
         <div className="contest-grid">
           {/* ── You ─────────────────────────────────────────── */}
-          {authToken && me ? (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)' }}>
-              <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
-                <NameEditor current={me.display_name} />
+          {authToken ? (
+            <div className="contest-you" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)', minHeight: 44 }}>
+                {me && <NameEditor current={me.display_name} />}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
-                <Stat value={me.points} label="Points" highlight />
-                <Stat value={me.pick_day_streak} label="Day streak" />
-                <Stat value={me.beat_secretariat_streak} label="Beat streak" />
-                <Stat value={`${me.wins}/${me.settled}`} label="Winners" />
-                <Stat value={me.beat_secretariat} label="Beat Secretariat" />
-                <Stat value={me.best_correct_streak} label="Best streak" />
+              <div className="contest-stats">
+                <Stat value={me ? me.points : '–'} label="Points" highlight />
+                <Stat value={me ? me.pick_day_streak : '–'} label="Day Streak" />
+                <Stat value={me ? me.beat_secretariat_streak : '–'} label="Beat Streak" />
+                <Stat value={me ? `${me.wins}/${me.settled}` : '–'} label="Winners" />
+                <Stat value={me ? me.beat_secretariat : '–'} label="Beat Secretariat" />
+                <Stat value={me ? me.best_correct_streak : '–'} label="Best Streak" />
               </div>
             </div>
           ) : (
@@ -96,6 +62,7 @@ export default function ContestPage() {
             </div>
           )}
 
+          <div className="contest-main">
           {/* ── Leaderboard ─────────────────────────────────── */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', gap: 10 }}>
@@ -151,6 +118,10 @@ export default function ContestPage() {
                 </div>
               );
             })}
+          </div>
+
+          {/* ── Races still open for a pick ─────────────────── */}
+          <NextToPost />
           </div>
         </div>
       </div>

@@ -13,6 +13,18 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => vi.fn() };
 });
 
+// Real /api/contest/me shape.
+const ME = {
+  display_name: 'Chalk Eater', pick_day_streak: 4, beat_secretariat_streak: 2,
+  best_correct_streak: 3, total_picks: 9, settled: 8, wins: 4, beat_secretariat: 2, points: 50,
+};
+const getContestProgress = vi.fn(() => Promise.resolve(ME));
+vi.mock('../utils/api', () => ({
+  getContestProgress: (...a) => getContestProgress(...a),
+  authUpdateProfile: vi.fn(() => Promise.resolve({})),
+  authLogout: vi.fn(() => Promise.resolve({})),
+}));
+
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -34,7 +46,10 @@ beforeEach(() => {
     },
     betSlip: [],
     advisorMessages: [],
+    authToken: null,
+    authUser: null,
   });
+  getContestProgress.mockClear();
 });
 
 describe('ProfilePage', () => {
@@ -43,16 +58,34 @@ describe('ProfilePage', () => {
     expect(screen.getByText('PROFILE')).toBeInTheDocument();
   });
 
-  it('renders experience level options', () => {
+  it('shows both experience levels with what each one means', () => {
     renderPage();
-    expect(screen.getAllByText('beginner').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('advanced')).toBeInTheDocument();
+    expect(screen.getByText('Beginner')).toBeInTheDocument();
+    expect(screen.getByText('Advanced')).toBeInTheDocument();
+    expect(screen.getByText(/Plain English/)).toBeInTheDocument();
+    expect(screen.getByText(/Full technical view/)).toBeInTheDocument();
   });
 
-  it('updates experience level when a segment is clicked', () => {
+  it('updates experience level when an option is clicked', () => {
     renderPage();
-    fireEvent.click(screen.getByText('advanced'));
+    fireEvent.click(screen.getByText('Advanced'));
     expect(useAppStore.getState().userProfile.experienceLevel).toBe('advanced');
+  });
+
+  it('shows the player name, progress and Sign Out when signed in', async () => {
+    useAppStore.setState({ authToken: 'token', authUser: { email: 'player@example.com' } });
+    renderPage();
+    expect(await screen.findByText('Chalk Eater')).toBeInTheDocument();
+    expect(screen.getByText('4/8')).toBeInTheDocument();
+    expect(screen.getByText('Beat Secretariat')).toBeInTheDocument();
+    expect(screen.getByText('Sign Out')).toBeInTheDocument();
+  });
+
+  it('asks guests to sign in and never fetches progress', () => {
+    renderPage();
+    expect(screen.getByText('Guest')).toBeInTheDocument();
+    expect(screen.getByText('Sign In')).toBeInTheDocument();
+    expect(getContestProgress).not.toHaveBeenCalled();
   });
 
   it('shows responsible gambling message', () => {

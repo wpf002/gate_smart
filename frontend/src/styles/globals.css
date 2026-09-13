@@ -35,6 +35,9 @@
 
   --bottom-nav-height: 64px;
   --sidebar-width: 104px;
+  /* Page headers and the sidebar logo block share this height on desktop so
+     their bottom borders form one line. */
+  --header-height: 72px;
 }
 
 /* ─── Reset ─────────────────────────────────────────────────────────────── */
@@ -63,6 +66,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
   overflow-x: hidden;
+}
+
+/* Form controls don't inherit the page font by default, so any button without
+   an explicit fontFamily rendered in Arial. */
+button, input, select, textarea {
+  font-family: inherit;
 }
 
 /* Prevent iOS zoom on input focus */
@@ -107,6 +116,10 @@ input, textarea, select {
     max-width: 100%;
   }
 
+  .page-header {
+    min-height: var(--header-height);
+  }
+
   /* hide bottom nav on desktop — sidebar takes over */
   .bottom-nav {
     display: none !important;
@@ -126,7 +139,7 @@ input, textarea, select {
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-secondary);
   flex-shrink: 0;
-  padding: 20px 0;
+  padding: 0 0 20px;
   position: sticky;
   top: 0;
   height: 100vh;
@@ -137,9 +150,10 @@ input, textarea, select {
   display: grid;
   place-items: center;
   width: 100%;
-  padding: 0 0 16px;
+  height: var(--header-height);
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .side-nav-logo > svg {
@@ -149,6 +163,7 @@ input, textarea, select {
 .side-nav-item {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   padding: 12px 12px;
   background: none;
@@ -159,7 +174,7 @@ input, textarea, select {
   font-size: 14px;
   font-weight: 600;
   width: 100%;
-  text-align: left;
+  text-align: center;
   transition: all 0.15s;
   border-radius: 0;
   position: relative;
@@ -658,28 +673,310 @@ select option {
   }
 }
 
-/* Contest page: your stats beside the leaderboard on desktop, stacked on mobile. */
+/* Contest page: stacked on mobile. On desktop your stats are a left column
+   beside the leaderboard and the races still open for a pick, and the stats
+   card stretches so both columns end on one line. */
+.contest-body {
+  padding: 16px;
+}
+
 .contest-grid {
   display: grid;
   gap: 16px;
 }
 
-@media (min-width: 1024px) {
-  .contest-grid {
-    grid-template-columns: minmax(300px, 380px) 1fr;
-    align-items: start;
-  }
-}
-
-/* Profile: settings beside your progress on desktop, stacked on mobile. */
-.profile-grid {
+.contest-main {
   display: grid;
   gap: 16px;
+  align-content: start;
+}
+
+.contest-you {
+  display: flex;
+  flex-direction: column;
+}
+
+.contest-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.contest-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  padding: 10px 4px;
+}
+
+.contest-stat-value {
+  font-size: 22px;
+}
+
+@media (min-width: 768px) {
+  .contest-body {
+    padding: 24px;
+  }
 }
 
 @media (min-width: 1024px) {
-  .profile-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
-    align-items: start;
+  .contest-grid {
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 20px;
   }
+
+  .contest-main {
+    gap: 20px;
+  }
+
+  .contest-stats {
+    flex: 1;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-rows: 1fr;
+  }
+
+  .contest-stat-value {
+    font-size: 28px;
+  }
+}
+
+/* Profile: stacked on mobile. On desktop the account card is a left column
+   beside settings and shortcuts stacked on the right. Stacking makes the page
+   taller, not wider, so a desktop screen isn't half blank under a thin strip of
+   stretched controls; the account card stretches to the same height so both
+   columns end on one line. */
+.profile-layout {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.profile-main {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.profile-identity {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-account {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+}
+
+.profile-account-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-avatar {
+  width: 52px;
+  height: 52px;
+  font-size: 24px;
+}
+
+.profile-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.profile-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  padding: 12px 4px;
+}
+
+.profile-stat:nth-child(even) {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.profile-stat:nth-child(n+3) {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.profile-stat-value {
+  font-size: 24px;
+}
+
+.profile-card-body {
+  padding: 16px;
+}
+
+.profile-experience {
+  display: grid;
+  gap: 8px;
+}
+
+@media (min-width: 768px) {
+  .profile-card-body {
+    padding: 22px 24px;
+  }
+
+  .profile-experience {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .profile-layout {
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 20px;
+    padding: 24px;
+  }
+
+  .profile-main {
+    gap: 20px;
+  }
+
+  .profile-footer {
+    grid-column: 1 / -1;
+  }
+
+  .profile-account {
+    flex-direction: column;
+    text-align: center;
+    gap: 14px;
+    padding: 32px 24px 24px;
+  }
+
+  .profile-account-text {
+    flex: none;
+    width: 100%;
+  }
+
+  .profile-name-row {
+    justify-content: center;
+  }
+
+  .profile-avatar {
+    width: 76px;
+    height: 76px;
+    font-size: 36px;
+  }
+
+  .profile-stats {
+    flex: 1;
+    grid-auto-rows: 1fr;
+  }
+
+  .profile-stat {
+    padding: 16px 8px;
+  }
+
+  .profile-stat-value {
+    font-size: 30px;
+  }
+}
+
+/* Secretariat's ticket: legs stack on mobile and sit in a row on desktop, so a
+   wide screen doesn't put each $2 a thousand pixels from its bet. */
+.ticket-legs {
+  display: flex;
+  flex-direction: column;
+}
+
+.ticket-leg {
+  border-left: 3px solid var(--leg-bar);
+  border-bottom: 1px dashed var(--border-subtle);
+}
+
+@media (min-width: 768px) {
+  .ticket-legs {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .ticket-leg {
+    border-left: none;
+    border-bottom: none;
+    border-top: 3px solid var(--leg-bar);
+  }
+
+  .ticket-leg + .ticket-leg {
+    border-left: 1px dashed var(--border-subtle);
+  }
+}
+
+/* Beat Secretariat picker: stacked on mobile, one row on desktop with the
+   dropdown at a sensible width. */
+.contest-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.contest-pick-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.contest-pick-form {
+  display: flex;
+  gap: 8px;
+}
+
+@media (min-width: 1024px) {
+  .contest-pick {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 24px;
+  }
+
+  .contest-pick-intro {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .contest-pick-title {
+    justify-content: flex-start;
+  }
+
+  .contest-pick-form {
+    width: 440px;
+  }
+
+  .contest-pick-note {
+    flex-basis: 100%;
+  }
+}
+
+/* "$2 on every pick" chart: fixed pixel height with HTML labels, so the text
+   stays the same size at any width instead of scaling with the SVG. */
+.bet-curve-plot {
+  position: relative;
+  height: 150px;
+  margin-top: 14px;
+}
+
+@media (min-width: 768px) {
+  .bet-curve-plot {
+    height: 200px;
+  }
+}
+
+/* Empty search: centered in the space below the search box instead of pinned
+   under it with the rest of the screen blank. */
+.search-empty {
+  min-height: 55vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
 }

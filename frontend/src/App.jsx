@@ -50,7 +50,7 @@ class ErrorBoundary extends Component {
             className="btn btn-primary"
             onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/'; }}
           >
-            Go back to races
+            Go Back To Races
           </button>
         </div>
       );
@@ -101,7 +101,7 @@ function SideNav() {
         onClick={goToRacesFresh}
         style={{ cursor: 'pointer' }}
       >
-        <GateSmartMark size={56} />
+        <GateSmartMark size={44} />
       </div>
       {NAV_ITEMS.map(({ path, label }, idx) => {
         const active = location.pathname === path ||

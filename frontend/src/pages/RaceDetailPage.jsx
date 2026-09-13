@@ -877,7 +877,7 @@ export default function RaceDetailPage() {
   return (
     <div>
       {/* ── Sticky header ─────────────────────────────────────────── */}
-      <div style={{
+      <div className="page-header" style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px',
         borderBottom: '1px solid var(--border-subtle)', position: 'sticky',
         top: 0, background: 'var(--bg-primary)', zIndex: 10,
@@ -1184,9 +1184,10 @@ export default function RaceDetailPage() {
                       <span style={{ width: 1, height: 12, background: 'var(--border-subtle)', flexShrink: 0 }} />
                       <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trainers & Jockeys</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+                    {/* minmax(0, 1fr): plain 1fr can't shrink below the longest name, which pushed the jockeys column off the card on phones. */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)' }}>
                       {trainers.length > 0 && (
-                        <div style={{ padding: '10px 14px', borderRight: '1px solid var(--border-subtle)' }}>
+                        <div style={{ padding: '10px 14px', borderRight: '1px solid var(--border-subtle)', minWidth: 0 }}>
                           <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Trainers</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                             {trainers.map(([name, info]) => (
@@ -1201,7 +1202,7 @@ export default function RaceDetailPage() {
                         </div>
                       )}
                       {jockeys.length > 0 && (
-                        <div style={{ padding: '10px 14px' }}>
+                        <div style={{ padding: '10px 14px', minWidth: 0 }}>
                           <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Jockeys</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                             {jockeys.map(([name, info]) => (
@@ -1218,9 +1219,9 @@ export default function RaceDetailPage() {
                     {owners.length > 0 && (
                       <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border-subtle)' }}>
                         <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Owners</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '4px 12px' }}>
                           {owners.map(([name, info]) => (
-                            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--accent-gold-bright)', background: 'rgba(201,162,39,0.1)', border: '1px solid rgba(201,162,39,0.2)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>#{info.nums.join(',')}</span>
                               <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                             </div>

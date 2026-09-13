@@ -2,9 +2,13 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getBetCurve } from '../../utils/api';
 
+// Plot coordinates. The SVG stretches to its box (preserveAspectRatio="none"),
+// so anything that must keep its shape — labels, the end dot — is HTML placed
+// by percentage, and strokes don't scale.
 const W = 600;
 const H = 180;
-const PAD = { top: 16, right: 12, bottom: 22, left: 12 };
+const PAD = { top: 22, right: 6, bottom: 8, left: 6 };
+const pct = (v, total) => `${((v / total) * 100).toFixed(2)}%`;
 
 const money = (n) => `${n < 0 ? '−' : '+'}$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
@@ -56,18 +60,31 @@ export default function BetCurve() {
         </div>
       </div>
 
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', marginTop: 12 }} role="img"
-        aria-label={`Running result of $2 win bets on every pick over ${days} days: ${money(data.net)}`}>
-        <path d={area} fill={color} opacity="0.1" />
-        <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="var(--border-medium)" strokeDasharray="4 4" />
-        <text x={W - PAD.right} y={y(0) - 4} textAnchor="end" fontSize="10" fill="var(--text-muted)">break even</text>
-        <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={x(pts.length - 1)} cy={y(last.cumulative)} r="4" fill={color} />
-        <text x={PAD.left} y={H - 6} fontSize="10" fill="var(--text-muted)">{pts[0].date.slice(5)}</text>
-        <text x={W - PAD.right} y={H - 6} textAnchor="end" fontSize="10" fill="var(--text-muted)">{last.date.slice(5)}</text>
-      </svg>
+      <div className="bet-curve-plot">
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}
+          aria-label={`Running result of $2 win bets on every pick over ${days} days: ${money(data.net)}`}>
+          <path d={area} fill={color} opacity="0.1" />
+          <line x1={PAD.left} x2={W - PAD.right} y1={y(0)} y2={y(0)} stroke="var(--border-medium)" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+          <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        </svg>
+        <span style={{
+          position: 'absolute', right: 0, top: pct(y(0), H), transform: 'translateY(-100%)',
+          paddingBottom: 3, fontSize: 11, color: 'var(--text-muted)',
+        }}>
+          break even
+        </span>
+        <span style={{
+          position: 'absolute', left: pct(x(pts.length - 1), W), top: pct(y(last.cumulative), H),
+          width: 9, height: 9, borderRadius: '50%', background: color, transform: 'translate(-50%, -50%)',
+        }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+        <span>{pts[0].date.slice(5)}</span>
+        <span>{last.date.slice(5)}</span>
+      </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 10 }}>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
           Official payouts only{data.unpriced_excluded ? ` · ${data.unpriced_excluded} unpriced races left out` : ''}
         </span>
