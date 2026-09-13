@@ -105,11 +105,11 @@ function SideNav() {
         onClick={() => goTo(path)}
         className={`side-nav-item${active ? ' active' : ''}`}
       >
-        <Icon name={icon} size={22} />
+        <Icon name={icon} size={20} />
         <span style={{
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: active ? 700 : 500,
-          letterSpacing: '0.06em',
+          letterSpacing: '0.05em',
           textTransform: 'uppercase',
         }}>{label}</span>
       </button>
@@ -123,7 +123,7 @@ function SideNav() {
         onClick={goToRacesFresh}
         style={{ cursor: 'pointer' }}
       >
-        <GateSmartMark size={44} />
+        <GateSmartMark size={40} />
       </div>
       {/* The links share the rail's full height, so it has no empty stretch at the bottom. */}
       <div className="side-nav-items">

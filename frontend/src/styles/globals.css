@@ -34,7 +34,7 @@
   --radius-lg: 16px;
 
   --bottom-nav-height: 64px;
-  --sidebar-width: 104px;
+  --sidebar-width: 80px;
   /* Page headers and the sidebar logo block share this height on desktop so
      their bottom borders form one line. */
   --header-height: 72px;
@@ -164,8 +164,8 @@ input, textarea, select {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 12px 6px;
+  gap: 5px;
+  padding: 8px 4px;
   background: none;
   border: none;
   cursor: pointer;
@@ -182,13 +182,12 @@ input, textarea, select {
 
 .side-nav-item:hover {
   color: var(--text-primary);
-  background: rgba(255,255,255,0.03);
 }
 
 .side-nav-divider {
   flex-shrink: 0;
   height: 1px;
-  margin: 0 16px;
+  margin: 0 14px;
   background: linear-gradient(to right, transparent, rgba(201,162,39,0.2), transparent);
 }
 
@@ -204,17 +203,19 @@ input, textarea, select {
   min-height: 56px;
 }
 
+/* Active page: gold icon and label with a short bar beside them. No filled
+   band, since the links are tall now that they share the rail's height. */
 .side-nav-item.active {
   color: var(--accent-gold-bright);
-  background: rgba(201,162,39,0.08);
 }
 
 .side-nav-item.active::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 6px;
-  bottom: 6px;
+  top: 50%;
+  height: 36px;
+  transform: translateY(-50%);
   width: 3px;
   background: var(--accent-gold);
   border-radius: 0 2px 2px 0;
