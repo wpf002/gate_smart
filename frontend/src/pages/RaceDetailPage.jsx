@@ -670,7 +670,7 @@ export default function RaceDetailPage() {
   const [analysis, setAnalysis] = useState(validCache?.analysis || null);
   // Page-level betting drawer for Secretariat's ticket, carrying the exact bet
   // text so the user doesn't have to re-type numbers into their sportsbook.
-  const [slipDrawer, setSlipDrawer] = useState({ open: false, betText: '' });
+  const [slipDrawer, setSlipDrawer] = useState({ open: false, legs: [] });
   const [analysisStreaming, setAnalysisStreaming] = useState(false);
   const [scorecardData, setScorecardData] = useState(validCache?.scorecardData || null);
   const [analyzeError, setAnalyzeError] = useState(null);
@@ -1016,7 +1016,7 @@ export default function RaceDetailPage() {
               {analysisStreaming
                 ? 'Analyzing…'
                 : analysis
-                ? 'Re-run Secretariat Analysis'
+                ? 'Re-Run Secretariat Analysis'
                 : 'Analyze with Secretariat'}
             </button>
           )}
@@ -1051,7 +1051,7 @@ export default function RaceDetailPage() {
           return (
             <div style={{ padding: '10px 14px', marginBottom: 12, background: 'rgba(201,162,39,0.08)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)' }}>
               <span style={{ fontSize: 12, color: 'var(--accent-gold-bright)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="warning" size={14} /> Analysis is {ageMin} min old — odds may have shifted. Tap "Re-run Secretariat Analysis" above for fresh picks.
+                <Icon name="warning" size={14} /> Analysis is {ageMin} min old — odds may have shifted. Tap "Re-Run Secretariat Analysis" above for fresh picks.
               </span>
             </div>
           );
@@ -1081,7 +1081,7 @@ export default function RaceDetailPage() {
             <BetSlip
               raceId={raceId}
               raceFinished={raceFinished}
-              onPlaceBet={(betText) => setSlipDrawer({ open: true, betText })}
+              onPlaceBet={(legs) => setSlipDrawer({ open: true, legs })}
             />
             <ContestPick
               raceId={raceId}
@@ -1092,11 +1092,12 @@ export default function RaceDetailPage() {
             />
             <AffiliateDrawer
               open={slipDrawer.open}
-              onClose={() => setSlipDrawer({ open: false, betText: '' })}
+              onClose={() => setSlipDrawer({ open: false, legs: [] })}
               region={userProfile?.region || 'usa'}
               recommendedHorse={analysis?.predicted_finish?.first?.horse_name || ''}
               recommendedBet="Secretariat's ticket"
-              betText={slipDrawer.betText}
+              betLegs={slipDrawer.legs}
+              raceNumber={raceId && raceId.includes('-') ? raceId.split('-').pop() : ''}
             />
           </>
         )}

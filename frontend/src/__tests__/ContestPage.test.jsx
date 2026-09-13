@@ -92,8 +92,8 @@ describe('ContestPage', () => {
     useAppStore.setState({ authToken: 'token' });
     wrap(<ContestPage />);
     expect(await screen.findByText('Day streak')).toBeInTheDocument();
-    expect(screen.getByText('Beat-Secretariat streak')).toBeInTheDocument();
-    expect(screen.getByText('Winners of 8')).toBeInTheDocument();
+    expect(screen.getByText('Beat streak')).toBeInTheDocument();
+    expect(screen.getByText('4/8')).toBeInTheDocument();
   });
 
   it('switches between today and this week', async () => {

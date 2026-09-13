@@ -57,7 +57,7 @@ describe('ContestPick', () => {
   it('sends signed-out visitors to sign in', () => {
     useAppStore.setState({ authToken: null });
     renderPick();
-    fireEvent.click(screen.getByText('Sign in to play'));
+    fireEvent.click(screen.getByText('Sign In To Play'));
     expect(navigate).toHaveBeenCalledWith('/login');
   });
 
@@ -72,7 +72,7 @@ describe('ContestPick', () => {
     renderPick();
     await waitFor(() => expect(api.getMyContestPicks).toHaveBeenCalled());
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Alinao Forever' } });
-    fireEvent.click(screen.getByText('Lock it in'));
+    fireEvent.click(screen.getByText('Lock It In'));
     await waitFor(() => expect(api.makeContestPick).toHaveBeenCalledWith('GP_1-4', 'Alinao Forever', '4'));
   });
 
@@ -81,7 +81,7 @@ describe('ContestPick', () => {
     renderPick();
     await waitFor(() => expect(api.getMyContestPicks).toHaveBeenCalled());
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Magic Heart' } });
-    fireEvent.click(screen.getByText('Lock it in'));
+    fireEvent.click(screen.getByText('Lock It In'));
     expect(await screen.findByText('Picks are locked — this race is already off')).toBeInTheDocument();
   });
 

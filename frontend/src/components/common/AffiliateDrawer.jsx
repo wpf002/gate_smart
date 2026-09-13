@@ -23,8 +23,11 @@ function openAffiliate(affiliate, baseUrl, sessionId, onClose, betText = '') {
   if (onClose) onClose();
 }
 
-export default function AffiliateDrawer({ open, onClose, region = 'usa', sessionId = '', recommendedHorse = '', recommendedBet = '', betText = '' }) {
+export default function AffiliateDrawer({ open, onClose, region = 'usa', sessionId = '', recommendedHorse = '', recommendedBet = '', betLegs = [], raceNumber = '' }) {
   const [copied, setCopied] = useState(false);
+  // Plain teller wording goes to the clipboard; the drawer shows the same bets
+  // styled like the rest of the app.
+  const betText = betLegs.map((l) => l.say).join('\n');
   // Lock body scroll while open
   useEffect(() => {
     if (open) {
@@ -118,19 +121,36 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
         </div>
 
         {/* The exact bet, ready to paste into whichever sportsbook they pick */}
-        {betText && (
-          <div style={{ margin: '12px 16px 0', padding: '10px 12px', background: 'var(--bg-card)', border: '1px dashed var(--border-gold)', borderRadius: 'var(--radius-md)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontSize: 11, letterSpacing: '0.06em', color: 'var(--accent-gold)' }}>YOUR BET</span>
+        {betLegs.length > 0 && (
+          <div style={{
+            margin: '12px 16px 0', padding: '12px 16px', background: 'var(--bg-card)',
+            border: '1px dashed var(--border-gold)', borderRadius: 'var(--radius-md)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
+                YOUR BET
+              </span>
               <button
+                className="btn btn-ghost"
+                style={{ fontSize: 12, padding: '6px 14px' }}
                 onClick={async () => { if (await copyBet(betText)) { setCopied(true); setTimeout(() => setCopied(false), 2000); } }}
-                style={{ background: 'none', border: 'none', color: 'var(--accent-gold-bright)', fontSize: 12, cursor: 'pointer' }}
               >
                 {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
-            <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{betText}</pre>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Copied automatically when you tap Place Bet.</div>
+            {betLegs.map((leg) => (
+              <div key={leg.type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '4px 0' }}>
+                <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', textTransform: 'capitalize' }}>
+                  {leg.type} <span style={{ color: 'var(--accent-gold-bright)' }}>{leg.numbers.map((n) => `#${n}`).join(' – ')}</span>
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  $2{raceNumber ? ` · Race ${raceNumber}` : ''}
+                </span>
+              </div>
+            ))}
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 8 }}>
+              Copied automatically when you tap Place Bet.
+            </div>
           </div>
         )}
 

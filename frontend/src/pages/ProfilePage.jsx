@@ -1,9 +1,9 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import Icon from '../components/common/Icon';
-import { authUpdateProfile, authLogout } from '../utils/api';
+import { authUpdateProfile, authLogout, getContestProgress } from '../utils/api';
 import { TIMEZONE_OPTIONS } from '../utils/timezone';
 
 const EXPERIENCE_OPTIONS = ['beginner', 'advanced'];
@@ -102,7 +102,8 @@ export default function ProfilePage() {
     <div>
       <PageHeader title="PROFILE" subtitle="Your betting preferences" />
 
-      <div style={{ padding: '16px' }}>
+      <div style={{ padding: '16px' }} className="profile-grid">
+        <div>
 
         {/* Auth status banner */}
         {isLoggedIn ? (
@@ -130,7 +131,7 @@ export default function ProfilePage() {
               disabled={logoutMutation.isPending}
               style={{ fontSize: 12, padding: '6px 14px' }}
             >
-              {logoutMutation.isPending ? 'Signing out…' : 'Sign out'}
+              {logoutMutation.isPending ? 'Signing Out…' : 'Sign Out'}
             </button>
           </div>
         ) : (
@@ -157,7 +158,7 @@ export default function ProfilePage() {
               onClick={() => navigate('/login', { state: { from: location.pathname } })}
               style={{ fontSize: 12, padding: '6px 14px', whiteSpace: 'nowrap' }}
             >
-              Sign in
+              Sign In
             </button>
           </div>
         )}
@@ -194,31 +195,6 @@ export default function ProfilePage() {
           }[userProfile.experienceLevel]}
         </div>
 
-        {/* Compact level comparison */}
-        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-          {[
-            { key: 'beginner', label: 'Beginner', note: 'Simple layout, plain English, key pick highlighted' },
-            { key: 'advanced', label: 'Advanced', note: 'Full data, pace analysis, all bet types, technical layout' },
-          ].map(({ key, label, note }) => {
-            const isActive = userProfile.experienceLevel === key;
-            return (
-              <div key={key} style={{
-                padding: '8px 10px',
-                background: isActive ? 'rgba(201,162,39,0.08)' : 'var(--bg-elevated)',
-                border: `1px solid ${isActive ? 'var(--border-gold)' : 'var(--border-subtle)'}`,
-                borderRadius: 8,
-              }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: isActive ? 'var(--accent-gold)' : 'var(--text-muted)', marginBottom: 4, textTransform: 'capitalize' }}>
-                  {label} {isActive && <span style={{ fontSize: 8, background: 'var(--accent-gold)', color: '#000', borderRadius: 3, padding: '1px 4px' }}>ON</span>}
-                </div>
-                <div style={{ fontSize: 10, color: isActive ? 'var(--text-secondary)' : 'var(--text-muted)', lineHeight: 1.4 }}>
-                  {note}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
         <div style={{
           marginTop: 16,
           padding: '10px 14px',
@@ -231,6 +207,65 @@ export default function ProfilePage() {
         }}>
           GateSmart is an AI-powered analysis tool for serious horseplayers, tracks, and ADWs. For responsible gambling support, visit <strong>ncpgambling.org</strong>.
         </div>
+        </div>
+
+        <ProgressPanel isLoggedIn={isLoggedIn} navigate={navigate} />
+      </div>
+    </div>
+  );
+}
+
+function ProgressPanel({ isLoggedIn, navigate }) {
+  const { data: me } = useQuery({
+    queryKey: ['contest-me'],
+    queryFn: getContestProgress,
+    enabled: isLoggedIn,
+  });
+
+  const links = [
+    { label: 'Leaderboard', path: '/contest', note: 'Beat Secretariat standings' },
+    { label: 'Report Card', path: '/accuracy', note: 'How the picks actually did' },
+    { label: 'Watchlist', path: '/watchlist', note: 'Horses, trainers and jockeys you follow' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {isLoggedIn && me && (
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)' }}>
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
+            YOUR PROGRESS
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            {[
+              [me.points, 'Points'],
+              [me.pick_day_streak, 'Day streak'],
+              [`${me.wins}/${me.settled}`, 'Winners'],
+            ].map(([value, label], i) => (
+              <div key={label} style={{ textAlign: 'center', padding: '10px 4px' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: i === 0 ? 'var(--accent-gold-bright)' : 'var(--text-primary)' }}>
+                  {value}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+        {links.map(({ label, path, note }, i) => (
+          <button key={path} onClick={() => navigate(path)} style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%',
+            padding: '12px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+            borderTop: i ? '1px solid var(--border-subtle)' : 'none',
+          }}>
+            <span>
+              <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</span>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{note}</span>
+            </span>
+            <span style={{ color: 'var(--text-muted)', fontSize: 16 }}>›</span>
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -39,7 +39,7 @@ export default function BetCurve() {
     <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '0.08em', color: 'var(--accent-gold)' }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
             $2 ON EVERY PICK
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -78,7 +78,7 @@ export default function BetCurve() {
               background: days === d ? 'var(--accent-gold-dim)' : 'transparent',
               color: days === d ? 'var(--accent-gold-bright)' : 'var(--text-muted)',
               border: '1px solid var(--border-subtle)',
-            }}>{d}d</button>
+            }}>{d}D</button>
           ))}
         </div>
       </div>

@@ -45,7 +45,7 @@ function Leg({ leg, settled }) {
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, letterSpacing: '0.06em', color: 'var(--text-primary)' }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--text-primary)' }}>
             {LABEL[leg.type]}
           </span>
           {!settled && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{HOW[leg.type]}</span>}
@@ -117,7 +117,7 @@ export default function BetSlip({ raceId, raceFinished = false, onPlaceBet }) {
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)',
       }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '0.08em', color: 'var(--accent-gold)' }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
           SECRETARIAT'S TICKET
         </span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
@@ -148,9 +148,9 @@ export default function BetSlip({ raceId, raceFinished = false, onPlaceBet }) {
           <button
             className="btn btn-primary"
             style={{ fontSize: 12, padding: '6px 12px' }}
-            onClick={() => onPlaceBet(legs.map((l) => l.say).join('\n'))}
+            onClick={() => onPlaceBet(legs)}
           >
-            Place this bet
+            Place This Bet
           </button>
         )}
       </div>

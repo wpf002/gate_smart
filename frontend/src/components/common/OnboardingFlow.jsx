@@ -301,7 +301,7 @@ export default function OnboardingFlow() {
               textAlign: 'center',
             }}
           >
-            Skip setup →
+            Skip Setup →
           </button>
         )}
       </div>

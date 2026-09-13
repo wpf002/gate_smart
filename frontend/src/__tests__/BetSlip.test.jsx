@@ -64,10 +64,10 @@ describe('BetSlip before the race', () => {
     getRaceTicket.mockResolvedValue(PENDING);
     const onPlaceBet = vi.fn();
     renderSlip({ raceFinished: false, onPlaceBet });
-    fireEvent.click(await screen.findByText('Place this bet'));
-    expect(onPlaceBet).toHaveBeenCalledWith(
-      '$2 to win on #4, race 4\n$2 exacta 4-7, race 4\n$2 trifecta 4-7-5, race 4'
-    );
+    fireEvent.click(await screen.findByText('Place This Bet'));
+    // Structured legs, so the drawer can style them like the app and still
+    // copy the teller wording to the clipboard.
+    expect(onPlaceBet).toHaveBeenCalledWith(PENDING.legs);
   });
 });
 
@@ -97,11 +97,11 @@ describe('BetSlip after the race', () => {
     expect(shareResult.mock.calls[0][0].text).toContain('$15.00');
   });
 
-  it('hides Place this bet once the race is off', async () => {
+  it('hides Place This Bet once the race is off', async () => {
     getRaceTicket.mockResolvedValue(PENDING);
     renderSlip({ raceFinished: true, onPlaceBet: vi.fn() });
     await screen.findByText("SECRETARIAT'S TICKET");
-    expect(screen.queryByText('Place this bet')).not.toBeInTheDocument();
+    expect(screen.queryByText('Place This Bet')).not.toBeInTheDocument();
   });
 
   it('shows "No pool" for a leg with no official price, not a loss', async () => {

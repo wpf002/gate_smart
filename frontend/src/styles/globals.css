@@ -94,10 +94,10 @@ input, textarea, select {
     overflow: auto;
   }
 
+  /* Full width: capping the shell at 1400px and centering it floated the whole
+     app, sidebar included, between empty black gutters on wide screens. */
   .app-shell {
     flex-direction: row;
-    max-width: 1400px;
-    margin: 0 auto;
     height: 100vh;
   }
 
@@ -642,3 +642,44 @@ select option {
 .text-secondary { color: var(--text-secondary); }
 .font-display { font-family: var(--font-display); }
 .font-mono { font-family: var(--font-mono); }
+
+/* Full-width form selects (e.g. picking a horse). The base select style only
+   pads the right for the chevron, which left option text flush against the
+   left border. 16px stays on mobile to stop iOS zooming on focus. */
+.form-select {
+  padding: 9px 32px 9px 14px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+@media (min-width: 768px) {
+  .form-select {
+    font-size: 14px;
+  }
+}
+
+/* Contest page: your stats beside the leaderboard on desktop, stacked on mobile. */
+.contest-grid {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .contest-grid {
+    grid-template-columns: minmax(300px, 380px) 1fr;
+    align-items: start;
+  }
+}
+
+/* Profile: settings beside your progress on desktop, stacked on mobile. */
+.profile-grid {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .profile-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    align-items: start;
+  }
+}

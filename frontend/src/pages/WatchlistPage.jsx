@@ -117,33 +117,33 @@ export default function WatchlistPage() {
             RACING SOON ({filtersActive ? `${filtered.length} of ${matches.length}` : matches.length})
           </div>
 
-          {matches.length > 1 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-              {/* Day */}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {DAY_FILTERS.filter((d) => d.key === 'all' || dayCounts[d.key] > 0).map((d) => (
-                  <FilterPill key={d.key} label={d.label} count={dayCounts[d.key]}
-                    active={dayFilter === d.key} onClick={() => setDayFilter(d.key)} />
+          {matches.length > 1 && (() => {
+            // One row of filters instead of three. A group only appears when it
+            // can actually narrow the list: no day pills when every entry is
+            // today, no type pills when only one kind is followed.
+            const showDays = dayCounts.today > 0 && dayCounts.tomorrow > 0;
+            const showTypes = typesPresent.length > 1;
+            const divider = <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--border-subtle)', margin: '2px 2px' }} />;
+            return (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+                {showDays && DAY_FILTERS.map((d) => (
+                  <FilterPill key={d.key} label={d.label} active={dayFilter === d.key} onClick={() => setDayFilter(d.key)} />
                 ))}
-              </div>
-              {/* Type — only when following more than one kind */}
-              {typesPresent.length > 1 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <FilterPill label="All types" active={typeFilter === 'all'} onClick={() => setTypeFilter('all')} />
-                  {typesPresent.map((t) => (
-                    <FilterPill key={t} label={TYPE_LABEL[t]}
-                      count={matches.filter((m) => m.entity_type === t).length}
-                      active={typeFilter === t} onClick={() => setTypeFilter(t)} />
-                  ))}
-                </div>
-              )}
-              {/* Who / track dropdowns + clear */}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                {showDays && showTypes && divider}
+                {showTypes && (
+                  <>
+                    <FilterPill label="All Types" active={typeFilter === 'all'} onClick={() => setTypeFilter('all')} />
+                    {typesPresent.map((t) => (
+                      <FilterPill key={t} label={TYPE_LABEL[t]} active={typeFilter === t} onClick={() => setTypeFilter(t)} />
+                    ))}
+                  </>
+                )}
+                {(showDays || showTypes) && (whoPresent.length > 1 || tracksPresent.length > 1) && divider}
                 {whoPresent.length > 1 && (
                   <select value={whoFilter} onChange={(e) => setWhoFilter(e.target.value)}
                     className={`filter-select${whoFilter !== 'all' ? ' is-active' : ''}`}
                     style={selectStyle} aria-label="Filter by who">
-                    <option value="all">Anyone ({whoPresent.length})</option>
+                    <option value="all">Anyone</option>
                     {whoPresent.map((w) => <option key={w} value={w}>{w}</option>)}
                   </select>
                 )}
@@ -151,7 +151,7 @@ export default function WatchlistPage() {
                   <select value={trackFilter} onChange={(e) => setTrackFilter(e.target.value)}
                     className={`filter-select${trackFilter !== 'all' ? ' is-active' : ''}`}
                     style={selectStyle} aria-label="Filter by track">
-                    <option value="all">All tracks ({tracksPresent.length})</option>
+                    <option value="all">All Tracks</option>
                     {tracksPresent.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 )}
@@ -162,8 +162,8 @@ export default function WatchlistPage() {
                   }}>Clear</button>
                 )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {matches.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
@@ -175,7 +175,7 @@ export default function WatchlistPage() {
               <button onClick={clearFilters} style={{
                 background: 'none', border: 'none', color: 'var(--accent-gold-bright)',
                 fontSize: 13, cursor: 'pointer', textDecoration: 'underline', padding: 0,
-              }}>Clear filters</button>
+              }}>Clear Filters</button>
             </div>
           ) : (
             filtered.map((m, i) => (

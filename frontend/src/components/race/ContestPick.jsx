@@ -34,7 +34,7 @@ export default function ContestPick({ raceId, raceDate, runners = [], raceFinish
       <Shell>
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Think you can beat Secretariat?</span>
         <button className="btn btn-ghost" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => navigate('/login')}>
-          Sign in to play
+          Sign In To Play
         </button>
       </Shell>
     );
@@ -96,7 +96,7 @@ export default function ContestPick({ raceId, raceDate, runners = [], raceFinish
   return (
     <Shell column>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '0.08em', color: 'var(--accent-gold)' }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>
           BEAT SECRETARIAT
         </span>
         <button onClick={() => navigate('/contest')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>
@@ -111,6 +111,7 @@ export default function ContestPick({ raceId, raceDate, runners = [], raceFinish
         <select
           value={choice || mine?.horse_name || ''}
           onChange={(e) => setChoice(e.target.value)}
+          className="form-select"
           style={{ flex: 1, minWidth: 0 }}
         >
           <option value="" disabled>Choose a horse</option>
@@ -124,7 +125,7 @@ export default function ContestPick({ raceId, raceDate, runners = [], raceFinish
           disabled={saving || !choice || choice === mine?.horse_name}
           onClick={submit}
         >
-          {mine ? 'Change' : 'Lock it in'}
+          {mine ? 'Change' : 'Lock It In'}
         </button>
       </div>
       {mine && !choice && <span style={{ fontSize: 12, color: 'var(--accent-green-bright)' }}>Locked in: {mine.horse_name}</span>}
