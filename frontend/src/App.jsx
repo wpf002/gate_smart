@@ -1,6 +1,7 @@
 import { Component, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getSecretariatAccuracy } from './utils/api';
 import Icon from './components/common/Icon';
 import { GateSmartMark } from './components/common/Logo';
 import BottomNav from './components/common/BottomNav';
@@ -94,6 +95,31 @@ function SideNav() {
     navigate(path);
   };
 
+  const isActive = (path) => location.pathname === path ||
+    (path !== '/' && location.pathname.startsWith(path));
+
+  const renderItem = ({ path, icon, label }) => {
+    const active = isActive(path);
+    return (
+      <button
+        key={path}
+        onClick={() => goTo(path)}
+        className={`side-nav-item${active ? ' active' : ''}`}
+      >
+        <Icon name={icon} size={22} />
+        <span style={{
+          fontSize: 11,
+          fontWeight: active ? 700 : 500,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+        }}>{label}</span>
+      </button>
+    );
+  };
+
+  const mainItems = NAV_ITEMS.filter((item) => item.path !== '/profile');
+  const profileItem = NAV_ITEMS.find((item) => item.path === '/profile');
+
   return (
     <nav className="side-nav">
       <div
@@ -103,34 +129,52 @@ function SideNav() {
       >
         <GateSmartMark size={44} />
       </div>
-      {NAV_ITEMS.map(({ path, label }, idx) => {
-        const active = location.pathname === path ||
-          (path !== '/' && location.pathname.startsWith(path));
-        return (
-          <div key={path}>
-            {idx > 0 && (
-              <div style={{
-                height: 1,
-                margin: '0 16px',
-                background: 'linear-gradient(to right, transparent, rgba(201,162,39,0.2), transparent)',
-              }} />
-            )}
-            <button
-              onClick={() => goTo(path)}
-              className={`side-nav-item${active ? ' active' : ''}`}
-            >
-              <span style={{
-                fontSize: 12,
-                fontWeight: active ? 700 : 500,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                color: active ? 'var(--accent-gold-bright)' : 'var(--text-secondary)',
-              }}>{label}</span>
-            </button>
-          </div>
-        );
-      })}
+      {mainItems.map((item, idx) => (
+        <div key={item.path}>
+          {idx > 0 && <div className="side-nav-divider" />}
+          {renderItem(item)}
+        </div>
+      ))}
+      {/* Pinned to the bottom of the rail so it's anchored at both ends. */}
+      <div className="side-nav-bottom">
+        <SideNavRecord active={isActive('/accuracy')} onOpen={() => navigate('/accuracy')} />
+        {renderItem(profileItem)}
+      </div>
     </nav>
+  );
+}
+
+// Secretariat's rolling record, the same numbers as the Races header badge,
+// shown in the rail on every desktop page. Opens the Report Card.
+function SideNavRecord({ active, onOpen }) {
+  const { data } = useQuery({
+    queryKey: ['secretariat-accuracy'],
+    queryFn: getSecretariatAccuracy,
+    refetchInterval: 10 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  if (!data || data.total_predictions < 10 || data.win_rate_percent == null) return null;
+
+  const rows = [
+    ['Win', data.win_rate_percent],
+    ['Place', data.place_rate_percent],
+    ['Show', data.show_rate_percent],
+  ];
+
+  return (
+    <button className={`side-nav-record${active ? ' active' : ''}`} onClick={onOpen} title="Report Card">
+      <span className="side-nav-record-title">SECRETARIAT</span>
+      <span className="side-nav-record-sub">Last {data.total_predictions}</span>
+      {rows.map(([label, value], i) => (
+        <span key={label} className="side-nav-record-row">
+          <span>{label}</span>
+          <strong style={i === 0 ? { color: 'var(--accent-gold-bright)' } : undefined}>
+            {value == null ? '—' : `${value}%`}
+          </strong>
+        </span>
+      ))}
+    </button>
   );
 }
 

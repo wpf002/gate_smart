@@ -135,7 +135,7 @@ export default function HomePage() {
       <PageHeader
         title="GATESMART"
         subtitle="AI-POWERED RACING INTELLIGENCE"
-        right={<AccuracyBadge />}
+        right={<div className="home-accuracy-badge"><AccuracyBadge /></div>}
       />
 
       {/* Date tabs */}

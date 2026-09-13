@@ -231,13 +231,14 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {isLoggedIn && me && (
+          {isLoggedIn && (
             <div className="profile-stats">
               {[
-                [me.points, 'Points'],
-                [me.pick_day_streak, 'Day Streak'],
-                [`${me.wins}/${me.settled}`, 'Winners'],
-                [me.beat_secretariat, 'Beat Secretariat'],
+                // Dashes until progress loads, so the card keeps its shape.
+                [me ? me.points : '–', 'Points'],
+                [me ? me.pick_day_streak : '–', 'Day Streak'],
+                [me ? `${me.wins}/${me.settled}` : '–', 'Winners'],
+                [me ? me.beat_secretariat : '–', 'Beat Secretariat'],
               ].map(([value, label], i) => (
                 <div key={label} className="profile-stat">
                   <div className="profile-stat-value" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: i === 0 ? 'var(--accent-gold-bright)' : 'var(--text-primary)' }}>
