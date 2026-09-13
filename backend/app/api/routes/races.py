@@ -140,6 +140,71 @@ async def races_by_date(race_date: str, region: str = None):
         raise HTTPException(status_code=502, detail="Racing data unavailable")
 
 
+@router.get("/ticket/{race_id}")
+async def race_ticket(race_id: str):
+    """Secretariat's betting ticket for a race, graded against the official chart.
+
+    Before the race it explains what to bet. After, each leg shows whether it hit
+    and what $2 actually returned. Nothing is estimated: legs without an official
+    price come back "unpriced".
+    """
+    from sqlalchemy import select
+
+    from app.core import database as _db
+    from app.models.accuracy import RacePrediction
+    from app.services.horse_form import horse_key
+    from app.services.ticket import build_ticket, grade_ticket, ticket_summary
+
+    async with _db._AsyncSessionLocal() as db:
+        pred = (await db.execute(
+            select(RacePrediction).where(
+                RacePrediction.race_id == race_id,
+                RacePrediction.analysis_mode == "auto_daily",
+                RacePrediction.user_id.is_(None),
+            )
+        )).scalars().first()
+    if not pred:
+        raise HTTPException(status_code=404, detail="No Secretariat pick for this race yet")
+
+    names = [pred.predicted_first, pred.predicted_second, pred.predicted_third]
+    numbers: dict[str, str] = {}
+    try:
+        race = await racing_api.get_race(race_id)
+        numbers = {horse_key(r.get("horse_name", "")): r.get("number") for r in race.get("runners") or []}
+    except Exception:
+        race = {}
+    if pred.predicted_first_num and horse_key(pred.predicted_first) not in numbers:
+        numbers[horse_key(pred.predicted_first)] = pred.predicted_first_num
+
+    race_number = race_id.rsplit("-", 1)[-1] if "-" in race_id else None
+    picks = [{"name": n, "number": numbers.get(horse_key(n))} for n in names if n]
+    legs = build_ticket(picks, race_number)
+
+    # Graded from the live results chart rather than waiting on the nightly
+    # accuracy job, so the slip turns green or red the same afternoon.
+    settled = False
+    if "-" in race_id:
+        try:
+            meet = await racing_api.get_na_meet_results(race_id.rsplit("-", 1)[0])
+            result = next(
+                (r for r in meet.get("races", [])
+                 if str((r.get("race_key") or {}).get("race_number", "")) == str(race_number)),
+                None,
+            )
+            if result and result.get("runners"):
+                legs = grade_ticket(legs, result)
+                settled = True
+        except Exception:
+            pass
+
+    return {
+        "race_id": race_id,
+        "settled": settled,
+        "legs": legs,
+        "summary": ticket_summary(legs) if settled else None,
+    }
+
+
 @router.get("/{race_id}")
 async def race_detail(race_id: str):
     try:

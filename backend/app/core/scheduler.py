@@ -120,6 +120,16 @@ async def job_score_lessons() -> None:
     await _run_script("score_lessons.py")
 
 
+async def job_settle_contest_picks() -> None:
+    try:
+        from app.services.contest import settle_pending_picks
+        n = await settle_pending_picks()
+        if n:
+            log.info(f"[scheduler] settled {n} contest pick(s)")
+    except Exception as e:
+        log.warning(f"[scheduler] contest settlement failed: {e}")
+
+
 async def job_daily_invariants() -> None:
     await _run_script("daily_invariants.py")
 
@@ -509,5 +519,9 @@ def create_scheduler() -> AsyncIOScheduler | None:
     scheduler.add_job(job_watchlist_alerts, CronTrigger(hour=15, minute=15), id="watchlist_alerts_mid", name="Watchlist alerts (11:15 AM ET)", misfire_grace_time=3600)
     scheduler.add_job(job_race_alerts, IntervalTrigger(minutes=5), id="race_alerts", name="Race alerts (every 5 min)")
     scheduler.add_job(job_smoke_check, IntervalTrigger(minutes=5), id="smoke_check", name="Prod smoke check (every 5 min)")
+    # Grades contest picks from the official chart as races finish, so players
+    # see results the same afternoon rather than after the nightly job.
+    scheduler.add_job(job_settle_contest_picks, IntervalTrigger(minutes=10), id="settle_contest_picks",
+                      name="Settle contest picks (every 10 min)", max_instances=1, coalesce=True)
 
     return scheduler

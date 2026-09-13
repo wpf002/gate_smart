@@ -29,6 +29,9 @@ class User(Base):
     experience_level: Mapped[str] = mapped_column(String(20), default="beginner")
     region: Mapped[str] = mapped_column(String(20), default="usa")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Public name on contest leaderboards. Emails are never shown; when this is
+    # unset the leaderboard falls back to "Handicapper <id>".
+    display_name: Mapped[Optional[str]] = mapped_column(String(40), nullable=True, unique=True)
 
     paper_bets: Mapped[list["PaperBet"]] = relationship(
         "PaperBet", back_populates="user", lazy="select"

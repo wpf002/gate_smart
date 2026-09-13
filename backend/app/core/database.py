@@ -25,7 +25,7 @@ class Base(DeclarativeBase):
 async def init_db() -> None:
     global _engine, _AsyncSessionLocal
     from app.core.config import settings
-    from app.models import accuracy, equibase, form, lesson, user, watchlist  # noqa: F401 — ensure models are registered
+    from app.models import accuracy, contest, equibase, form, lesson, user, watchlist  # noqa: F401 — ensure models are registered
 
     _engine = create_async_engine(
         settings.DATABASE_URL,
@@ -79,6 +79,8 @@ _STARTUP_MIGRATIONS: list[str] = [
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS fade_reason VARCHAR(30)",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_applied BOOLEAN DEFAULT FALSE",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_eligible BOOLEAN DEFAULT FALSE",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(40)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_display_name ON users (display_name)",
     "CREATE INDEX IF NOT EXISTS ix_race_predictions_lesson_arm ON race_predictions (lesson_arm)",
 ]
 

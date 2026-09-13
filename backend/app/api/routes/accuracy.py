@@ -553,3 +553,58 @@ async def get_my_predictions(
         }
         for p in preds
     ]
+
+
+@router.get("/bet-curve")
+async def bet_curve(days: int = 30, db: AsyncSession = Depends(get_db)):
+    """Running result of a $2 win bet on every Secretariat pick.
+
+    One point per day: that day's net and the cumulative total. Built only from
+    official payoffs on priced races — an unpriced race is left out rather than
+    being counted as a loss, and the response says how many were left out.
+    """
+    days = max(1, min(int(days), 365))
+    since = datetime.date.today() - datetime.timedelta(days=days)
+    base = (
+        (RacePrediction.analysis_mode == "auto_daily")
+        & (RacePrediction.user_id.is_(None))
+        & (RacePrediction.result_fetched == True)  # noqa: E712
+        & (RacePrediction.race_date >= since)
+    )
+
+    rows = (await db.execute(
+        select(
+            RacePrediction.race_date,
+            func.count().label("bets"),
+            func.sum(func.coalesce(RacePrediction.top_pick_win_payoff, 0)).label("returned"),
+        )
+        .where(base & RacePrediction.top_pick_win_payoff.is_not(None))
+        .group_by(RacePrediction.race_date)
+        .order_by(RacePrediction.race_date)
+    )).all()
+
+    unpriced = (await db.execute(
+        select(func.count()).where(base & RacePrediction.top_pick_win_payoff.is_(None))
+    )).scalar() or 0
+
+    running, points = 0.0, []
+    for race_date, bets, returned in rows:
+        net = float(returned or 0) - 2.0 * bets
+        running += net
+        points.append({
+            "date": race_date.isoformat(),
+            "bets": bets,
+            "net": round(net, 2),
+            "cumulative": round(running, 2),
+        })
+
+    total_bets = sum(p["bets"] for p in points)
+    return {
+        "days": days,
+        "points": points,
+        "total_bets": total_bets,
+        "staked": round(2.0 * total_bets, 2),
+        "net": round(running, 2),
+        "roi": round(running / (2.0 * total_bets), 4) if total_bets else None,
+        "unpriced_excluded": unpriced,
+    }
