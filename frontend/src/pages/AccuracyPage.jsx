@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getDailyAccuracy, getAccuracyHistory, getMyAccuracyStats } from '../utils/api';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
+import BetCurve from '../components/accuracy/BetCurve';
 
 function WinRateDot({ rate }) {
   const pct = (rate || 0) * 100;
@@ -78,6 +79,9 @@ export default function AccuracyPage() {
       />
 
       <div style={{ padding: '16px' }}>
+
+        {/* ── What following every pick would have done ─────────────── */}
+        <BetCurve />
 
         {/* ── User's own picks (logged-in only) ───────────────────── */}
         {isLoggedIn && (

@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { path: '/',          icon: 'home',      label: 'Races'   },
   { path: '/search',    icon: 'search',    label: 'Search'  },
   { path: '/watchlist', icon: 'star',      label: 'Watch'   },
+  { path: '/contest',   icon: 'trophy',    label: 'Contest' },
   { path: '/advisor',   icon: 'robot',     label: 'Advisor' },
   { path: '/education', icon: 'learn',     label: 'Learn'   },
   { path: '/profile',   icon: 'profile',   label: 'Profile' },

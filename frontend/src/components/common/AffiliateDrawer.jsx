@@ -1,15 +1,30 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { getAffiliatesForRegion, buildAffiliateUrl, trackAffiliateClick as logAffiliateBackend } from '../../utils/affiliates';
 import { trackAffiliateClick } from '../../utils/analytics';
 
-function openAffiliate(affiliate, baseUrl, sessionId, onClose) {
+// Sportsbooks don't accept pre-filled bet slips from outside links, so the
+// closest thing to one-click is putting the exact bet on the clipboard as the
+// user leaves: they open the race and paste or read it off.
+async function copyBet(text) {
+  if (!text) return false;
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function openAffiliate(affiliate, baseUrl, sessionId, onClose, betText = '') {
+  copyBet(betText);
   trackAffiliateClick(affiliate.id, affiliate.name, null);
   logAffiliateBackend(affiliate.id, sessionId);
   window.open(buildAffiliateUrl(affiliate, baseUrl), '_blank', 'noopener,noreferrer');
   if (onClose) onClose();
 }
 
-export default function AffiliateDrawer({ open, onClose, region = 'usa', sessionId = '', recommendedHorse = '', recommendedBet = '' }) {
+export default function AffiliateDrawer({ open, onClose, region = 'usa', sessionId = '', recommendedHorse = '', recommendedBet = '', betText = '' }) {
+  const [copied, setCopied] = useState(false);
   // Lock body scroll while open
   useEffect(() => {
     if (open) {
@@ -102,6 +117,23 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
           </button>
         </div>
 
+        {/* The exact bet, ready to paste into whichever sportsbook they pick */}
+        {betText && (
+          <div style={{ margin: '12px 16px 0', padding: '10px 12px', background: 'var(--bg-card)', border: '1px dashed var(--border-gold)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ fontSize: 11, letterSpacing: '0.06em', color: 'var(--accent-gold)' }}>YOUR BET</span>
+              <button
+                onClick={async () => { if (await copyBet(betText)) { setCopied(true); setTimeout(() => setCopied(false), 2000); } }}
+                style={{ background: 'none', border: 'none', color: 'var(--accent-gold-bright)', fontSize: 12, cursor: 'pointer' }}
+              >
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{betText}</pre>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Copied automatically when you tap Place Bet.</div>
+          </div>
+        )}
+
         {/* Affiliate cards */}
         <div style={{ overflowY: 'auto', padding: '12px 16px', flex: 1 }}>
           {affiliates.length === 0 ? (
@@ -163,7 +195,7 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
                     {affiliate.subOptions.map((opt) => (
                       <button
                         key={opt.label}
-                        onClick={() => openAffiliate(affiliate, opt.baseUrl, sessionId, onClose)}
+                        onClick={() => openAffiliate(affiliate, opt.baseUrl, sessionId, onClose, betText)}
                         className="btn btn-primary"
                         style={{ fontSize: 11, padding: '6px 12px', whiteSpace: 'nowrap' }}
                       >
@@ -173,7 +205,7 @@ export default function AffiliateDrawer({ open, onClose, region = 'usa', session
                   </div>
                 ) : (
                   <button
-                    onClick={() => openAffiliate(affiliate, affiliate.baseUrl, sessionId, onClose)}
+                    onClick={() => openAffiliate(affiliate, affiliate.baseUrl, sessionId, onClose, betText)}
                     className="btn btn-primary"
                     style={{ flexShrink: 0, fontSize: 12, padding: '8px 16px' }}
                   >

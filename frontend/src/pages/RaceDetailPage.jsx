@@ -9,6 +9,8 @@ import DebriefPanel from '../components/races/DebriefPanel';
 import { getDisplayTime, formatDistance, formatPurse, isRaceDefinitelyFinished } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
 import AffiliateDrawer from '../components/common/AffiliateDrawer';
+import BetSlip from '../components/race/BetSlip';
+import ContestPick from '../components/race/ContestPick';
 import { PARTNERS } from '../utils/affiliates';
 import Icon from '../components/common/Icon';
 import FollowButton from '../components/common/FollowButton';
@@ -666,6 +668,9 @@ export default function RaceDetailPage() {
 
   const analysisMode = 'medium';
   const [analysis, setAnalysis] = useState(validCache?.analysis || null);
+  // Page-level betting drawer for Secretariat's ticket, carrying the exact bet
+  // text so the user doesn't have to re-type numbers into their sportsbook.
+  const [slipDrawer, setSlipDrawer] = useState({ open: false, betText: '' });
   const [analysisStreaming, setAnalysisStreaming] = useState(false);
   const [scorecardData, setScorecardData] = useState(validCache?.scorecardData || null);
   const [analyzeError, setAnalyzeError] = useState(null);
@@ -1068,6 +1073,32 @@ export default function RaceDetailPage() {
           <div style={{ padding: '10px 14px', background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--accent-red-bright)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Icon name="warning" size={15} color="var(--accent-red-bright)" /> {debriefError}
           </div>
+        )}
+
+        {/* ── Secretariat's ticket + Beat Secretariat ─────────────────── */}
+        {race && (
+          <>
+            <BetSlip
+              raceId={raceId}
+              raceFinished={raceFinished}
+              onPlaceBet={(betText) => setSlipDrawer({ open: true, betText })}
+            />
+            <ContestPick
+              raceId={raceId}
+              raceDate={race?.off_dt ? String(race.off_dt).slice(0, 10) : ''}
+              runners={race?.runners || []}
+              raceFinished={raceFinished}
+              secretariatPick={analysis?.predicted_finish?.first?.horse_name || ''}
+            />
+            <AffiliateDrawer
+              open={slipDrawer.open}
+              onClose={() => setSlipDrawer({ open: false, betText: '' })}
+              region={userProfile?.region || 'usa'}
+              recommendedHorse={analysis?.predicted_finish?.first?.horse_name || ''}
+              recommendedBet="Secretariat's ticket"
+              betText={slipDrawer.betText}
+            />
+          </>
         )}
 
         {/* ── Tab panel ─────────────────────────────────────────────── */}

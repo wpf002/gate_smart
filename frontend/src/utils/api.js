@@ -199,3 +199,26 @@ export const unsubscribeFromRaceAlerts = (raceId) =>
   api.delete(`/alerts/subscribe/${raceId}`).then((r) => r.data);
 
 export default api;
+
+// ── Bet slips, bet curve, contests ───────────────────────────────────────────
+export const getRaceTicket = (raceId) =>
+  api.get(`/races/ticket/${raceId}`).then((r) => r.data);
+
+export const getBetCurve = (days = 30) =>
+  api.get('/accuracy/bet-curve', { params: { days } }).then((r) => r.data);
+
+export const makeContestPick = (raceId, horseName, programNumber = '') =>
+  api.post('/contest/picks', { race_id: raceId, horse_name: horseName, program_number: programNumber })
+    .then((r) => r.data);
+
+export const getMyContestPicks = (raceDate = '') =>
+  api.get('/contest/picks', { params: raceDate ? { race_date: raceDate } : {} }).then((r) => r.data);
+
+export const getLeaderboard = (period = 'week') =>
+  api.get('/contest/leaderboard', { params: { period } }).then((r) => r.data);
+
+export const getContestProgress = () =>
+  api.get('/contest/me').then((r) => r.data);
+
+export const setDisplayName = (displayName) =>
+  api.put('/contest/display-name', { display_name: displayName }).then((r) => r.data);

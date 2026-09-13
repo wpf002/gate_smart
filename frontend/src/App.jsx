@@ -14,6 +14,7 @@ import ProfilePage from './pages/ProfilePage';
 import LoginPage from './pages/LoginPage';
 import AccuracyPage from './pages/AccuracyPage';
 import WatchlistPage from './pages/WatchlistPage';
+import ContestPage from './pages/ContestPage';
 import LandingPage from './pages/LandingPage';
 import OnboardingFlow from './components/common/OnboardingFlow';
 import { useAppStore } from './store';
@@ -62,6 +63,7 @@ const NAV_ITEMS = [
   { path: '/',          icon: 'home',    label: 'Races'   },
   { path: '/search',    icon: 'search',  label: 'Search'  },
   { path: '/watchlist', icon: 'star',    label: 'Watchlist' },
+  { path: '/contest',   icon: 'trophy',  label: 'Contest' },
   { path: '/advisor',   icon: 'robot',   label: 'Advisor' },
   { path: '/education', icon: 'learn',   label: 'Learn'   },
   { path: '/profile',   icon: 'profile', label: 'Profile' },
@@ -223,6 +225,7 @@ function AppShell() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/accuracy" element={<AccuracyPage />} />
             <Route path="/watchlist" element={<WatchlistPage />} />
+            <Route path="/contest" element={<ContestPage />} />
           </Routes>
         </ErrorBoundary>
       </div>
