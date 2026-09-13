@@ -139,7 +139,7 @@ input, textarea, select {
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-secondary);
   flex-shrink: 0;
-  padding: 0 0 20px;
+  padding: 0;
   position: sticky;
   top: 0;
   height: 100vh;
@@ -153,7 +153,6 @@ input, textarea, select {
   height: var(--header-height);
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 8px;
 }
 
 .side-nav-logo > svg {
@@ -187,79 +186,22 @@ input, textarea, select {
 }
 
 .side-nav-divider {
+  flex-shrink: 0;
   height: 1px;
   margin: 0 16px;
   background: linear-gradient(to right, transparent, rgba(201,162,39,0.2), transparent);
 }
 
-/* Profile and Secretariat's record sit at the bottom of the rail, so the rail
-   is anchored top and bottom instead of seven links trailing into blank space. */
-.side-nav-bottom {
-  margin-top: auto;
-  padding-top: 16px;
+/* The links split the rail's full height between them. */
+.side-nav-items {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
-.side-nav-record {
-  margin: 0 8px;
-  padding: 10px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-gold);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  text-align: center;
-  transition: border-color 0.15s;
-}
-
-.side-nav-record:hover,
-.side-nav-record.active {
-  border-color: var(--accent-gold);
-}
-
-.side-nav-record-title {
-  font-family: var(--font-display);
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  color: var(--accent-gold);
-}
-
-.side-nav-record-sub {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
-.side-nav-record-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.side-nav-record-row strong {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-/* On short windows the record would push Profile out of view, so it drops out
-   of the rail there and the Races header keeps its copy instead. */
-@media (max-height: 720px) {
-  .side-nav-record {
-    display: none;
-  }
-}
-
-/* Otherwise the rail shows the record on desktop and the Races header drops its copy. */
-@media (min-width: 768px) and (min-height: 721px) {
-  .home-accuracy-badge {
-    display: none;
-  }
+.side-nav-items > .side-nav-item {
+  flex: 1;
+  min-height: 56px;
 }
 
 .side-nav-item.active {

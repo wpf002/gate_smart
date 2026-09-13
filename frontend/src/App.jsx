@@ -1,7 +1,6 @@
-import { Component, useEffect, useRef, useState } from 'react';
+import { Component, Fragment, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getSecretariatAccuracy } from './utils/api';
+import { useQueryClient } from '@tanstack/react-query';
 import Icon from './components/common/Icon';
 import { GateSmartMark } from './components/common/Logo';
 import BottomNav from './components/common/BottomNav';
@@ -117,9 +116,6 @@ function SideNav() {
     );
   };
 
-  const mainItems = NAV_ITEMS.filter((item) => item.path !== '/profile');
-  const profileItem = NAV_ITEMS.find((item) => item.path === '/profile');
-
   return (
     <nav className="side-nav">
       <div
@@ -129,52 +125,16 @@ function SideNav() {
       >
         <GateSmartMark size={44} />
       </div>
-      {mainItems.map((item, idx) => (
-        <div key={item.path}>
-          {idx > 0 && <div className="side-nav-divider" />}
-          {renderItem(item)}
-        </div>
-      ))}
-      {/* Pinned to the bottom of the rail so it's anchored at both ends. */}
-      <div className="side-nav-bottom">
-        <SideNavRecord active={isActive('/accuracy')} onOpen={() => navigate('/accuracy')} />
-        {renderItem(profileItem)}
+      {/* The links share the rail's full height, so it has no empty stretch at the bottom. */}
+      <div className="side-nav-items">
+        {NAV_ITEMS.map((item, idx) => (
+          <Fragment key={item.path}>
+            {idx > 0 && <div className="side-nav-divider" />}
+            {renderItem(item)}
+          </Fragment>
+        ))}
       </div>
     </nav>
-  );
-}
-
-// Secretariat's rolling record, the same numbers as the Races header badge,
-// shown in the rail on every desktop page. Opens the Report Card.
-function SideNavRecord({ active, onOpen }) {
-  const { data } = useQuery({
-    queryKey: ['secretariat-accuracy'],
-    queryFn: getSecretariatAccuracy,
-    refetchInterval: 10 * 60 * 1000,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  if (!data || data.total_predictions < 10 || data.win_rate_percent == null) return null;
-
-  const rows = [
-    ['Win', data.win_rate_percent],
-    ['Place', data.place_rate_percent],
-    ['Show', data.show_rate_percent],
-  ];
-
-  return (
-    <button className={`side-nav-record${active ? ' active' : ''}`} onClick={onOpen} title="Report Card">
-      <span className="side-nav-record-title">SECRETARIAT</span>
-      <span className="side-nav-record-sub">Last {data.total_predictions}</span>
-      {rows.map(([label, value], i) => (
-        <span key={label} className="side-nav-record-row">
-          <span>{label}</span>
-          <strong style={i === 0 ? { color: 'var(--accent-gold-bright)' } : undefined}>
-            {value == null ? '—' : `${value}%`}
-          </strong>
-        </span>
-      ))}
-    </button>
   );
 }
 
