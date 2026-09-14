@@ -14,8 +14,12 @@ def patched(monkeypatch):
     async def fake_cal(race_id=None):
         return "YOUR RECENT PERFORMANCE: 19% over 2404 races."
 
+    async def no_lessons(race_id=None):
+        return ""
+
     monkeypatch.setattr(sec, "get_hardware_and_historical_context", no_hardware)
     monkeypatch.setattr(sec, "get_calibration_context", fake_cal)
+    monkeypatch.setattr(sec, "get_lessons_context", no_lessons)
 
 
 RACE = {
@@ -35,6 +39,22 @@ async def test_builder_returns_cached_system_blocks(patched):
     assert system[0]["cache_control"] == {"type": "ephemeral"}
     assert system[1]["text"].startswith("YOUR RECENT PERFORMANCE")
     assert system[1]["cache_control"] == {"type": "ephemeral"}
+
+
+@pytest.mark.asyncio
+async def test_builder_sends_the_races_lessons_as_a_final_uncached_block(patched, monkeypatch):
+    seen = []
+
+    async def lessons(race_id=None):
+        seen.append(race_id)
+        return "LESSONS FROM RECENT RACES (apply these now):\n  - trust the chalk"
+
+    monkeypatch.setattr(sec, "get_lessons_context", lessons)
+    system = (await sec.build_analyze_request(RACE, mode="medium"))["system"]
+    assert seen == ["ALB_123-5"], "lessons are chosen per race"
+    assert len(system) == 3
+    assert system[1]["text"].startswith("YOUR RECENT PERFORMANCE")
+    assert system[2]["text"].startswith("LESSONS") and "cache_control" not in system[2]
 
 
 @pytest.mark.asyncio

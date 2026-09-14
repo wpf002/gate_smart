@@ -10,25 +10,24 @@ measurable improvement, because nothing in the loop selected for what was true.
 
 How a lesson is scored
 ----------------------
-Every pick records which lessons its prompt carried (race_predictions.lesson_ids)
-and which A/B arm it was in. So for one lesson we can compare, over the SAME
-days and only within the races that lesson claims to govern:
+In the measured arm every eligible lesson gets its own coin flip per race: it is
+either carried by that race's prompt or withheld from it. Both outcomes are
+recorded (race_predictions.lesson_ids and lesson_holdout_ids). So for one lesson,
+within the races it claims to govern:
 
-    treated — in-scope races whose prompt carried this lesson
-    control — in-scope races ON THE SAME DAYS whose prompt did not
+    treated — races whose prompt carried it
+    control — races that were eligible for it and withheld it
 
-Restricting both sides to the days the lesson was actually carried is what makes
-this contemporaneous. An earlier version bounded only the start, so the control
-kept growing after the lesson stopped being injected and a single good day could
-be scored against a month of baseline.
+The two groups come from the same arm, the same days and the same predict passes,
+split only by a hash of (race_id, lesson id). No date windows are needed to make
+that contemporaneous, and a lesson's verdict no longer depends on which other
+lessons it happened to ride alongside.
 
-That is a contemporaneous comparison, not a before/after one, so it is not
-confounded by seasonal form, track mix, or any other change shipped in the
-meantime. Arm assignment is a deterministic hash of race_id, independent of
-track, date and field size, so neither group gets the easier races.
-
-A lesson sitting in the top slots of BOTH arms has no control group and stays
-PENDING. That is honest: we cannot measure a lesson we never withheld.
+Before per-lesson holdouts every measured race carried the same top lessons, so
+"carried lesson X" meant "was in the measured arm". Each lesson's record was the
+arm difference counted again under its name; two lessons showed identical
+numbers. Rows from that period have no holdout list and are not used here. The
+arm-level A/B in scripts/lesson_report.py still reads them.
 
 Usage:
     cd backend
@@ -81,12 +80,37 @@ def classify(treated_w, treated_n, control_w, control_n) -> tuple[str, float | N
     return "UNPROVEN", lift, p
 
 
+def count_evidence(rows, lesson_id, scope) -> tuple[int, int, int, int]:
+    """(treated wins, treated races, control wins, control races) for one lesson.
+
+    `rows` are (race_type, surface, won, lesson_ids, lesson_holdout_ids). Pure, so
+    the rule that defines a control group is testable without a database.
+
+    A row counts only if it is under per-lesson randomization (its holdout list is
+    an array) and in the lesson's scope. It is treated if it carried the lesson,
+    control if it withheld it, and ignored if the lesson was not eligible that day.
+    """
+    from app.services.lesson_scope import race_matches_scope
+
+    t_w = t_n = c_w = c_n = 0
+    for race_type, surface, won, carried, withheld in rows:
+        if not isinstance(withheld, list) or not race_matches_scope(race_type, surface, scope):
+            continue
+        if lesson_id in (carried or []):
+            t_n += 1
+            t_w += bool(won)
+        elif lesson_id in withheld:
+            c_n += 1
+            c_w += bool(won)
+    return t_w, t_n, c_w, c_n
+
+
 async def main(dry_run: bool) -> None:
     from sqlalchemy import select, text as T
 
     from app.core import database as _db
     from app.models.lesson import SecretariatLesson
-    from app.services.lesson_scope import describe_scope, race_matches_scope
+    from app.services.lesson_scope import describe_scope
 
     await _db.init_db()
 
@@ -112,25 +136,24 @@ async def main(dry_run: bool) -> None:
         print("[score_lessons] no lessons recorded yet — nothing to score")
         return
 
-    # One pass over the evidence, reused for every lesson. Only races that went
-    # through the provenance-recording path count: on older rows lesson_ids is
-    # NULL, and absence there means "not recorded", not "not applied".
+    # One pass over the evidence, reused for every lesson. Only races under
+    # per-lesson randomization count, and those are exactly the rows with a
+    # holdout array (an empty array still counts: that race withheld nothing).
     async with _db._AsyncSessionLocal() as db:
         rows = (await db.execute(T("""
-            SELECT race_type, surface, top_pick_correct, lesson_ids, race_date
+            SELECT race_type, surface, top_pick_correct, lesson_ids, lesson_holdout_ids
             FROM race_predictions
             WHERE result_fetched AND analysis_mode = 'auto_daily' AND user_id IS NULL
               -- jsonb null is NOT sql NULL: a row written with a JSON `null`
-              -- passes `IS NOT NULL`, decodes to None, and was silently counted
-              -- as CONTROL evidence for every lesson it never carried.
+              -- passes `IS NOT NULL` and decodes to None.
               AND lesson_ids IS NOT NULL AND jsonb_typeof(lesson_ids) = 'array'
+              AND lesson_holdout_ids IS NOT NULL AND jsonb_typeof(lesson_holdout_ids) = 'array'
         """))).all()
 
-    print(f"[score_lessons] {len(lessons)} lessons | {len(rows)} scored races with provenance")
+    print(f"[score_lessons] {len(lessons)} lessons | {len(rows)} settled races under per-lesson holdouts")
     if not rows:
-        print("  No races carry lesson provenance yet. Verdicts stay PENDING until")
-        print("  the next nightly slate runs with the playbook wired in.")
-        return
+        print("  No settled races under per-lesson holdouts yet. Verdicts stay PENDING")
+        print("  until the first randomized slate has results.")
 
     now = datetime.now(timezone.utc)
     changed = []
@@ -138,40 +161,7 @@ async def main(dry_run: bool) -> None:
 
     for lesson in lessons:
         scope = lesson.scope or {}
-
-        # Both groups are restricted to the days this lesson was actually
-        # carried by at least one pick. Without that, only a lower bound applied
-        # and the control kept absorbing races for the rest of the table's life:
-        # a lesson's treated count freezes the night it drops out of the top
-        # slots, so one good day ends up compared against a month-long baseline
-        # and returns a confident PROVEN. Same days on both sides is what makes
-        # this the contemporaneous comparison it always claimed to be.
-        injected_dates = {
-            race_date for _t, _s, _c, lesson_ids, race_date in rows
-            if race_date and lesson.id in (lesson_ids or [])
-        }
-        # A lesson's activation date is not one playbook regime. Two predict
-        # passes run for the same race_date (12:00 UTC, then 15:00 --only-missing)
-        # with reflect minting lessons at 14:30 in between, so on that day the
-        # split is not the race_id hash at all: treated is whatever the second
-        # pass happened to cover, control whatever the first did. Which races
-        # land in which pass depends on feed timing and which tracks posted late
-        # — exactly the track/card confound the hash split exists to remove.
-        if lesson.activated_at:
-            injected_dates.discard(lesson.activated_at.date())
-
-        t_n = t_w = c_n = c_w = 0
-        for race_type, surface, correct, lesson_ids, race_date in rows:
-            if race_date not in injected_dates:
-                continue
-            if not race_matches_scope(race_type, surface, scope):
-                continue
-            if lesson.id in (lesson_ids or []):
-                t_n += 1
-                t_w += bool(correct)
-            else:
-                c_n += 1
-                c_w += bool(correct)
+        t_w, t_n, c_w, c_n = count_evidence(rows, lesson.id, scope)
 
         verdict, lift, p = classify(t_w, t_n, c_w, c_n)
         was = lesson.verdict
@@ -190,7 +180,7 @@ async def main(dry_run: bool) -> None:
                 lesson.status = "retired"
                 lesson.retired_at = now
                 lesson.retire_reason = (
-                    f"measured {lift:+.1f} pts vs control over {t_n} in-scope races (p={p:.3f})"
+                    f"measured {lift:+.1f} pts vs withheld over {t_n} in-scope races (p={p:.3f})"
                 )
                 # Also evict it from the calibration list, which is the curator's
                 # candidate pool. Leaving it there let the next reflect run hand
@@ -199,7 +189,7 @@ async def main(dry_run: bool) -> None:
                 failed_texts.append(lesson.text)
 
         tag = f"{was}->{verdict}" if was != verdict else verdict
-        detail = (f"treated {t_w}/{t_n} vs control {c_w}/{c_n}"
+        detail = (f"carried {t_w}/{t_n} vs withheld {c_w}/{c_n}"
                   + (f" | {lift:+.1f} pts p={p:.3f}" if lift is not None and p is not None else ""))
         print(f"  [{tag:<18}] {detail:<58} {describe_scope(scope)}")
         print(f"      {lesson.text[:120]}")

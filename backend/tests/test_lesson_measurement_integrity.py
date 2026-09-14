@@ -5,10 +5,12 @@ An audit of the loop found the scoring apparatus could manufacture confident
 verdicts from nothing. These are the three defects that mattered most, each
 pinned so it cannot come back:
 
-1. The control group had only a lower date bound. A lesson's treated count
-   freezes the night it drops out of the injected set, but its control kept
-   absorbing races for the life of the table — so one good day got scored
-   against a month of baseline and returned PROVEN.
+1. The control group was not a control. It first had only a lower date bound,
+   so one good day got scored against a month of baseline and returned PROVEN.
+   Then, with every measured race carrying the same top lessons, "did not carry
+   lesson X" meant "was in the other arm", and each lesson's record was the arm
+   difference counted again. Control is now the races that withheld the lesson
+   by per-race coin flip.
 2. A FAILING lesson was resurrected by the next reflect run, because its text
    stayed in the calibration list that feeds the curator. Reactivation reset
    activated_at, discarding the very races that condemned it, and the next
@@ -27,11 +29,45 @@ NIGHTLY = (BACKEND / "scripts" / "nightly_predict_all.py").read_text()
 MEMORY = (BACKEND / "app" / "services" / "lesson_memory.py").read_text()
 
 
-def test_both_groups_are_restricted_to_days_the_lesson_was_carried():
-    assert "injected_dates" in SCORE
-    assert "if race_date not in injected_dates:" in SCORE
-    # The old lower-bound-only filter must be gone.
-    assert "race_date < activated.date()" not in SCORE
+def test_control_is_the_races_that_withheld_the_lesson():
+    """The control group used to be every in-scope race that did not carry the
+    lesson. Every measured race carried the same top lessons, so that was just
+    the other arm, and two different lessons showed identical records. Control is
+    now only races that were eligible for the lesson and withheld it."""
+    from scripts.score_lessons import count_evidence
+
+    rows = [
+        # race_type, surface, won, carried, withheld
+        ("CLAIMING", "Dirt", True, [7, 9], [3]),    # carried 7
+        ("CLAIMING", "Dirt", False, [9], [7, 3]),   # withheld 7
+        ("CLAIMING", "Dirt", True, [9], [3]),       # 7 not eligible that race
+        ("STAKES", "Turf", True, [7], []),          # carried 7, empty holdout list still counts
+    ]
+    assert count_evidence(rows, 7, {}) == (2, 2, 0, 1)
+
+
+def test_rows_without_a_holdout_list_are_not_evidence():
+    """Rows from before per-lesson holdouts (and recency-arm rows) have no holdout
+    list. Counting them would bring the bundled comparison straight back."""
+    from scripts.score_lessons import count_evidence
+
+    rows = [
+        ("CLAIMING", "Dirt", True, [7], None),
+        ("CLAIMING", "Dirt", False, [], None),
+    ]
+    assert count_evidence(rows, 7, {}) == (0, 0, 0, 0)
+
+
+def test_evidence_respects_the_lessons_scope():
+    from scripts.score_lessons import count_evidence
+
+    rows = [
+        ("CLAIMING", "Turf", True, [7], []),
+        ("CLAIMING", "Dirt", True, [7], []),
+        ("STAKES", "Turf", False, [], [7]),
+    ]
+    turf_claiming = {"race_types": ["CLAIMING"], "surfaces": ["TURF"]}
+    assert count_evidence(rows, 7, turf_claiming) == (1, 1, 0, 0)
 
 
 def test_a_failed_lesson_is_evicted_from_the_curators_candidate_pool():
@@ -58,11 +94,20 @@ def test_reactivation_resets_the_evidence_it_claims_to_reset():
 
 
 def test_only_lesson_bearing_picks_record_provenance():
-    guard = re.search(r'if lock_source == "nightly":\s*\n\s*try:\s*\n\s*from app\.services\.lesson_memory import lessons_for_race',
+    guard = re.search(r'if lock_source == "nightly":\s*\n\s*try:\s*\n\s*from app\.services\.lesson_memory import \(',
                       NIGHTLY)
     assert guard, "lesson provenance must be guarded on the full-analysis path"
     # Defaults must be set before the guard so lean/fallback rows write NULL.
-    assert "lesson_arm, lesson_ids = None, None\n            if lock_source" in NIGHTLY
+    assert "lesson_arm, lesson_ids, lesson_holdout_ids = None, None, None\n            if lock_source" in NIGHTLY
+
+
+def test_provenance_comes_from_the_same_assignment_as_the_prompt():
+    """The prompt and the stored row must be built from one helper, or a lesson
+    can be credited with races that never saw it."""
+    assert "await lesson_assignment_for_race(race_id)" in NIGHTLY
+    assert '"lesson_holdout_ids": lesson_holdout_ids' in NIGHTLY
+    secretariat = (BACKEND / "app" / "services" / "secretariat.py").read_text()
+    assert "await lesson_assignment_for_race(race_id)" in secretariat
 
 
 def test_the_playbook_is_pinned_for_the_length_of_a_run():
@@ -73,13 +118,13 @@ def test_the_playbook_is_pinned_for_the_length_of_a_run():
     assert "freeze_lessons(True)" in NIGHTLY
 
 
-def test_the_activation_day_is_excluded_from_evidence():
-    """Two predict passes run for the same race_date (12:00 UTC, then 15:00
-    --only-missing) with reflect minting lessons at 14:30 between them. On a
-    lesson's first day, treated is whatever the second pass covered and control
-    whatever the first did — split by feed timing and which tracks posted late,
-    not by the race_id hash. That day cannot be counted as contemporaneous."""
-    assert "injected_dates.discard(lesson.activated_at.date())" in SCORE
+def test_scoring_reads_only_randomized_rows():
+    """Two predict passes per day with reflect minting lessons between them used
+    to split a lesson's first day by pass, not by hash. Holdouts are decided per
+    race inside whichever pass runs, so scoring needs no date windows, but it
+    must only read rows that were randomized."""
+    assert "jsonb_typeof(lesson_holdout_ids) = 'array'" in SCORE
+    assert "injected_dates" not in SCORE
 
 
 def test_the_eviction_count_is_computed_before_the_assignment():

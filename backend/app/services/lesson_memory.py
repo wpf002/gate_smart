@@ -25,6 +25,23 @@ LESSON_CONTROL_LIMIT = int(os.getenv("LESSON_CONTROL_LIMIT", "5"))
 # Percentage of races routed to the evidence-ranked arm. 0 ends the experiment
 # and sends every race to the old behaviour.
 LESSON_AB_PERCENT = int(os.getenv("LESSON_AB_PERCENT", "50"))
+# In the measured arm, each lesson is withheld from this share of races, decided
+# per race AND per lesson. Until this existed every measured race carried the
+# same top lessons, so "races that carried lesson X" was just "the measured arm":
+# each lesson's verdict was the arm difference counted again under its name,
+# which is why two different lessons showed identical records. An independent
+# coin flip per lesson gives every lesson its own control group. 0 turns it off.
+LESSON_HOLDOUT_PERCENT = int(os.getenv("LESSON_HOLDOUT_PERCENT", "50"))
+# A PROVEN lesson has already beaten its control, so it is withheld far less
+# often: enough to keep checking it still works, not so much that most races
+# lose it.
+LESSON_PROVEN_HOLDOUT_PERCENT = int(os.getenv("LESSON_PROVEN_HOLDOUT_PERCENT", "10"))
+# How many top-ranked lessons are under test at once. Twice the prompt limit, so
+# with half of them withheld a prompt still carries about LESSON_INJECT_LIMIT,
+# and each lesson under test is in roughly half the measured races. Testing every
+# active lesson instead would thin that exposure as the table grows and slow
+# every verdict.
+LESSON_ELIGIBLE_LIMIT = int(os.getenv("LESSON_ELIGIBLE_LIMIT", str(2 * LESSON_INJECT_LIMIT)))
 
 ARM_MEASURED = "measured"
 ARM_RECENCY = "recency"
@@ -98,6 +115,59 @@ def select_lessons(lessons: list, arm: str = ARM_MEASURED, limit: int | None = N
             chosen = chosen[: limit - 1] + [best_continue]
 
     return chosen
+
+
+def lesson_withheld(race_id: str, lesson) -> bool:
+    """Whether this race's prompt withholds this lesson. Deterministic per
+    (race_id, lesson id), so the prompt and the stored provenance agree and a
+    second predict pass never flips it.
+
+    Its own salt, so being withheld is independent of the arm split, the model
+    split and every other lesson's coin flip.
+    """
+    pct = (LESSON_PROVEN_HOLDOUT_PERCENT if getattr(lesson, "verdict", None) == "PROVEN"
+           else LESSON_HOLDOUT_PERCENT)
+    if pct <= 0 or not race_id:
+        return False
+    digest = hashlib.md5(f"holdout:{race_id}:{getattr(lesson, 'id', None)}".encode()).hexdigest()[:8]
+    return int(digest, 16) % 100 < pct
+
+
+def assign_lessons(lessons: list, race_id: str, arm: str = ARM_MEASURED,
+                   limit: int | None = None) -> tuple[list, list]:
+    """(carried, withheld) for one race's prompt.
+
+    The recency arm is the old behaviour verbatim and withholds nothing.
+
+    In the measured arm the top LESSON_ELIGIBLE_LIMIT lessons (active, not
+    FAILING, in rank order) each get their own coin flip. Survivors fill the
+    prompt in rank order up to `limit`; survivors past the limit are withheld
+    too. That is still random with respect to the race, because which lessons
+    survive depends only on the hashes. A surviving CONTINUE lesson keeps its
+    guaranteed slot, but a CONTINUE lesson the coin flip withheld stays withheld,
+    or it would never get a control group.
+    """
+    if arm == ARM_RECENCY or LESSON_HOLDOUT_PERCENT <= 0:
+        return select_lessons(lessons, arm=arm, limit=limit), []
+
+    limit = limit or LESSON_INJECT_LIMIT
+    active = [l for l in lessons if getattr(l, "status", "active") == "active"]
+    ranked = sorted(
+        (l for l in active if getattr(l, "verdict", "PENDING") != "FAILING"),
+        key=_sort_key_measured,
+    )[:LESSON_ELIGIBLE_LIMIT]
+    survivors = [l for l in ranked if not lesson_withheld(race_id, l)]
+    carried = survivors[:limit]
+
+    if limit > 0 and not any(getattr(l, "lesson_type", "change") == "continue" for l in carried):
+        spare = next((l for l in survivors[limit:]
+                      if getattr(l, "lesson_type", "change") == "continue"), None)
+        if spare is not None:
+            carried = carried[: limit - 1] + [spare]
+
+    carried_ids = {id(l) for l in carried}
+    withheld = [l for l in ranked if id(l) not in carried_ids]
+    return carried, withheld
 
 
 def render_lessons_block(lessons: list) -> str:
@@ -180,8 +250,9 @@ async def _active_lessons_cached() -> list:
     return _cached_lessons
 
 
-async def lessons_for_race(race_id: str) -> tuple[str, list]:
-    """The arm this race is in, and the lessons its prompt receives.
+async def lesson_assignment_for_race(race_id: str) -> tuple[str, list, list]:
+    """The arm this race is in, the lessons its prompt carries, and the eligible
+    lessons it withheld.
 
     One function so the prompt and the stored provenance can never disagree:
     whatever this returns is both what the model was told and what we record
@@ -189,4 +260,11 @@ async def lessons_for_race(race_id: str) -> tuple[str, list]:
     "was it applied?" column is exactly right.
     """
     arm = lesson_arm_for_race(race_id)
-    return arm, select_lessons(await _active_lessons_cached(), arm=arm)
+    carried, withheld = assign_lessons(await _active_lessons_cached(), race_id, arm=arm)
+    return arm, carried, withheld
+
+
+async def lessons_for_race(race_id: str) -> tuple[str, list]:
+    """The arm this race is in, and the lessons its prompt receives."""
+    arm, carried, _withheld = await lesson_assignment_for_race(race_id)
+    return arm, carried

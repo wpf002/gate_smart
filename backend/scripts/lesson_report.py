@@ -74,16 +74,16 @@ async def main(days: int) -> None:
             c = f"{lesson.baseline_wins}/{lesson.baseline_races}"
             tr = lesson.win_rate()
             cr = lesson.baseline_rate()
-            # Either side can legitimately be zero: a lesson in the top slots of
-            # both arms has no control group, and a brand-new lesson has no
-            # treated races yet. Neither is an error, so neither may crash here.
+            # Either side can legitimately be zero early on: a lesson's first
+            # few randomized races may all land on one side. Neither is an
+            # error, so neither may crash here.
             t_txt = f"{t} ({tr:.1%} [{lo:.1%}–{hi:.1%}])" if tr is not None else f"{t} (none yet)"
-            c_txt = f"{c} ({cr:.1%})" if cr is not None else f"{c} (no control group)"
-            print(f"  carried {t_txt}  vs  without {c_txt}")
+            c_txt = f"{c} ({cr:.1%})" if cr is not None else f"{c} (none withheld yet)"
+            print(f"  carried {t_txt}  vs  withheld {c_txt}")
             if lesson.lift is not None and lesson.p_value is not None:
                 print(f"  lift {lesson.lift:+.1f} pts, p={lesson.p_value:.3f}")
         else:
-            print("  no in-scope races with provenance yet")
+            print("  no settled in-scope races under per-lesson holdouts yet")
         if lesson.retire_reason:
             print(f"  retired: {lesson.retire_reason}")
 

@@ -362,7 +362,7 @@ INTERNAL CONSISTENCY RULE: Within a single response, the horse you name as predi
 Always respond in valid JSON as specified in each prompt. No markdown inside string values. No extra text outside the JSON object."""
 
 
-def _cached_system(extra: str = "", ttl: str | None = None) -> list[dict]:
+def _cached_system(extra: str = "", ttl: str | None = None, uncached: str = "") -> list[dict]:
     """System param with prompt caching enabled.
 
     SECRETARIAT_SYSTEM is ~5.5k tokens and was being re-billed at full price on
@@ -378,6 +378,10 @@ def _cached_system(extra: str = "", ttl: str | None = None) -> list[dict]:
     i.e. only 46% of cache traffic was hits, and a write bills at 1.25x (2x at
     1h) versus 0.1x for a read. Interactive calls stay on 5m, where a longer
     (and pricier-to-write) entry would not pay for itself.
+
+    `uncached` rides last with no cache marker. The lesson block goes there: each
+    lesson is switched on or off per race, so almost every race has a different
+    set, and caching it would pay a cache write per race for nothing.
     """
     cc: dict = {"type": "ephemeral"}
     if ttl:
@@ -393,6 +397,8 @@ def _cached_system(extra: str = "", ttl: str | None = None) -> list[dict]:
             "text": extra,
             "cache_control": dict(cc),
         })
+    if uncached:
+        blocks.append({"type": "text", "text": uncached})
     return blocks
 
 
@@ -907,6 +913,7 @@ async def build_analyze_request(
         ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values())
 
     cal_context = await get_calibration_context(race_data.get("race_id"))
+    lessons_context = await get_lessons_context(race_data.get("race_id"))
 
     # Our own accumulated form lines — the NA feed ships every runner with an
     # empty `form`, so without this the model handicaps blind on recent record.
@@ -1000,7 +1007,7 @@ Return this JSON exactly:
         "model": model or PICK_MODEL_DEFAULT,
         "max_tokens": 5000,
         "temperature": 0.2,
-        "system": _cached_system(cal_context, ttl=cache_ttl),
+        "system": _cached_system(cal_context, ttl=cache_ttl, uncached=lessons_context),
         "messages": [{"role": "user", "content": prompt}],
     }
 
@@ -1017,6 +1024,7 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
     # Rolling calibration rides as a cached system block (changes once daily) so
     # Secretariat still learns from its own history without re-billing the tokens.
     cal_context = await get_calibration_context(race_data.get("race_id"))
+    lessons_context = await get_lessons_context(race_data.get("race_id"))
 
     # Our own accumulated form lines — the NA feed ships every runner with an
     # empty `form`, so without this the model handicaps blind on recent record.
@@ -1118,7 +1126,7 @@ Return this JSON exactly:
         model="claude-haiku-4-5-20251001",
         max_tokens=5000,
         temperature=0.2,
-        system=_cached_system(cal_context),
+        system=_cached_system(cal_context, uncached=lessons_context),
         messages=[{"role": "user", "content": prompt}]
     ) as stream:
         async for text in stream.text_stream:
@@ -2723,7 +2731,9 @@ async def _playbook_status() -> dict:
 
         from app.core.database import _AsyncSessionLocal
         from app.models.lesson import SecretariatLesson
-        from app.services.lesson_memory import LESSON_CONTROL_LIMIT, LESSON_INJECT_LIMIT
+        from app.services.lesson_memory import (
+            LESSON_CONTROL_LIMIT, LESSON_ELIGIBLE_LIMIT, LESSON_HOLDOUT_PERCENT, LESSON_INJECT_LIMIT,
+        )
 
         if not _AsyncSessionLocal:
             return out
@@ -2748,7 +2758,16 @@ async def _playbook_status() -> dict:
         # Per arm, because half the races get the old five-slot behaviour. A
         # single number from LESSON_INJECT_LIMIT read as "every pick carries N",
         # which was untrue for the recency arm and independent of the data.
-        out["injected"] = min(len(active), LESSON_INJECT_LIMIT)
+        # With per-lesson holdouts a measured pick carries the lessons that
+        # survived their coin flips, so the count is the typical survivor count,
+        # not the prompt limit.
+        if LESSON_HOLDOUT_PERCENT > 0:
+            under_test = min(len(active), LESSON_ELIGIBLE_LIMIT)
+            out["injected"] = min(LESSON_INJECT_LIMIT,
+                                  round(under_test * (100 - LESSON_HOLDOUT_PERCENT) / 100))
+            out["holdout_percent"] = LESSON_HOLDOUT_PERCENT
+        else:
+            out["injected"] = min(len(active), LESSON_INJECT_LIMIT)
         out["injected_recency"] = min(len(active), LESSON_CONTROL_LIMIT)
 
         arms = {a: (w or 0, n) for a, n, w in rows}
@@ -2817,18 +2836,25 @@ def _playbook_sentences(status: dict) -> list[str]:
     mean for the picks being made today.
     """
     recency = status.get("injected_recency")
+    about = "about " if status.get("holdout_percent") else ""
     if recency and recency != status["injected"]:
         opening = (
-            f"Secretariat is carrying {status['injected']} lessons into about half "
+            f"Secretariat is carrying {about}{status['injected']} lessons into about half "
             f"its picks and {recency} into the rest, chosen from "
             f"{status['active']} it currently believes — the two are being compared."
         )
     else:
         opening = (
-            f"Secretariat is carrying {status['injected']} lessons into every pick, "
+            f"Secretariat is carrying {about}{status['injected']} lessons into every pick, "
             f"chosen from {status['active']} it currently believes."
         )
     lines = [opening]
+    if status.get("holdout_percent"):
+        lines.append(
+            f"Each lesson is left out of a random {status['holdout_percent']}% of those "
+            f"picks, so it is judged against the same kind of races without it rather "
+            f"than alongside every other lesson."
+        )
     if status["proven"]:
         n = status["proven"]
         lines.append(
@@ -2899,13 +2925,62 @@ def _render_playbook_text(status: dict) -> str:
 
 # ── Calibration Context ───────────────────────────────────────────────────────
 
+async def get_lessons_context(race_id: str | None = None) -> str:
+    """The lesson block for one race's prompt.
+
+    Lessons come from the tracked playbook. This used to be `cal.lessons[:5]`
+    against a newest-first list, which made memory a five-slot recency window:
+    nine of fourteen lessons were curated, stored, shown in the digest, and never
+    read by any pick.
+
+    Kept apart from get_calibration_context because it now differs per race:
+    each lesson is withheld from a random share of races so it can be measured on
+    its own. The calibration block stays identical across the slate and keeps its
+    cache hit; this block rides uncached after it.
+    """
+    try:
+        from app.services.lesson_memory import lesson_assignment_for_race, render_lessons_block
+        if race_id:
+            _arm, carried, withheld = await lesson_assignment_for_race(race_id)
+        else:
+            carried, withheld = [], []
+        block = render_lessons_block(carried)
+    except Exception:
+        return ""
+    if block:
+        return block
+    if carried or withheld:
+        # The playbook exists and this race drew no lessons. That empty prompt is
+        # the control condition; filling it from the legacy list would hand the
+        # control group lessons and void the comparison.
+        return ""
+
+    # Playbook table not populated yet (first boot after deploy): fall back to
+    # the legacy list so picks never lose their lessons entirely.
+    try:
+        from app.core.database import _AsyncSessionLocal
+        from app.models.accuracy import SecretariatCalibration
+
+        if not _AsyncSessionLocal:
+            return ""
+        async with _AsyncSessionLocal() as db:
+            cal = await db.get(SecretariatCalibration, 1)
+        if not cal or not cal.lessons:
+            return ""
+        return "\n".join(["LESSONS FROM RECENT RACES (apply these now):",
+                          *(f"  - {lesson}" for lesson in cal.lessons[:5])])
+    except Exception:
+        return ""
+
+
 async def get_calibration_context(race_id: str | None = None) -> str:
     """
     Returns a context string injected into every analysis prompt.
     Returns empty string if < 20 samples or calibration row missing.
 
-    `race_id` selects the lesson-memory A/B arm. Passing None keeps the old
-    recency behaviour, which is what the non-race callers (digest, tooling) want.
+    Identical for every race on the slate, so it caches. The per-race lesson
+    block lives in get_lessons_context. `race_id` is accepted so both helpers take
+    the same arguments at the call sites.
     """
     try:
         from app.core.database import _AsyncSessionLocal
@@ -2934,26 +3009,6 @@ async def get_calibration_context(race_id: str | None = None) -> str:
             lines.append("YOUR STRENGTHS (be more decisive):")
             for spot in cal.strong_spots[:3]:
                 lines.append(f"  - {spot}")
-
-        # Lessons come from the tracked playbook, ranked by measured record.
-        # This used to be `cal.lessons[:5]` against a newest-first list, which
-        # made memory a five-slot recency window: nine of fourteen lessons were
-        # curated, stored, shown in the digest, and never read by any pick.
-        lesson_block = ""
-        try:
-            from app.services.lesson_memory import lessons_for_race, render_lessons_block
-            _arm, chosen = await lessons_for_race(race_id) if race_id else (None, [])
-            lesson_block = render_lessons_block(chosen)
-        except Exception:
-            lesson_block = ""
-        if lesson_block:
-            lines.append(lesson_block)
-        elif cal.lessons:
-            # Playbook table not populated yet (first boot after deploy) — fall
-            # back to the legacy list so picks never lose their lessons entirely.
-            lines.append("LESSONS FROM RECENT RACES (apply these now):")
-            for lesson in cal.lessons[:5]:
-                lines.append(f"  - {lesson}")
 
         # MARKET DISCIPLINE — cite the model's REAL agree-vs-fade record when we
         # have it (populated nightly from actual results), never hardcoded numbers.

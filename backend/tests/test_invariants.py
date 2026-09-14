@@ -74,6 +74,14 @@ async def test_the_jsonb_null_leak_is_caught():
 
 
 @pytest.mark.asyncio
+async def test_a_lesson_both_carried_and_withheld_is_caught():
+    """One race counted as its own treated and control would bias every verdict
+    toward no difference."""
+    assert await invariants.check_provenance_shape(FakeDB([(0,)], [(3,)])) is not None
+    assert await invariants.check_provenance_shape(FakeDB([(0,)], [(0,)])) is None
+
+
+@pytest.mark.asyncio
 async def test_form_archive_corruption_is_caught():
     """The also_ran character-split signature, now watched on the live path and
     not only in the backfill script."""

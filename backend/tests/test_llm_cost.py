@@ -45,3 +45,13 @@ def test_cached_system_with_calibration_block():
     assert len(blocks) == 2
     assert blocks[1]["text"].startswith("YOUR RECENT PERFORMANCE")
     assert all(b["cache_control"] == {"type": "ephemeral"} for b in blocks)
+
+
+def test_lessons_ride_last_and_uncached():
+    """Each lesson is switched on or off per race, so nearly every race has its
+    own set. A cache marker there would buy a cache write per race and no hits,
+    and anything placed after it would lose its cache too."""
+    blocks = _cached_system("YOUR RECENT PERFORMANCE: ...", uncached="LESSONS FROM RECENT RACES")
+    assert len(blocks) == 3
+    assert "cache_control" in blocks[0] and "cache_control" in blocks[1]
+    assert blocks[2]["text"].startswith("LESSONS") and "cache_control" not in blocks[2]

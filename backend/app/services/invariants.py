@@ -65,20 +65,34 @@ async def check_pick_model_mix(db) -> str | None:
 
 
 async def check_provenance_shape(db) -> str | None:
-    """lesson_ids must be a real array or SQL NULL — never a JSON null.
+    """lesson_ids and lesson_holdout_ids must be real arrays or SQL NULL, never a
+    JSON null, and no lesson may be both carried and withheld by the same race.
 
     A JSON null passes `IS NOT NULL`, decodes to None, and gets counted as
-    control evidence for lessons the race never carried.
+    evidence for lessons the race never carried. A lesson in both lists would
+    count the same race as its own treated and control.
     """
     rows = await _fetch(db, """
         SELECT COUNT(*) FROM race_predictions
         WHERE analysis_mode = 'auto_daily' AND user_id IS NULL
           AND race_date >= CURRENT_DATE - 2
-          AND lesson_ids IS NOT NULL AND jsonb_typeof(lesson_ids) <> 'array'
+          AND ((lesson_ids IS NOT NULL AND jsonb_typeof(lesson_ids) <> 'array')
+            OR (lesson_holdout_ids IS NOT NULL AND jsonb_typeof(lesson_holdout_ids) <> 'array'))
     """)
     bad = rows[0][0] if rows else 0
     if bad:
-        return f"{bad} prediction rows hold a non-array lesson_ids (jsonb null leak)"
+        return f"{bad} prediction rows hold a non-array lesson_ids or lesson_holdout_ids (jsonb null leak)"
+    rows = await _fetch(db, """
+        SELECT COUNT(*) FROM race_predictions
+        WHERE analysis_mode = 'auto_daily' AND user_id IS NULL
+          AND race_date >= CURRENT_DATE - 2
+          AND jsonb_typeof(lesson_ids) = 'array' AND jsonb_typeof(lesson_holdout_ids) = 'array'
+          AND EXISTS (SELECT 1 FROM jsonb_array_elements(lesson_ids) c
+                      JOIN jsonb_array_elements(lesson_holdout_ids) h ON c = h)
+    """)
+    overlap = rows[0][0] if rows else 0
+    if overlap:
+        return f"{overlap} prediction rows list the same lesson as both carried and withheld"
     return None
 
 

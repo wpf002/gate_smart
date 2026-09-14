@@ -76,6 +76,7 @@ _STARTUP_MIGRATIONS: list[str] = [
     # Lesson-memory A/B: which arm produced the pick and which lessons it carried.
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_arm VARCHAR(20)",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_ids JSONB",
+    "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_holdout_ids JSONB",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS fade_reason VARCHAR(30)",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_applied BOOLEAN DEFAULT FALSE",
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_eligible BOOLEAN DEFAULT FALSE",

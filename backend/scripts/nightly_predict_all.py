@@ -409,6 +409,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS pick_model VARCHAR(60)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_arm VARCHAR(20)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_ids JSONB"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_holdout_ids JSONB"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS fade_reason VARCHAR(30)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_applied BOOLEAN DEFAULT FALSE"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_eligible BOOLEAN DEFAULT FALSE"))
@@ -760,14 +761,21 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
             # predict_race(), whose prompt contains no lessons at all — stamping
             # them was filing ~20% of the slate as evidence for lessons they
             # never saw, attenuating every measured lift toward zero.
-            lesson_arm, lesson_ids = None, None
+            lesson_arm, lesson_ids, lesson_holdout_ids = None, None, None
             if lock_source == "nightly":
                 try:
-                    from app.services.lesson_memory import lessons_for_race
-                    lesson_arm, chosen_lessons = await lessons_for_race(race_id)
-                    lesson_ids = [l.id for l in chosen_lessons]
+                    from app.services.lesson_memory import (
+                        ARM_MEASURED, LESSON_HOLDOUT_PERCENT, lesson_assignment_for_race,
+                    )
+                    lesson_arm, carried, withheld = await lesson_assignment_for_race(race_id)
+                    lesson_ids = [l.id for l in carried]
+                    # Only races under per-lesson randomization get a holdout
+                    # list, even an empty one. An array here is what marks the row
+                    # as usable evidence for scoring.
+                    if lesson_arm == ARM_MEASURED and LESSON_HOLDOUT_PERCENT > 0:
+                        lesson_holdout_ids = [l.id for l in withheld]
                 except Exception:
-                    lesson_arm, lesson_ids = None, None
+                    lesson_arm, lesson_ids, lesson_holdout_ids = None, None, None
 
             row = {
                 "race_id": _clip(race_id, 100),
@@ -800,6 +808,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 "rerank_eligible": rerank_eligible,
                 "lesson_arm": lesson_arm,
                 "lesson_ids": lesson_ids,
+                "lesson_holdout_ids": lesson_holdout_ids,
                 # Which market-divergence angle was claimed. Scored later to find
                 # which fades are worth making at all.
                 "fade_reason": _clip(normalize_fade_reason(

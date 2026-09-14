@@ -271,3 +271,136 @@ def test_no_race_id_never_lands_in_the_lean_arm():
 
     assert pick_depth_for_race("") == "full"
     assert pick_depth_for_race(None) == "full"
+
+
+# ── Per-lesson holdouts ─────────────────────────────────────────────────────
+# Every measured race used to carry the same top lessons, so "carried lesson X"
+# was "in the measured arm" and each lesson's verdict was the arm difference
+# again. Two lessons showed identical records. Each lesson now gets its own coin
+# flip per race, which gives it a control group of its own.
+
+def _playbook(n, **kw):
+    lessons = []
+    for i in range(n):
+        lesson = L(f"lesson {i}", age_days=i, **kw)
+        lesson.id = 100 + i
+        lessons.append(lesson)
+    return lessons
+
+
+def test_assignment_is_stable_for_a_race():
+    """The prompt and the stored row are built at different times; a second
+    predict pass runs hours later. Neither may see a different assignment."""
+    from app.services.lesson_memory import assign_lessons
+
+    lessons = _playbook(12)
+    first = assign_lessons(lessons, "SAR_1-4")
+    for _ in range(5):
+        again = assign_lessons(lessons, "SAR_1-4")
+        assert [l.id for l in again[0]] == [l.id for l in first[0]]
+        assert [l.id for l in again[1]] == [l.id for l in first[1]]
+
+
+def test_every_eligible_lesson_is_either_carried_or_withheld_never_both():
+    from app.services.lesson_memory import LESSON_INJECT_LIMIT, assign_lessons
+
+    lessons = _playbook(12)
+    for i in range(200):
+        carried, withheld = assign_lessons(lessons, f"TRK_{i}-3")
+        c, w = {l.id for l in carried}, {l.id for l in withheld}
+        assert not c & w
+        assert c | w == {l.id for l in lessons}
+        assert len(carried) <= LESSON_INJECT_LIMIT
+
+
+def test_each_lesson_is_withheld_from_about_the_configured_share():
+    from app.services.lesson_memory import LESSON_HOLDOUT_PERCENT, lesson_withheld
+
+    lesson = _playbook(1)[0]
+    ids = [f"TRK_{i}-{i % 9}" for i in range(4000)]
+    share = sum(lesson_withheld(r, lesson) for r in ids) / len(ids)
+    assert abs(share * 100 - LESSON_HOLDOUT_PERCENT) < 4
+
+
+def test_one_lessons_coin_flip_is_independent_of_anothers():
+    """If two lessons were withheld together, their verdicts would still be one
+    experiment counted twice."""
+    from app.services.lesson_memory import lesson_withheld
+
+    a, b = _playbook(2)
+    ids = [f"TRK_{i}-{i % 9}" for i in range(4000)]
+    agree = sum(lesson_withheld(r, a) == lesson_withheld(r, b) for r in ids) / len(ids)
+    assert 0.44 < agree < 0.56
+
+
+def test_holdouts_are_independent_of_the_arm_split():
+    from app.services.lesson_memory import lesson_arm_for_race, lesson_withheld
+
+    lesson = _playbook(1)[0]
+    ids = [f"TRK_{i}-{i % 9}" for i in range(4000)]
+    measured = [r for r in ids if lesson_arm_for_race(r) == ARM_MEASURED]
+    share = sum(lesson_withheld(r, lesson) for r in measured) / len(measured)
+    overall = sum(lesson_withheld(r, lesson) for r in ids) / len(ids)
+    assert abs(share - overall) < 0.04
+
+
+def test_the_recency_arm_is_untouched():
+    """The control arm is the old behaviour verbatim, or the arm A/B measures
+    two changes at once."""
+    from app.services.lesson_memory import assign_lessons
+
+    lessons = _playbook(10)
+    carried, withheld = assign_lessons(lessons, "SAR_1-4", arm=ARM_RECENCY)
+    assert withheld == []
+    assert [l.text for l in carried] == [l.text for l in select_lessons(lessons, arm=ARM_RECENCY)]
+
+
+def test_failing_and_retired_lessons_are_neither_carried_nor_withheld():
+    """Withholding a lesson nobody would carry is not a control; it would pad the
+    control group of a lesson that is already out."""
+    from app.services.lesson_memory import assign_lessons
+
+    lessons = _playbook(4)
+    lessons[0].verdict = "FAILING"
+    lessons[1].status = "retired"
+    for i in range(50):
+        carried, withheld = assign_lessons(lessons, f"TRK_{i}-1")
+        ids = {l.id for l in carried} | {l.id for l in withheld}
+        assert ids == {lessons[2].id, lessons[3].id}
+
+
+def test_a_proven_lesson_is_withheld_far_less_often():
+    from app.services.lesson_memory import (
+        LESSON_HOLDOUT_PERCENT, LESSON_PROVEN_HOLDOUT_PERCENT, lesson_withheld,
+    )
+
+    proven = _playbook(1, verdict="PROVEN", lift=4.0)[0]
+    ids = [f"TRK_{i}-{i % 9}" for i in range(4000)]
+    share = sum(lesson_withheld(r, proven) for r in ids) / len(ids)
+    assert abs(share * 100 - LESSON_PROVEN_HOLDOUT_PERCENT) < 3
+    assert LESSON_PROVEN_HOLDOUT_PERCENT < LESSON_HOLDOUT_PERCENT
+
+
+def test_a_withheld_continue_lesson_is_not_forced_back_in():
+    """The CONTINUE slot guarantee must not override the coin flip, or a
+    CONTINUE lesson would never be withheld and never get a control group."""
+    from app.services.lesson_memory import assign_lessons, lesson_withheld
+
+    lessons = _playbook(6)
+    keep = L("continue this", lesson_type="continue", age_days=40)
+    keep.id = 999
+    lessons.append(keep)
+    races = [f"TRK_{i}-2" for i in range(300)]
+    for r in races:
+        carried, withheld = assign_lessons(lessons, r, limit=3)
+        if lesson_withheld(r, keep):
+            assert keep not in carried and keep in withheld
+    assert any(keep in assign_lessons(lessons, r, limit=3)[0] for r in races)
+
+
+def test_no_race_id_withholds_nothing():
+    from app.services.lesson_memory import lesson_withheld
+
+    lesson = _playbook(1)[0]
+    assert lesson_withheld("", lesson) is False
+    assert lesson_withheld(None, lesson) is False
