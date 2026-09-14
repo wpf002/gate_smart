@@ -16,3 +16,6 @@ Thumbs.db
 .vite/
 .railway/
 *.local.json
+
+# Ad-hoc analysis dumps (race form/prediction snapshots). Local only.
+*.pkl
