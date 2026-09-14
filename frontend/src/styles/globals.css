@@ -1000,3 +1000,102 @@ select option {
   padding: 20px;
   color: var(--text-muted);
 }
+
+/* Races list: tracks stack on phones. On wider screens they are tiles in a
+   grid, and an opened track takes the whole row for its race cards. */
+.track-section {
+  margin-bottom: 24px;
+}
+
+@media (min-width: 768px) {
+  .track-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+
+  .track-section {
+    margin-bottom: 0;
+    padding: 10px 16px 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    transition: border-color 0.15s;
+  }
+
+  .track-section:hover {
+    border-color: var(--border-medium);
+  }
+
+  .track-section.is-open {
+    grid-column: 1 / -1;
+    background: var(--bg-secondary);
+    border-color: var(--border-gold);
+    padding-bottom: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .track-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Learn: topic cards in two columns on desktop; an opened card takes the row. */
+@media (min-width: 1024px) {
+  .learn-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 12px;
+  }
+
+  .learn-grid > .learn-card.is-open {
+    grid-column: 1 / -1;
+  }
+
+  .learn-grid--terms {
+    column-gap: 32px;
+  }
+}
+
+/* Watchlist: Racing Soon beside Following on desktop. */
+@media (min-width: 1024px) {
+  .watchlist-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 28px;
+    align-items: start;
+  }
+}
+
+.watchlist-section + .watchlist-section {
+  margin-top: 24px;
+}
+
+@media (min-width: 1024px) {
+  .watchlist-section + .watchlist-section {
+    margin-top: 0;
+  }
+}
+
+/* Advisor: one chat column, centered, with the input bar the same width. With
+   no messages yet, the welcome and suggestions sit in the middle of the space.
+   Auto margins rather than justify-content, so a list taller than the screen
+   still scrolls from its top instead of being cut off. */
+.advisor-column {
+  width: 100%;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.advisor-scroll.is-empty {
+  display: flex;
+  flex-direction: column;
+}
+
+.advisor-scroll.is-empty > .advisor-column {
+  margin-top: auto;
+  margin-bottom: auto;
+}

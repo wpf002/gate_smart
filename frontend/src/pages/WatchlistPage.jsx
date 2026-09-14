@@ -110,9 +110,9 @@ export default function WatchlistPage() {
     <div>
       <PageHeader title="WATCHLIST" subtitle="FOLLOW HORSES, TRAINERS & JOCKEYS" />
 
-      <div style={{ padding: '12px 20px 24px' }}>
+      <div className="watchlist-grid" style={{ padding: '12px 20px 24px' }}>
         {/* Racing today */}
-        <div style={{ marginBottom: 24 }}>
+        <section className="watchlist-section">
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)', letterSpacing: '0.06em', marginBottom: 10 }}>
             RACING SOON ({filtersActive ? `${filtered.length} of ${matches.length}` : matches.length})
           </div>
@@ -198,9 +198,10 @@ export default function WatchlistPage() {
               </div>
             ))
           )}
-        </div>
+        </section>
 
         {/* Following */}
+        <section className="watchlist-section">
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)', letterSpacing: '0.06em', marginBottom: 10 }}>
           FOLLOWING ({items.length})
         </div>
@@ -230,6 +231,7 @@ export default function WatchlistPage() {
             </div>
           ))
         )}
+        </section>
       </div>
     </div>
   );

@@ -209,6 +209,9 @@ export default function AdvisorPage() {
   };
 
   useEffect(() => {
+    // Only follow a conversation. With no messages the "bottom" is the end of
+    // the suggestion list, and scrolling there hid the heading on phones.
+    if (advisorMessages.length === 0 && !askMutation.isPending) return;
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [advisorMessages, askMutation.isPending]);
 
@@ -231,7 +234,8 @@ export default function AdvisorPage() {
         }
       />
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+      <div className={`advisor-scroll${showSuggestions ? ' is-empty' : ''}`} style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+        <div className="advisor-column">
         {showSuggestions && (
           <div>
             <div style={{ textAlign: 'center', padding: '24px 0 20px', color: 'var(--text-muted)' }}>
@@ -299,6 +303,7 @@ export default function AdvisorPage() {
           </div>
         )}
         <div ref={bottomRef} />
+        </div>
       </div>
 
       <div style={{
@@ -306,9 +311,8 @@ export default function AdvisorPage() {
         paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
         borderTop: '1px solid var(--border-subtle)',
         background: 'var(--bg-secondary)',
-        display: 'flex',
-        gap: 10,
       }}>
+        <div className="advisor-column" style={{ display: 'flex', gap: 10 }}>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -325,6 +329,7 @@ export default function AdvisorPage() {
         >
           →
         </button>
+        </div>
       </div>
     </div>
   );

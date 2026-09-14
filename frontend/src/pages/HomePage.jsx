@@ -15,7 +15,7 @@ const DATE_TABS = [
 function TrackSection({ course, races, isTomorrow }) {
   const [collapsed, setCollapsed] = useState(true);
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div className={`track-section${collapsed ? '' : ' is-open'}`}>
       <button
         onClick={() => setCollapsed(c => !c)}
         style={{
@@ -230,9 +230,11 @@ export default function HomePage() {
                 ? `${tracks.length} of ${allTracks.length} tracks match "${trackSearch.trim()}"`
                 : `${races.length} races across ${tracks.length} tracks`}
             </div>
-            {tracks.map(course => (
-              <TrackSection key={course} course={course} races={byTrack[course]} isTomorrow={selectedDay === 'tomorrow'} />
-            ))}
+            <div className="track-grid">
+              {tracks.map(course => (
+                <TrackSection key={course} course={course} races={byTrack[course]} isTomorrow={selectedDay === 'tomorrow'} />
+              ))}
+            </div>
           </>
         )}
       </div>

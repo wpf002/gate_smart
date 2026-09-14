@@ -452,6 +452,7 @@ function BetTypeCard({ bet }) {
 
   return (
     <div
+      className={`learn-card${open ? ' is-open' : ''}`}
       style={{
         background: 'var(--bg-card)',
         border: `1px solid ${open ? 'var(--border-gold)' : 'var(--border-subtle)'}`,
@@ -520,7 +521,7 @@ function BetTypeCard({ bet }) {
 function AccordionCard({ title, emoji, icon, body, color }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{
+    <div className={`learn-card${open ? ' is-open' : ''}`} style={{
       background: 'var(--bg-card)',
       border: `1px solid ${open ? (color ? color + '44' : 'var(--border-gold)') : 'var(--border-subtle)'}`,
       borderRadius: 'var(--radius-md)',
@@ -578,11 +579,11 @@ function BetsTab() {
         Horse racing offers more bet types than almost any other sport. Start with Win bets, then graduate to exotics as you gain confidence.
       </p>
       <SectionLabel>Straight Bets (single horse)</SectionLabel>
-      {BET_TYPES.slice(0, 4).map(b => <BetTypeCard key={b.name} bet={b} />)}
+      <div className="learn-grid">{BET_TYPES.slice(0, 4).map(b => <BetTypeCard key={b.name} bet={b} />)}</div>
       <SectionLabel style={{ marginTop: 16 }}>Exotic Bets (multiple horses)</SectionLabel>
-      {BET_TYPES.slice(4, 8).map(b => <BetTypeCard key={b.name} bet={b} />)}
+      <div className="learn-grid">{BET_TYPES.slice(4, 8).map(b => <BetTypeCard key={b.name} bet={b} />)}</div>
       <SectionLabel>Multi-Race Bets</SectionLabel>
-      {BET_TYPES.slice(8).map(b => <BetTypeCard key={b.name} bet={b} />)}
+      <div className="learn-grid">{BET_TYPES.slice(8).map(b => <BetTypeCard key={b.name} bet={b} />)}</div>
     </div>
   );
 }
@@ -657,7 +658,9 @@ function HandicapTab() {
       <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
         Handicapping is the art of evaluating horses to find winners — and more importantly, <em>value</em>. Even beginners can improve immediately by focusing on 2–3 key factors.
       </p>
-      {HANDICAPPING.map(h => <AccordionCard key={h.title} title={h.title} icon={h.icon} body={h.body} />)}
+      <div className="learn-grid">
+        {HANDICAPPING.map(h => <AccordionCard key={h.title} title={h.title} icon={h.icon} body={h.body} />)}
+      </div>
       <div style={{
         marginTop: 20, padding: '14px 16px',
         background: 'rgba(42,122,75,0.08)',
@@ -782,8 +785,9 @@ function BankrollTab() {
           <span>Only bet what you can afford to lose. Set a dedicated betting bankroll separate from living expenses. Never chase losses.</span>
         </span>
       </div>
+      <div className="learn-grid">
       {BANKROLL.map(b => (
-        <div key={b.title} style={{
+        <div key={b.title} className="learn-card" style={{
           background: 'var(--bg-card)',
           border: '1px solid var(--border-subtle)',
           borderLeft: '3px solid var(--accent-gold)',
@@ -797,6 +801,7 @@ function BankrollTab() {
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{b.body}</p>
         </div>
       ))}
+      </div>
       <div style={{
         marginTop: 8, padding: '14px 16px',
         background: 'rgba(201,162,39,0.06)',
@@ -832,6 +837,7 @@ function GlossaryTab() {
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
         {filtered.length} terms
       </div>
+      <div className="learn-grid learn-grid--terms">
       {filtered.map(({ term, def, plain_english }) => (
         <div key={term} style={{
           padding: '12px 0',
@@ -848,6 +854,7 @@ function GlossaryTab() {
           <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>{def}</div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
