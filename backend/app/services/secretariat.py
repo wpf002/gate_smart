@@ -130,10 +130,13 @@ def pick_model_for_race(race_id: str) -> str:
 # only needs generating when someone actually opens the race — /analyze already
 # does that on a cache miss, so nothing is lost either way.
 #
-# Whether the cheap pick is as accurate is unmeasured (31 settled races), which
-# is exactly the accuracy trade not worth making blind. So: measure it. Start
-# small, because every lean race is one that skipped the better path.
-PICK_DEPTH_LEAN_PERCENT = int(os.getenv("PICK_DEPTH_LEAN_PERCENT", "20"))
+# Measured at 20% from 2026-08-31 and ended 2026-09-14. Lean won more often
+# (31.6% vs 26.0% over 354 vs 2,323 races, p=0.024), but only because it picked
+# the morning-line favorite 78% of the time against 30%. Within each branch the
+# full analysis was as good or better (favorite picks 39.8% vs 35.1%, fades
+# 20.1% vs 19.2%). Lean prompts also carry no lessons, so every lean race was
+# one the learning loop never saw. Off by default; set the env var to re-run it.
+PICK_DEPTH_LEAN_PERCENT = int(os.getenv("PICK_DEPTH_LEAN_PERCENT", "0"))
 
 
 def pick_depth_for_race(race_id: str) -> str:

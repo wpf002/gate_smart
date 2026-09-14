@@ -239,17 +239,35 @@ def test_condition_clause_keeps_an_embedded_first_person_phrase():
 # good pick, the write-up only needs generating when someone opens the race.
 # Whether it does is unmeasured, so the split has to be small and clean.
 
-def test_lean_share_matches_the_configured_percent():
-    from app.services.secretariat import PICK_DEPTH_LEAN_PERCENT, pick_depth_for_race
+def test_lean_share_matches_the_configured_percent(monkeypatch):
+    import app.services.secretariat as sec
 
     ids = [f"TRK_{i}-{i % 11}" for i in range(4000)]
-    lean = sum(pick_depth_for_race(r) == "lean" for r in ids) / len(ids)
-    assert abs(lean * 100 - PICK_DEPTH_LEAN_PERCENT) < 4
+    for pct in (0, 20):
+        monkeypatch.setattr(sec, "PICK_DEPTH_LEAN_PERCENT", pct)
+        lean = sum(sec.pick_depth_for_race(r) == "lean" for r in ids) / len(ids)
+        assert abs(lean * 100 - pct) < 4
 
 
-def test_depth_is_stable_and_independent_of_the_other_experiments():
+def test_the_lean_arm_is_off_by_default():
+    """It ended 2026-09-14: lean's extra wins were favorites, and its prompts
+    carry no lessons."""
+    import os
+
+    from app.services.secretariat import PICK_DEPTH_LEAN_PERCENT
+
+    if "PICK_DEPTH_LEAN_PERCENT" not in os.environ:
+        assert PICK_DEPTH_LEAN_PERCENT == 0
+
+
+def test_depth_is_stable_and_independent_of_the_other_experiments(monkeypatch):
+    import app.services.secretariat as sec
     from app.services.lesson_memory import ARM_MEASURED, lesson_arm_for_race
-    from app.services.secretariat import pick_depth_for_race, pick_model_for_race
+    from app.services.secretariat import pick_model_for_race
+
+    # Checked with the split switched on, so a re-run starts from a clean design.
+    monkeypatch.setattr(sec, "PICK_DEPTH_LEAN_PERCENT", 20)
+    pick_depth_for_race = sec.pick_depth_for_race
 
     assert len({pick_depth_for_race("SAR_9-2") for _ in range(20)}) == 1
 
