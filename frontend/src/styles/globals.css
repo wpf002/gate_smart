@@ -1079,23 +1079,63 @@ select option {
   }
 }
 
-/* Advisor: one chat column, centered, with the input bar the same width. With
-   no messages yet, the welcome and suggestions sit in the middle of the space.
-   Auto margins rather than justify-content, so a list taller than the screen
-   still scrolls from its top instead of being cut off. */
-.advisor-column {
+/* Advisor: with no messages, the starter questions are three labeled topic
+   columns across the page, top-aligned under the header, so the page reads as
+   a start screen instead of a small block floating in the middle. In a
+   conversation, Secretariat's messages start at the same left edge as the
+   header and input bar, yours end at the same right edge, and each bubble is
+   capped so lines stay readable. */
+.advisor-start {
+  padding: 20px 16px 8px;
+}
+
+.advisor-topics {
+  display: grid;
+  gap: 20px;
+}
+
+.advisor-question {
   width: 100%;
-  max-width: 800px;
-  margin-left: auto;
-  margin-right: auto;
+  text-align: left;
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
 }
 
-.advisor-scroll.is-empty {
-  display: flex;
-  flex-direction: column;
+.advisor-question:hover {
+  border-color: var(--accent-gold-dim);
+  color: var(--text-primary);
 }
 
-.advisor-scroll.is-empty > .advisor-column {
-  margin-top: auto;
-  margin-bottom: auto;
+.advisor-thread {
+  padding: 16px;
+}
+
+.advisor-input-bar {
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .advisor-start {
+    padding: 28px 24px 8px;
+  }
+
+  .advisor-topics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+  }
+
+  .advisor-input-bar {
+    padding: 14px 24px;
+  }
+
+  .advisor-thread {
+    padding: 20px 24px;
+  }
 }

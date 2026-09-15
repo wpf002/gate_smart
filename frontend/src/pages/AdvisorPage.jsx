@@ -5,19 +5,39 @@ import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import Icon from '../components/common/Icon';
 
-const SUGGESTED_QUESTIONS = [
-  'Who are the top Kentucky Derby contenders this year?',
-  'What horses should I watch heading into the Triple Crown?',
-  'Who are the leading trainers in US racing right now?',
-  'Explain the Kentucky Derby points system',
-  'What is track bias and how does it affect betting?',
-  'How do I read a US past performance sheet?',
-  'What does each way mean?',
-  'What is a trifecta bet?',
-  'How should I size my bets for my bankroll?',
-  'What is a Beyer Speed Figure?',
-  'How does parimutuel betting work?',
-  'What is a claiming race?',
+// The starter questions, grouped so a wide screen can show them as labeled
+// columns instead of one undifferentiated block in the middle of the page.
+const SUGGESTION_GROUPS = [
+  {
+    title: 'Races & Horses',
+    icon: 'horse',
+    questions: [
+      'Who are the top Kentucky Derby contenders this year?',
+      'What horses should I watch heading into the Triple Crown?',
+      'Who are the leading trainers in US racing right now?',
+      'Explain the Kentucky Derby points system',
+    ],
+  },
+  {
+    title: 'Betting Basics',
+    icon: 'bet',
+    questions: [
+      'What is a trifecta bet?',
+      'What does each way mean?',
+      'How does parimutuel betting work?',
+      'How should I size my bets for my bankroll?',
+    ],
+  },
+  {
+    title: 'Handicapping',
+    icon: 'target',
+    questions: [
+      'What is track bias and how does it affect betting?',
+      'How do I read a US past performance sheet?',
+      'What is a Beyer Speed Figure?',
+      'What is a claiming race?',
+    ],
+  },
 ];
 
 /** Render inline markdown: **bold**, *italic*, `code` */
@@ -143,7 +163,7 @@ function Message({ msg }) {
         </div>
       )}
       <div style={{
-        maxWidth: '80%',
+        maxWidth: 'min(80%, 760px)',
         padding: '10px 14px',
         borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
         background: isUser
@@ -234,45 +254,46 @@ export default function AdvisorPage() {
         }
       />
 
-      <div className={`advisor-scroll${showSuggestions ? ' is-empty' : ''}`} style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-        <div className="advisor-column">
+      <div className="advisor-scroll" style={{ flex: 1, overflowY: 'auto' }}>
         {showSuggestions && (
-          <div>
-            <div style={{ textAlign: 'center', padding: '24px 0 20px', color: 'var(--text-muted)' }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent-gold)', marginBottom: 6 }}>
-                Ask Secretariat
+          <div className="advisor-start">
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent-gold)', letterSpacing: '0.04em' }}>
+                ASK SECRETARIAT
               </div>
-              <div style={{ fontSize: 13 }}>
-                Get expert handicapping advice, bet education, and race breakdowns.
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+                Race breakdowns, bet education and handicapping advice. Pick a question or type your own.
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8 }}>
-              {SUGGESTED_QUESTIONS.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => handleSuggestion(q)}
-                  style={{
-                    textAlign: 'left',
-                    padding: '10px 14px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-subtle)',
-                    background: 'var(--bg-card)',
-                    color: 'var(--text-secondary)',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                    fontFamily: 'var(--font-body)',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-gold-dim)'}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-subtle)'}
-                >
-                  {q}
-                </button>
+            <div className="advisor-topics">
+              {SUGGESTION_GROUPS.map(({ title, icon, questions }) => (
+                <section key={title}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+                    fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                    color: 'var(--text-muted)',
+                  }}>
+                    <Icon name={icon} size={15} color="var(--accent-gold)" />
+                    {title}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {questions.map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => handleSuggestion(q)}
+                        className="advisor-question"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           </div>
         )}
 
+        <div className="advisor-thread">
         {advisorMessages.map((msg, i) => (
           <Message key={i} msg={msg} />
         ))}
@@ -306,13 +327,11 @@ export default function AdvisorPage() {
         </div>
       </div>
 
-      <div style={{
-        padding: '12px 16px',
-        paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+      <div className="advisor-input-bar" style={{
         borderTop: '1px solid var(--border-subtle)',
         background: 'var(--bg-secondary)',
       }}>
-        <div className="advisor-column" style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
