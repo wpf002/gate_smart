@@ -118,6 +118,20 @@ describe('ContestPage', () => {
     expect(screen.getByText('Beat Streak')).toBeInTheDocument();
   });
 
+  it('shows a first-pick prompt instead of a card of zeros for a new player', async () => {
+    useAppStore.setState({ authToken: 'token' });
+    api.getContestProgress.mockImplementationOnce(() => Promise.resolve({
+      display_name: 'Handicapper 3', pick_day_streak: 0, beat_secretariat_streak: 0,
+      best_correct_streak: 0, total_picks: 0, settled: 0, wins: 0, beat_secretariat: 0, points: 0,
+    }));
+    wrap(<ContestPage />);
+    expect(await screen.findByText('NO PICKS YET')).toBeInTheDocument();
+    expect(screen.getByText('Make Your First Pick')).toBeInTheDocument();
+    expect(screen.getByText('Set Your Name')).toBeInTheDocument();
+    expect(screen.queryByText('Day Streak')).not.toBeInTheDocument();
+    expect(screen.queryByText('Handicapper 3 · Edit Name')).not.toBeInTheDocument();
+  });
+
   it('switches between today and this week', async () => {
     wrap(<ContestPage />);
     await screen.findByText('Longshot Larry');

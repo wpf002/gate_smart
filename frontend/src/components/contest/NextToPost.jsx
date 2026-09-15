@@ -11,13 +11,10 @@ const openRaces = (cards, now) => (cards || [])
   .sort((a, b) => new Date(a.off_dt) - new Date(b.off_dt));
 
 /**
- * Races still open for a Beat Secretariat pick, soonest first. Falls back to
- * tomorrow's card once today's last race is off.
+ * Races still open for a Beat Secretariat pick, soonest first: today's, or
+ * tomorrow's once today's last race is off.
  */
-export default function NextToPost({ now = Date.now() }) {
-  const navigate = useNavigate();
-  const timezone = useAppStore((s) => s.userProfile?.timezone);
-
+export function useOpenRaces(now = Date.now()) {
   // Same query keys as the Races page, so this reuses its cache.
   const { data: today } = useQuery({ queryKey: ['races', 'today'], queryFn: () => getRacesToday('usa') });
   const todayOpen = openRaces(today?.racecards, now);
@@ -26,9 +23,15 @@ export default function NextToPost({ now = Date.now() }) {
     queryFn: () => getRacesByDate('tomorrow', 'usa'),
     enabled: !!today && todayOpen.length === 0,
   });
-
   const showingTomorrow = todayOpen.length === 0;
-  const races = (showingTomorrow ? openRaces(tomorrow?.racecards, now) : todayOpen).slice(0, LIMIT);
+  return { races: showingTomorrow ? openRaces(tomorrow?.racecards, now) : todayOpen, showingTomorrow };
+}
+
+export default function NextToPost({ now = Date.now() }) {
+  const navigate = useNavigate();
+  const timezone = useAppStore((s) => s.userProfile?.timezone);
+  const { races: open, showingTomorrow } = useOpenRaces(now);
+  const races = open.slice(0, LIMIT);
   if (!races.length) return null;
 
   return (

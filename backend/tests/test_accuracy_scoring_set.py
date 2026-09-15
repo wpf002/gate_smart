@@ -44,3 +44,37 @@ def test_live_mode_win_does_not_inflate():
 
 def test_empty_when_no_nightly_rows():
     assert _report_scoring_set([_row(mode="medium"), _row(user_id=1)]) == []
+
+
+# ── Best call / worst miss ───────────────────────────────────────────────────
+# `max(rows, key=lambda s: 1)` returns the first row, so the report card's
+# "Best Call" was whichever winner happened to settle first.
+
+def _pick(name, won, payoff=None, odds=None):
+    return {"race_id": name, "race_name": name, "predicted": f"{name} horse", "actual": "x",
+            "top_correct": won, "top_pick_win_payoff": payoff, "top_pick_odds": odds}
+
+
+def test_best_call_is_the_biggest_official_payout():
+    from nightly_accuracy import best_and_worst
+
+    rows = [_pick("R1", True, 4.20, 1.0), _pick("R2", True, 31.60, 14.0), _pick("R3", True, 8.00, 3.0)]
+    best, _ = best_and_worst(rows)
+    assert best.startswith("R2: R2 horse won") and "$31.60" in best
+
+
+def test_worst_miss_is_the_shortest_priced_loser():
+    from nightly_accuracy import best_and_worst
+
+    rows = [_pick("R1", False, odds=6.0), _pick("R2", False, odds=0.6), _pick("R3", True, 5.0, 2.0)]
+    _, worst = best_and_worst(rows)
+    assert worst.startswith("R2: picked R2 horse")
+
+
+def test_best_and_worst_handle_empty_and_unpriced_days():
+    from nightly_accuracy import best_and_worst
+
+    assert best_and_worst([]) == (None, None)
+    best, worst = best_and_worst([_pick("R1", True), _pick("R2", False)])
+    assert best == "R1: R1 horse won"
+    assert worst.startswith("R2: picked")

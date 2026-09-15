@@ -70,6 +70,32 @@ def _report_scoring_set(settled: list) -> list:
     ]
 
 
+def best_and_worst(report_set: list) -> tuple[str | None, str | None]:
+    """The day's best call and worst miss, for the report card and digest.
+
+    Best is the winning pick that paid the most on the official $2 win price.
+    Worst is the shortest-priced pick that lost. This used to be `max(...,
+    key=lambda s: 1)`, which returns the first row, so "Best Call" was just
+    whichever winner happened to be settled first.
+    """
+    wins = [s for s in report_set if s["top_correct"]]
+    misses = [s for s in report_set if not s["top_correct"]]
+    best = max(wins, key=lambda s: s.get("top_pick_win_payoff") or 0.0, default=None)
+    priced_misses = [s for s in misses if s.get("top_pick_odds") is not None]
+    worst = (min(priced_misses, key=lambda s: s["top_pick_odds"]) if priced_misses
+             else (misses[0] if misses else None))
+
+    best_call = None
+    if best:
+        paid = f" (paid ${best['top_pick_win_payoff']:.2f})" if best.get("top_pick_win_payoff") else ""
+        best_call = f"{best['race_name'] or best['race_id']}: {best['predicted']} won{paid}"
+    worst_miss = (
+        f"{worst['race_name'] or worst['race_id']}: picked {worst['predicted']}, actual {worst['actual']}"
+        if worst else None
+    )
+    return best_call, worst_miss
+
+
 async def main(target_date: datetime.date, dry_run: bool):
     from sqlalchemy import select, update
 
@@ -168,6 +194,7 @@ async def main(target_date: datetime.date, dry_run: bool):
                 "top_pick_win_payoff": payoffs["win"] if payoffs else None,
                 "top_pick_place_payoff": payoffs["place"] if payoffs else None,
                 "top_pick_show_payoff": payoffs["show"] if payoffs else None,
+                "top_pick_odds": pred.top_pick_odds,
                 "predicted": pred.predicted_first,
                 "predicted_second": pred.predicted_second,
                 "predicted_third": pred.predicted_third,
@@ -234,11 +261,7 @@ async def main(target_date: datetime.date, dry_run: bool):
     place_rate = place_count / total if total else 0.0
     show_rate = show_count / total if total else 0.0
 
-    best = max((s for s in report_set if s["top_correct"]), key=lambda s: 1, default=None)
-    worst = max((s for s in report_set if not s["top_correct"]), key=lambda s: 1, default=None)
-
-    best_call = f"{best['race_name'] or best['race_id']}: {best['predicted']} won" if best else None
-    worst_miss = f"{worst['race_name'] or worst['race_id']}: picked {worst['predicted']}, actual {worst['actual']}" if worst else None
+    best_call, worst_miss = best_and_worst(report_set)
 
     # Flat-bet P&L on the same nightly-slate rows, priced from official payoffs.
     from app.services.bet_pnl import compute_flat_bet_pnl

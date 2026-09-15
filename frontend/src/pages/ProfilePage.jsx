@@ -4,6 +4,7 @@ import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import Icon from '../components/common/Icon';
 import NameEditor from '../components/contest/NameEditor';
+import FirstPick, { isDefaultName } from '../components/contest/FirstPick';
 import { authUpdateProfile, authLogout, getContestProgress } from '../utils/api';
 import { TIMEZONE_OPTIONS } from '../utils/timezone';
 
@@ -156,7 +157,10 @@ export default function ProfilePage() {
   });
 
   const name = me?.display_name;
-  const initial = (name || authUser?.email || '').trim().charAt(0).toUpperCase();
+  // "Handicapper <id>" is the leaderboard's stand-in until a name is chosen;
+  // showing it as the account's name made the card read as placeholder data.
+  const customName = name && !isDefaultName(name) ? name : '';
+  const initial = (customName || authUser?.email || '').trim().charAt(0).toUpperCase();
 
   return (
     <div>
@@ -191,16 +195,16 @@ export default function ProfilePage() {
             <div className="profile-account-text">
               {isLoggedIn ? (
                 <>
-                  {name ? (
+                  {customName ? (
                     <NameEditor
-                      current={name}
+                      current={customName}
                       renderIdle={(edit) => (
                         <div className="profile-name-row" style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
                           <span style={{
                             fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--text-primary)',
                             letterSpacing: '0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>
-                            {name}
+                            {customName}
                           </span>
                           <button onClick={edit} style={{
                             background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0,
@@ -212,11 +216,24 @@ export default function ProfilePage() {
                       )}
                     />
                   ) : (
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-gold)' }}>Signed in</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {authUser.email}
+                    </div>
                   )}
-                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {authUser.email}
-                  </div>
+                  {customName ? (
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {authUser.email}
+                    </div>
+                  ) : name ? (
+                    <NameEditor
+                      current={name}
+                      renderIdle={(edit) => (
+                        <button className="btn btn-ghost" onClick={edit} style={{ fontSize: 12, padding: '5px 12px', marginTop: 8 }}>
+                          Set Your Name
+                        </button>
+                      )}
+                    />
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -231,7 +248,8 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {isLoggedIn && (
+          {isLoggedIn && me && !me.total_picks && <FirstPick divider />}
+          {isLoggedIn && !(me && !me.total_picks) && (
             <div className="profile-stats">
               {[
                 // Dashes until progress loads, so the card keeps its shape.

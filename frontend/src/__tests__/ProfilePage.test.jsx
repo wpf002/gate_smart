@@ -23,6 +23,8 @@ vi.mock('../utils/api', () => ({
   getContestProgress: (...a) => getContestProgress(...a),
   authUpdateProfile: vi.fn(() => Promise.resolve({})),
   authLogout: vi.fn(() => Promise.resolve({})),
+  getRacesToday: vi.fn(() => Promise.resolve({ racecards: [] })),
+  getRacesByDate: vi.fn(() => Promise.resolve({ racecards: [] })),
 }));
 
 function renderPage() {
@@ -79,6 +81,20 @@ describe('ProfilePage', () => {
     expect(screen.getByText('4/8')).toBeInTheDocument();
     expect(screen.getByText('Beat Secretariat')).toBeInTheDocument();
     expect(screen.getByText('Sign Out')).toBeInTheDocument();
+  });
+
+  it('shows no zeros and no stand-in name before the first pick', async () => {
+    useAppStore.setState({ authToken: 'token', authUser: { email: 'player@example.com' } });
+    getContestProgress.mockImplementationOnce(() => Promise.resolve({
+      display_name: 'Handicapper 3', pick_day_streak: 0, beat_secretariat_streak: 0,
+      best_correct_streak: 0, total_picks: 0, settled: 0, wins: 0, beat_secretariat: 0, points: 0,
+    }));
+    renderPage();
+    expect(await screen.findByText('NO PICKS YET')).toBeInTheDocument();
+    expect(screen.getByText('Set Your Name')).toBeInTheDocument();
+    expect(screen.getByText('player@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('Handicapper 3')).not.toBeInTheDocument();
+    expect(screen.queryByText('0/0')).not.toBeInTheDocument();
   });
 
   it('asks guests to sign in and never fetches progress', () => {

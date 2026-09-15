@@ -1,9 +1,20 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getDailyAccuracy, getAccuracyHistory, getMyAccuracyStats } from '../utils/api';
 import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import BetCurve from '../components/accuracy/BetCurve';
+
+const HISTORY_PAGE_SIZE = 10;
+
+// Report dates arrive as "YYYY-MM-DD". `new Date("2026-09-13")` parses as UTC
+// midnight, which is the previous evening in US time zones, so every row showed
+// the day before the races it scored.
+const localDate = (iso) => {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
 
 function WinRateDot({ rate }) {
   const pct = (rate || 0) * 100;
@@ -67,6 +78,11 @@ export default function AccuracyPage() {
 
   const todayPending = !today || today.status === 'pending';
   const last7 = (history || []).slice(0, 7);
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil((history?.length || 0) / HISTORY_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageStart = currentPage * HISTORY_PAGE_SIZE;
+  const pageRows = (history || []).slice(pageStart, pageStart + HISTORY_PAGE_SIZE);
 
   return (
     <div>
@@ -191,7 +207,7 @@ export default function AccuracyPage() {
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                   <WinRateDot rate={r.win_rate} />
                   <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
-                    {new Date(r.date).toLocaleDateString([], { weekday: 'short' })}
+                    {localDate(r.date).toLocaleDateString([], { weekday: 'short' })}
                   </span>
                 </div>
               ))}
@@ -215,18 +231,18 @@ export default function AccuracyPage() {
                 <span style={{ textAlign: 'right' }}>Win %</span>
                 <span style={{ textAlign: 'right' }}>Races</span>
               </div>
-              {history.map((r, i) => {
+              {pageRows.map((r, i) => {
                 const wr = (r.win_rate || 0) * 100;
                 const wrColor = wr >= 50 ? 'var(--accent-green-bright)' : wr >= 35 ? 'var(--accent-gold)' : 'var(--accent-red-bright)';
                 return (
                   <div key={i} style={{
                     display: 'grid', gridTemplateColumns: '100px 1fr 70px 70px',
                     padding: '9px 12px', fontSize: 12,
-                    borderBottom: i < history.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                    borderBottom: i < pageRows.length - 1 ? '1px solid var(--border-subtle)' : 'none',
                     background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
                   }}>
                     <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                      {new Date(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      {localDate(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                     </span>
                     <span style={{ color: 'var(--text-secondary)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
                       {r.best_call || '—'}
@@ -240,6 +256,35 @@ export default function AccuracyPage() {
                   </div>
                 );
               })}
+              {pageCount > 1 && (
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+                  padding: '10px 12px', borderTop: '1px solid var(--border-subtle)',
+                }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    {pageStart + 1}–{pageStart + pageRows.length} of {history.length} days
+                  </span>
+                  <span style={{ display: 'flex', gap: 6 }}>
+                    {[['Previous', currentPage - 1, currentPage === 0], ['Next', currentPage + 1, currentPage >= pageCount - 1]].map(([label, target, disabled]) => (
+                      <button
+                        key={label}
+                        onClick={() => setPage(target)}
+                        disabled={disabled}
+                        style={{
+                          fontSize: 12, padding: '5px 12px', borderRadius: 4,
+                          cursor: disabled ? 'default' : 'pointer',
+                          background: 'transparent',
+                          color: disabled ? 'var(--text-muted)' : 'var(--text-primary)',
+                          border: '1px solid var(--border-subtle)',
+                          opacity: disabled ? 0.5 : 1,
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}

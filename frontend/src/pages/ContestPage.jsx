@@ -6,6 +6,7 @@ import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import NameEditor from '../components/contest/NameEditor';
 import NextToPost from '../components/contest/NextToPost';
+import FirstPick, { isDefaultName } from '../components/contest/FirstPick';
 
 function Stat({ value, label, highlight = false }) {
   return (
@@ -42,8 +43,23 @@ export default function ContestPage() {
           {authToken ? (
             <div className="contest-you" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)' }}>
               <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)', minHeight: 44 }}>
-                {me && <NameEditor current={me.display_name} />}
+                {me && (isDefaultName(me.display_name) ? (
+                  <NameEditor
+                    current={me.display_name}
+                    renderIdle={(edit) => (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Choose the name other players see</span>
+                        <button className="btn btn-ghost" style={{ fontSize: 12, padding: '5px 12px', flexShrink: 0 }} onClick={edit}>
+                          Set Your Name
+                        </button>
+                      </div>
+                    )}
+                  />
+                ) : (
+                  <NameEditor current={me.display_name} />
+                ))}
               </div>
+              {me && !me.total_picks ? <FirstPick /> : (
               <div className="contest-stats">
                 <Stat value={me ? me.points : '–'} label="Points" highlight />
                 <Stat value={me ? me.pick_day_streak : '–'} label="Day Streak" />
@@ -52,6 +68,7 @@ export default function ContestPage() {
                 <Stat value={me ? me.beat_secretariat : '–'} label="Beat Secretariat" />
                 <Stat value={me ? me.best_correct_streak : '–'} label="Best Streak" />
               </div>
+              )}
             </div>
           ) : (
             <div style={{ padding: 14, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
