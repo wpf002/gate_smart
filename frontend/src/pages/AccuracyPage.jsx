@@ -88,7 +88,7 @@ export default function AccuracyPage() {
     <div>
       <PageHeader
         title="SECRETARIAT REPORT CARD"
-        subtitle="Performance tracking across all races"
+        subtitle="Graded against official results"
         left={
           <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 20 }}>←</button>
         }
@@ -111,25 +111,25 @@ export default function AccuracyPage() {
             <SectionHeader>YOUR PICKS</SectionHeader>
             {!myStats ? (
               <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                No settled picks yet — analyze a race to start tracking your accuracy.
+                Analyze a race to start tracking your picks.
               </div>
             ) : myStats.total_predictions === 0 ? (
               <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                No settled picks yet — analyze a race to start tracking your accuracy.
+                Analyze a race to start tracking your picks.
               </div>
             ) : (
               <>
                 <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
-                  <StatBlock label="Races called" value={myStats.total_predictions} />
+                  <StatBlock label="Races Called" value={myStats.total_predictions} />
                   <StatBlock
-                    label="Win rate"
+                    label="Win Rate"
                     value={`${((myStats.win_rate || 0) * 100).toFixed(0)}%`}
                     color={(myStats.win_rate || 0) >= 0.5 ? 'var(--accent-green-bright)' : 'var(--accent-gold)'}
                   />
-                  <StatBlock label="ITM rate" value={`${((myStats.itm_rate || 0) * 100).toFixed(0)}%`} />
+                  <StatBlock label="ITM Rate" value={`${((myStats.itm_rate || 0) * 100).toFixed(0)}%`} />
                   {myStats.last_7_days_win_rate != null && (
                     <StatBlock
-                      label="Last 7 days"
+                      label="Last 7 Days"
                       value={`${(myStats.last_7_days_win_rate * 100).toFixed(0)}%`}
                       color="var(--accent-gold)"
                     />
@@ -174,13 +174,13 @@ export default function AccuracyPage() {
           ) : (
             <>
               <div style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
-                <StatBlock label="Races called" value={today.races_analyzed} />
+                <StatBlock label="Races Called" value={today.races_analyzed} />
                 <StatBlock
-                  label="Win rate"
+                  label="Win Rate"
                   value={`${((today.win_rate || 0) * 100).toFixed(0)}%`}
                   color={(today.win_rate || 0) >= 0.5 ? 'var(--accent-green-bright)' : 'var(--accent-gold)'}
                 />
-                <StatBlock label="ITM rate" value={`${((today.itm_rate || 0) * 100).toFixed(0)}%`} />
+                <StatBlock label="ITM Rate" value={`${((today.itm_rate || 0) * 100).toFixed(0)}%`} />
               </div>
               {today.best_call && (
                 <div style={{ fontSize: 12, color: 'var(--accent-green-bright)', marginBottom: 4 }}>
@@ -199,9 +199,7 @@ export default function AccuracyPage() {
         {/* ── 7-day trend ─────────────────────────────────────────── */}
         {last7.length > 0 && (
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-              Last 7 Days
-            </div>
+            <SectionHeader>LAST 7 DAYS</SectionHeader>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {[...last7].reverse().map((r, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -211,8 +209,13 @@ export default function AccuracyPage() {
                   </span>
                 </div>
               ))}
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>
-                &gt;50% &nbsp; 35–50% &nbsp; &lt;35%
+              <div style={{ display: 'flex', gap: 10, marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                {[['var(--accent-green-bright)', '50%+'], ['var(--accent-gold)', '35–50%'], ['var(--accent-red-bright)', 'Under 35%']].map(([c, label]) => (
+                  <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />
+                    {label}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -221,13 +224,11 @@ export default function AccuracyPage() {
         {/* ── 30-day history table ─────────────────────────────────── */}
         {!histLoading && history?.length > 0 && (
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-              History (Last 30 Days)
-            </div>
+            <SectionHeader>HISTORY · LAST 30 DAYS</SectionHeader>
             <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 70px 70px', padding: '8px 12px', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-subtle)' }}>
+              <div className="history-row history-head" style={{ padding: '8px 12px', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-subtle)' }}>
                 <span>Date</span>
-                <span>Best Call</span>
+                <span className="history-best">Best Call</span>
                 <span style={{ textAlign: 'right' }}>Win %</span>
                 <span style={{ textAlign: 'right' }}>Races</span>
               </div>
@@ -235,8 +236,7 @@ export default function AccuracyPage() {
                 const wr = (r.win_rate || 0) * 100;
                 const wrColor = wr >= 50 ? 'var(--accent-green-bright)' : wr >= 35 ? 'var(--accent-gold)' : 'var(--accent-red-bright)';
                 return (
-                  <div key={i} style={{
-                    display: 'grid', gridTemplateColumns: '100px 1fr 70px 70px',
+                  <div key={i} className="history-row" style={{
                     padding: '9px 12px', fontSize: 12,
                     borderBottom: i < pageRows.length - 1 ? '1px solid var(--border-subtle)' : 'none',
                     background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
@@ -244,7 +244,7 @@ export default function AccuracyPage() {
                     <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
                       {localDate(r.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                     </span>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                    <span className="history-best" style={{ color: 'var(--text-secondary)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
                       {r.best_call || '—'}
                     </span>
                     <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: wrColor }}>
@@ -262,7 +262,7 @@ export default function AccuracyPage() {
                   padding: '10px 12px', borderTop: '1px solid var(--border-subtle)',
                 }}>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                    {pageStart + 1}–{pageStart + pageRows.length} of {history.length} days
+                    {pageStart + 1}–{pageStart + pageRows.length} of {history.length} Days
                   </span>
                   <span style={{ display: 'flex', gap: 6 }}>
                     {[['Previous', currentPage - 1, currentPage === 0], ['Next', currentPage + 1, currentPage >= pageCount - 1]].map(([label, target, disabled]) => (

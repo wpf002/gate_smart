@@ -45,7 +45,9 @@ export default function PageHeader({ title, subtitle, showBack = false, right = 
           {title}
         </div>
         {subtitle && (
-          <div style={{ fontSize: 13, color: 'var(--text-primary)', marginTop: 1, letterSpacing: '0.03em' }}>
+          // Uppercase on every page. Some subtitles were written in capitals and
+          // some in sentence case, so pages disagreed with each other.
+          <div style={{ fontSize: 13, color: 'var(--text-primary)', marginTop: 1, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
             {subtitle}
           </div>
         )}

@@ -60,7 +60,7 @@ def test_best_call_is_the_biggest_official_payout():
 
     rows = [_pick("R1", True, 4.20, 1.0), _pick("R2", True, 31.60, 14.0), _pick("R3", True, 8.00, 3.0)]
     best, _ = best_and_worst(rows)
-    assert best.startswith("R2: R2 horse won") and "$31.60" in best
+    assert best == "R2 horse paid $31.60"
 
 
 def test_worst_miss_is_the_shortest_priced_loser():
@@ -68,7 +68,7 @@ def test_worst_miss_is_the_shortest_priced_loser():
 
     rows = [_pick("R1", False, odds=6.0), _pick("R2", False, odds=0.6), _pick("R3", True, 5.0, 2.0)]
     _, worst = best_and_worst(rows)
-    assert worst.startswith("R2: picked R2 horse")
+    assert worst == "R2 horse lost to x"
 
 
 def test_best_and_worst_handle_empty_and_unpriced_days():
@@ -76,5 +76,5 @@ def test_best_and_worst_handle_empty_and_unpriced_days():
 
     assert best_and_worst([]) == (None, None)
     best, worst = best_and_worst([_pick("R1", True), _pick("R2", False)])
-    assert best == "R1: R1 horse won"
-    assert worst.startswith("R2: picked")
+    assert best == "R1 horse won"
+    assert worst == "R2 horse lost to x"

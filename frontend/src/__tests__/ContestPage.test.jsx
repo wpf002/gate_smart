@@ -174,14 +174,14 @@ describe('BetCurve', () => {
     wrap(<BetCurve />);
     expect(await screen.findByText('$2 ON EVERY PICK')).toBeInTheDocument();
     expect(screen.getByText('−$9')).toBeInTheDocument();
-    expect(screen.getByText('-1.0% return')).toBeInTheDocument();
-    expect(screen.getByText(/2 unpriced races left out/)).toBeInTheDocument();
+    expect(screen.getByText('-1.0% Return')).toBeInTheDocument();
+    expect(screen.getByText(/2 Unpriced Excluded/)).toBeInTheDocument();
   });
 
   it('draws one line with a break-even baseline', async () => {
     const { container } = wrap(<BetCurve />);
     await screen.findByText('$2 ON EVERY PICK');
     expect(container.querySelectorAll('svg path')).toHaveLength(2); // area + line
-    expect(screen.getByText('break even')).toBeInTheDocument();
+    expect(screen.getByText('Break Even')).toBeInTheDocument();
   });
 });

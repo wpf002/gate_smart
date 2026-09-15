@@ -85,14 +85,12 @@ def best_and_worst(report_set: list) -> tuple[str | None, str | None]:
     worst = (min(priced_misses, key=lambda s: s["top_pick_odds"]) if priced_misses
              else (misses[0] if misses else None))
 
+    # Short on purpose: the report card shows these on a phone in one line.
     best_call = None
     if best:
-        paid = f" (paid ${best['top_pick_win_payoff']:.2f})" if best.get("top_pick_win_payoff") else ""
-        best_call = f"{best['race_name'] or best['race_id']}: {best['predicted']} won{paid}"
-    worst_miss = (
-        f"{worst['race_name'] or worst['race_id']}: picked {worst['predicted']}, actual {worst['actual']}"
-        if worst else None
-    )
+        best_call = (f"{best['predicted']} paid ${best['top_pick_win_payoff']:.2f}"
+                     if best.get("top_pick_win_payoff") else f"{best['predicted']} won")
+    worst_miss = f"{worst['predicted']} lost to {worst['actual']}" if worst else None
     return best_call, worst_miss
 
 

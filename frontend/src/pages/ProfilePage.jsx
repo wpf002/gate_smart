@@ -166,7 +166,7 @@ export default function ProfilePage() {
     <div>
       <PageHeader
         title="PROFILE"
-        subtitle="Your account, progress and settings"
+        subtitle="Account, progress & settings"
         right={isLoggedIn ? (
           <button
             className="btn btn-secondary"

@@ -10,6 +10,12 @@ const H = 180;
 const PAD = { top: 22, right: 6, bottom: 8, left: 6 };
 const pct = (v, total) => `${((v / total) * 100).toFixed(2)}%`;
 
+// "2026-08-16" -> "Aug 16", read as a local calendar day (not UTC midnight).
+const shortDate = (iso) => {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
 const money = (n) => `${n < 0 ? '−' : '+'}$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
 /**
@@ -47,14 +53,14 @@ export default function BetCurve() {
             $2 ON EVERY PICK
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            {data.total_bets.toLocaleString()} bets · ${data.staked.toLocaleString()} wagered
+            {data.total_bets.toLocaleString()} Bets · ${data.staked.toLocaleString()} Wagered
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color }}>{money(data.net)}</div>
           {data.roi !== null && (
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {(data.roi * 100).toFixed(1)}% return
+              {(data.roi * 100).toFixed(1)}% Return
             </div>
           )}
         </div>
@@ -72,7 +78,7 @@ export default function BetCurve() {
           position: 'absolute', right: 0, top: pct(y(0), H), transform: 'translateY(-100%)',
           paddingBottom: 3, fontSize: 11, color: 'var(--text-muted)',
         }}>
-          break even
+          Break Even
         </span>
         <span style={{
           position: 'absolute', left: pct(x(pts.length - 1), W), top: pct(y(last.cumulative), H),
@@ -80,13 +86,13 @@ export default function BetCurve() {
         }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-        <span>{pts[0].date.slice(5)}</span>
-        <span>{last.date.slice(5)}</span>
+        <span>{shortDate(pts[0].date)}</span>
+        <span>{shortDate(last.date)}</span>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 10 }}>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-          Official payouts only{data.unpriced_excluded ? ` · ${data.unpriced_excluded} unpriced races left out` : ''}
+          Official Payouts{data.unpriced_excluded ? ` · ${data.unpriced_excluded} Unpriced Excluded` : ''}
         </span>
         <div style={{ display: 'flex', gap: 4 }}>
           {[7, 30, 90].map((d) => (

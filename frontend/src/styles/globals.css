@@ -1139,3 +1139,30 @@ select option {
     padding: 20px 24px;
   }
 }
+
+/* Report Card history: four columns on wider screens. On phones the best call
+   drops to its own full-width line under the date, where it has room to be
+   read instead of being cut to a few characters. */
+.history-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) 70px 70px;
+  align-items: center;
+}
+
+@media (max-width: 767px) {
+  .history-row {
+    grid-template-columns: minmax(0, 1fr) 60px 50px;
+    row-gap: 3px;
+  }
+
+  .history-row .history-best {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    white-space: normal !important;
+    padding-right: 0 !important;
+  }
+
+  .history-head .history-best {
+    display: none;
+  }
+}
