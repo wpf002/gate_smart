@@ -11,7 +11,7 @@ agreement is never miscounted as a fade, and a fade with no real reason lands in
 its own bucket rather than being quietly dropped.
 """
 from app.services.fade_reason import (
-    FADE_REASONS, NO_FADE, UNSPECIFIED, normalize_fade_reason, prompt_block,
+    DATA_FADE_REASONS, FADE_REASONS, NO_FADE, UNSPECIFIED, normalize_fade_reason, prompt_block,
 )
 
 
@@ -62,3 +62,28 @@ def test_prompt_block_lists_every_reason_and_the_agreement_value():
     assert NO_FADE in block
     # It must tell the model that no applicable reason means: take the favorite.
     assert "put the favorite first" in block
+
+
+def test_the_honest_arms_reasons_score_under_their_own_names():
+    """The honest-prompt arm offers reasons the legacy list never had. They have
+    to pass through as themselves, or every honest-arm fade lands in
+    'unspecified' and the arms can't be compared."""
+    for key in DATA_FADE_REASONS:
+        assert normalize_fade_reason(key, False) == key
+    assert normalize_fade_reason("Surface distance", False) == "surface_distance"
+
+
+def test_the_honest_block_offers_only_data_backed_reasons():
+    block = prompt_block(DATA_FADE_REASONS)
+    for key in DATA_FADE_REASONS:
+        assert f"    {key} — " in block
+    for key in ("lone_speed", "pace_collapse", "bounce", "run_style", "trip_bias", "form_cycle"):
+        assert f"    {key} — " not in block
+    assert "put the favorite first" in block
+    # The default stays the legacy list, byte for byte.
+    assert prompt_block() == prompt_block(FADE_REASONS)
+
+
+def test_reason_keys_fit_the_column():
+    for key in {**FADE_REASONS, **DATA_FADE_REASONS}:
+        assert len(key) <= 30

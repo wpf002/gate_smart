@@ -43,7 +43,7 @@ async def main(days: int) -> None:
     from sqlalchemy import text as T
 
     from app.core import database as _db
-    from app.services.fade_reason import FADE_REASONS, NO_FADE, UNSPECIFIED
+    from app.services.fade_reason import KNOWN_FADE_REASONS, NO_FADE, UNSPECIFIED
 
     await _db.init_db()
     base = ("result_fetched AND analysis_mode = 'auto_daily' AND user_id IS NULL "
@@ -99,7 +99,7 @@ async def main(days: int) -> None:
     if thin:
         print(f"\n{len(thin)} reason(s) under 50 races — {', '.join(r[0] for r in thin)}. "
               f"Read those as provisional.")
-    print(f"\nKnown reasons: {', '.join(FADE_REASONS)}")
+    print(f"\nKnown reasons: {', '.join(KNOWN_FADE_REASONS)}")
 
 
 if __name__ == "__main__":

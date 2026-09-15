@@ -97,6 +97,9 @@ class RacePrediction(Base):
     # same day, same pass, differing only by a hash. NULL means the race predates
     # per-lesson holdouts or is not in the measured arm, and it is not evidence.
     lesson_holdout_ids: Mapped[Optional[list]] = mapped_column(JSON(none_as_null=True), nullable=True)
+    # Which system prompt analyzed this pick: "legacy" or "honest" (see
+    # prompt_arm_for_race). NULL for lean/fallback picks, which use neither.
+    prompt_arm: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Named angle for diverging from the morning-line favorite; see fade_reason.py
     fade_reason: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     # True when the deep-fade re-ranker promoted the model's second choice.

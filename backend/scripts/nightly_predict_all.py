@@ -177,6 +177,13 @@ _BATCH_CANCEL_DRAIN_SECONDS = 120
 BATCH_EXPERIENCE = "beginner"
 
 
+def cached_prefix(system: list) -> list:
+    """The system blocks a prompt-cache entry covers: everything up to and
+    including the last block with a cache marker. Empty when nothing is cached."""
+    last = max((i for i, b in enumerate(system) if b.get("cache_control")), default=-1)
+    return system[: last + 1]
+
+
 async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
     """Analyze every race in one Message Batch (50% off all tokens).
 
@@ -250,10 +257,14 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
         # warm every later request bills it at 0.1x. There are only ever a
         # handful of distinct prefixes (pick model x lesson arm), so this trades
         # a few cheap writes for ~150 of them.
-        # Dedupe on the WHOLE cached prefix — model plus every system block in
-        # order, serialized verbatim. A cache entry is keyed by the full prefix,
-        # so hashing only the last block (or a slice of it) would collapse two
-        # genuinely different prefixes into one key and leave one of them cold.
+        # Dedupe on the WHOLE cached prefix — model plus every system block up
+        # to and including the last cache marker, serialized verbatim. A cache
+        # entry is keyed by the full prefix, so hashing only the last block (or a
+        # slice of it) would collapse two genuinely different prefixes into one
+        # key and leave one of them cold. Blocks after the last marker are not
+        # part of any cache entry: the per-race lesson block rides there, and
+        # hashing it made almost every race look like a new prefix (45 pre-warm
+        # calls on 2026-09-15 against 2 the night before).
         # build_analyze_request sends no `tools`, so model + system is the
         # complete prefix; if tools are ever added they must join this key.
         try:
@@ -261,11 +272,11 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
             warmed: set = set()
             for _req in requests:
                 _params = _req["params"]
-                _system = _params.get("system") or []
-                if not _system:
+                _prefix = cached_prefix(_params.get("system") or [])
+                if not _prefix:
                     continue
                 _key = (_params["model"], hashlib.md5(
-                    json.dumps(_system, sort_keys=True).encode("utf-8")
+                    json.dumps(_prefix, sort_keys=True).encode("utf-8")
                 ).hexdigest())
                 if _key in warmed:
                     continue
@@ -276,7 +287,7 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
                         endpoint="batch_prewarm",
                         model=_params["model"],
                         max_tokens=1,
-                        system=_system,
+                        system=_prefix,
                         messages=[{"role": "user", "content": "."}],
                     )
                 except Exception as e:
@@ -410,6 +421,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_arm VARCHAR(20)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_ids JSONB"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS lesson_holdout_ids JSONB"))
+        await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS prompt_arm VARCHAR(20)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS fade_reason VARCHAR(30)"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_applied BOOLEAN DEFAULT FALSE"))
         await _conn.execute(_text("ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS rerank_eligible BOOLEAN DEFAULT FALSE"))
@@ -530,6 +542,7 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
     from app.services.fade_reason import normalize_fade_reason
     from app.services.secretariat import (
         analyze_race, compute_input_fingerprint, pick_depth_for_race, pick_model_for_race,
+        prompt_arm_for_race,
     )
     from app.core.llm_cost import DailyBudgetExceeded, enforce_daily_cap
 
@@ -809,6 +822,9 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 "lesson_arm": lesson_arm,
                 "lesson_ids": lesson_ids,
                 "lesson_holdout_ids": lesson_holdout_ids,
+                # Which system prompt the pick came from. Same helper the prompt
+                # builder calls, so the row can't disagree with the prompt.
+                "prompt_arm": prompt_arm_for_race(race_id) if lock_source == "nightly" else None,
                 # Which market-divergence angle was claimed. Scored later to find
                 # which fades are worth making at all.
                 "fade_reason": _clip(normalize_fade_reason(

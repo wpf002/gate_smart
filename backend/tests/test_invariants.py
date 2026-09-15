@@ -68,6 +68,33 @@ async def test_the_expected_model_split_is_silent():
 
 
 @pytest.mark.asyncio
+async def test_a_prompt_split_that_disagrees_with_config_is_caught(monkeypatch):
+    from app.services import secretariat as sec
+
+    monkeypatch.setattr(sec, "PROMPT_HONEST_PERCENT", 50)
+    msg = await invariants.check_prompt_arm_mix(FakeDB([("legacy", 140)]))
+    assert msg and "disagree" in msg
+
+
+@pytest.mark.asyncio
+async def test_nightly_picks_missing_a_prompt_arm_are_caught(monkeypatch):
+    from app.services import secretariat as sec
+
+    monkeypatch.setattr(sec, "PROMPT_HONEST_PERCENT", 50)
+    msg = await invariants.check_prompt_arm_mix(FakeDB([("legacy", 60), ("honest", 55), (None, 40)]))
+    assert msg and "missing" in msg
+
+
+@pytest.mark.asyncio
+async def test_the_expected_prompt_split_is_silent(monkeypatch):
+    from app.services import secretariat as sec
+
+    monkeypatch.setattr(sec, "PROMPT_HONEST_PERCENT", 50)
+    assert await invariants.check_prompt_arm_mix(FakeDB([("legacy", 70), ("honest", 64)])) is None
+    assert await invariants.check_prompt_arm_mix(FakeDB([("honest", 12)])) is None
+
+
+@pytest.mark.asyncio
 async def test_the_jsonb_null_leak_is_caught():
     assert await invariants.check_provenance_shape(FakeDB([(78,)])) is not None
     assert await invariants.check_provenance_shape(FakeDB([(0,)])) is None

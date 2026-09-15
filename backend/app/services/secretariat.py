@@ -152,6 +152,40 @@ def pick_depth_for_race(race_id: str) -> str:
     return "lean" if bucket < PICK_DEPTH_LEAN_PERCENT else "full"
 
 
+# ── Honest-prompt experiment ─────────────────────────────────────────────────
+# SECRETARIAT_SYSTEM was written for full past-performance sheets. It tells the
+# model to lead with Beyer trajectories, count running styles, read workouts and
+# beaten lengths, and weigh trainer win percentages. For races since 2024 none of
+# that reaches the prompt: the results feed charts only the top three finishers,
+# with no figures, margins, running positions or workouts, and the Equibase
+# figures that do exist (about 1 runner in 5) stop in December 2023. Checked
+# 2026-09-15 on the 2026-08-15 card.
+#
+# The honest arm describes the data the model actually receives and how to use
+# it, and its fade vocabulary drops the reasons that data can't show. Started
+# 2026-09-16 at 50%. Read with scripts/prompt_report.py. 0 ends the test with
+# every race on the legacy prompt; 100 ships the honest one.
+PROMPT_ARM_LEGACY = "legacy"
+PROMPT_ARM_HONEST = "honest"
+PROMPT_HONEST_PERCENT = int(os.getenv("PROMPT_HONEST_PERCENT", "50"))
+# First nightly slate under the test. Rows before it carry no arm.
+PROMPT_TEST_START = "2026-09-16"
+
+
+def prompt_arm_for_race(race_id: str) -> str:
+    """Which system prompt analyzes this race. Deterministic per race_id.
+
+    Its own md5 salt keeps it independent of the model, depth, lesson and
+    re-rank assignments. The nightly pick, a live re-analysis and the stored row
+    all call this, so a race never mixes prompts.
+    """
+    if PROMPT_HONEST_PERCENT <= 0 or not race_id:
+        return PROMPT_ARM_LEGACY
+    import hashlib
+    bucket = int(hashlib.md5(f"prompt:{race_id}".encode()).hexdigest()[:8], 16) % 100
+    return PROMPT_ARM_HONEST if bucket < PROMPT_HONEST_PERCENT else PROMPT_ARM_LEGACY
+
+
 class SecretariatBusyError(Exception):
     """Raised when Claude returns HTTP 529 (overloaded)."""
 
@@ -365,7 +399,78 @@ INTERNAL CONSISTENCY RULE: Within a single response, the horse you name as predi
 Always respond in valid JSON as specified in each prompt. No markdown inside string values. No extra text outside the JSON object."""
 
 
-def _cached_system(extra: str = "", ttl: str | None = None, uncached: str = "") -> list[dict]:
+# The honest-prompt arm (see prompt_arm_for_race). Everything it claims about the
+# inputs is checked against _slim_race_for_prompt, render_form_block and
+# get_hardware_and_historical_context; change those and this must change too.
+SECRETARIAT_SYSTEM_HONEST = """You are Secretariat, a horse racing handicapper and betting strategist inside GateSmart. Your focus is North American racing: US and Canadian tracks, trainers, jockeys and betting pools.
+
+Your job is to analyze races and give users clear, honest, actionable betting intelligence from the data in the prompt and well-established racing knowledge.
+
+THE DATA YOU RECEIVE
+- Race conditions: track, post time (off_dt), distance, surface, track condition (going), weather, race class and type, purse, claiming price range, age, sex and state-bred restrictions, breed, and scratches or rider changes posted by the track.
+- Each runner: program number, post position, jockey, trainer, morning-line odds (`odds` switches to the live tote price once the pool opens), claiming price, equipment ("Blk-O" = blinkers off), and medication (L = Lasix, FTL = first-time Lasix, B = Bute). In fields of 10 or fewer, also weight, sire, dam and damsire.
+- PAST FORM from GateSmart's result archive, for most runners: each start's date, finish and field size, track, distance, surface, going and class. The archive covers North American races since January 2024. The results feed behind it charts only the first three finishers, so "off/N" means 4th or worse in an N-horse field, by an unknown margin. A runner with no lines may have raced before 2024, outside North America, or in a race the feed missed, so say "no archived starts". In a race for 2-year-olds, no lines almost always means a first start.
+- EQUIBASE past performances with speed and pace figures, for about one runner in five. Those files end in December 2023, so they describe the horse two or more years ago. Use them only as background on the class it once reached, never as current form.
+- Your own recent results, market calibration and lessons, in the blocks that follow.
+
+THE DATA YOU DO NOT RECEIVE
+For races since 2024 there are no speed or pace figures, no beaten lengths, no finishing positions below 3rd, no running positions during a race, no workouts, no trip notes, and no win percentages for trainers, jockeys or sires. Age and sex are usually missing.
+- Never state a number you weren't given: no speed figures for recent races, no workout times, no trainer or jockey percentages, no lengths beaten.
+- Never call a horse a front-runner, presser or closer, or claim lone speed, unless the prompt's data shows it. Without running positions, describe pace only from distance, surface, post positions and field size.
+- General racing knowledge is fine when you are confident it's accurate and state it without numbers, e.g. a trainer known for turf runners or a sire known for wet-track ability.
+
+THE MORNING LINE
+The track's morning-line maker sees what you don't: speed figures, workouts, running lines and trainer patterns. Treat the line as your best proxy for that missing information. The favorite wins far more often than any other runner. Start from the market's order and move a horse up or down only for specific evidence in your data.
+
+HOW TO HANDICAP WITH THIS DATA, strongest signals first:
+1. MARKET: morning-line odds, and once the pool is up, money moving toward or away from a horse.
+2. RECENT FORM: archived finishes, weighted toward the latest and adjusted for field size (2nd of 11 is better than 2nd of 5). Repeated recent "off" lines in similar company are a real negative.
+3. CLASS: today's class and claiming price against the class of recent starts. A drop in claiming price, or from maiden special weight to maiden claiming, is a strong angle. A big rise is a test. State-bred and restricted races are softer than open company.
+4. DAYS SINCE LAST START: count from the latest archived line to today's race date. Flag 60+ days, and remember the archive can miss starts outside North America.
+5. SURFACE, DISTANCE AND GOING: top-three finishes on today's surface, at a similar distance (sprints are under 8 furlongs), and on off tracks when today's going is off. A first try on a surface or at a distance is a question mark, not a negative.
+6. CONNECTIONS: today's jockey and trainer, and a rider or trainer change the archive shows. It records riders and trainers only for top-three finishes.
+7. EQUIPMENT AND MEDICATION: blinkers off (Blk-O) and first-time Lasix (FTL).
+8. POST POSITION AND FIELD SIZE: a wide post costs ground in two-turn routes, most of all on turf and in big fields. Fields of 10+ add traffic trouble and spread the prices.
+9. PEDIGREE: sire and dam, for first-time starters and first tries on turf or a wet track, from general knowledge only.
+
+RACE TYPES
+- MAIDENS: form is thin. First-time starters have no lines, so lean on the market, connections and pedigree, and keep confidence low. For lightly raced maidens, improving finishes and a drop from maiden special weight to maiden claiming are the strongest angles.
+- CLAIMING: moves in claiming price are the clearest signal you have.
+- STAKES: fields are closely matched and your data can't separate them the way figures would. Respect the market and keep confidence modest.
+- QUARTER HORSES AND ARABIANS (breed is not Thoroughbred): short dashes decided at the break. Don't apply thoroughbred pace or closing logic.
+- OFF TRACKS: a top-three finish on an off track in the archive is your only evidence of wet-track ability. Say "no off-track lines" when there are none.
+
+FAIR ODDS AND VALUE: how to populate fair_odds, value_score and recommended_bet.
+- Give each runner a win probability. Start from the probabilities the odds imply, adjust for the evidence above, and normalize so they sum to about 100%.
+- fair_odds = (1 / probability) - 1, written as a fraction: 33% = 2/1, 25% = 3/1, 20% = 4/1, 14% = 6/1, 10% = 9/1.
+- Compare fair odds with the market. Fair odds shorter than the market (you 3/1, market 5/1) = overlay, value_score 75-95. Within about 25% = fair price, value_score about 50. Fair odds longer than the market (you 4/1, market 8/5) = underlay, value_score 20-35, recommended_bet usually "avoid" or downgraded to "show".
+- predicted_finish is who you think crosses the line first. Price never changes that. bet_recommendations may still back a longer-priced horse you rate as an overlay.
+
+CONFIDENCE: your data is thinner than a full past-performance sheet. "high" needs the market and at least two independent signals from the list above pointing to the same horse. When signals conflict, say so and lower confidence rather than forcing a pick.
+
+Always include the program number (#) with every horse name in predictions and recommendations. Program numbers are how bettors identify horses at the teller window.
+
+SUMMARY STYLE: write ONE overall_summary and one summary per runner, styled by the "USER EXPERIENCE LEVEL" directive on each prompt:
+- beginner: plain English, no jargon. "class relief" becomes "facing easier opponents today".
+- advanced: handicapping terms (class drop, layoff, surface switch). No over-explaining.
+- intermediate (or unspecified): balanced. Name the factor and briefly say why it matters.
+Cite facts from the data, e.g. "2nd of 9 at this level on Aug 3", never an invented figure.
+
+Your tone: direct and confident about what the data shows, plain about what it doesn't.
+
+CONSISTENCY RULE: Given the same race data and the same analysis mode, you must always produce the same predicted finish order and the same top recommendation. If you are torn between two horses, favor the one with the lower morning-line odds. Never flip-flop.
+
+INTERNAL CONSISTENCY RULE: Within a single response, the horse you name as predicted_finish.first MUST be the same horse named in bet_recommendations.win.selection, and that horse's per-runner recommended_bet field MUST be "win" — never "avoid", "use-in-exotics", or null. If you believe the projected winner is poor value at its current price, demote its recommended_bet to "place" or "show" (and reflect that in bet_recommendations) — do NOT mark a projected winner as "avoid". "Avoid" means you do not expect this horse to hit the board; it is incompatible with picking the same horse to win. Likewise, predicted_finish.second and predicted_finish.third should not have recommended_bet="avoid" — at minimum tag them "show" or "use-in-exotics". Verify these fields agree before returning the JSON.
+
+Always respond in valid JSON as specified in each prompt. No markdown inside string values. No extra text outside the JSON object."""
+
+
+def system_prompt_for_arm(arm: str | None) -> str:
+    return SECRETARIAT_SYSTEM_HONEST if arm == PROMPT_ARM_HONEST else SECRETARIAT_SYSTEM
+
+
+def _cached_system(extra: str = "", ttl: str | None = None, uncached: str = "",
+                   system: str | None = None) -> list[dict]:
     """System param with prompt caching enabled.
 
     SECRETARIAT_SYSTEM is ~5.5k tokens and was being re-billed at full price on
@@ -385,13 +490,15 @@ def _cached_system(extra: str = "", ttl: str | None = None, uncached: str = "") 
     `uncached` rides last with no cache marker. The lesson block goes there: each
     lesson is switched on or off per race, so almost every race has a different
     set, and caching it would pay a cache write per race for nothing.
+
+    `system` swaps the base prompt; pick analyses pass their prompt arm's text.
     """
     cc: dict = {"type": "ephemeral"}
     if ttl:
         cc["ttl"] = ttl
     blocks = [{
         "type": "text",
-        "text": SECRETARIAT_SYSTEM,
+        "text": system or SECRETARIAT_SYSTEM,
         "cache_control": cc,
     }]
     if extra:
@@ -746,7 +853,33 @@ def _slim_race_for_prompt(race_data: dict) -> dict:
     return slim
 
 
-def _experience_level_block(experience_level: str | None) -> str:
+def _pace_scenario_spec(arm: str | None) -> str:
+    """The JSON schema's description of pace_scenario, per prompt arm."""
+    if arm == PROMPT_ARM_HONEST:
+        return ("one sentence — must state the field size (N runners) and what distance, "
+                "surface and post positions suggest about the pace; don't assign running "
+                "styles the data doesn't show")
+    return ("one sentence — must state the field size (N runners) and how that shape "
+            "affects the pace projection")
+
+
+def _experience_level_block(experience_level: str | None, arm: str | None = None) -> str:
+    if arm == PROMPT_ARM_HONEST and experience_level in ("advanced", "intermediate"):
+        # The legacy wording asks for speed figures and Beyer trajectories,
+        # which the honest arm tells the model it doesn't have.
+        if experience_level == "advanced":
+            return (
+                "\nUSER EXPERIENCE LEVEL: advanced. "
+                "Lead with the market, class moves, recent finishes and layoffs. "
+                "Use proper handicapping terminology in overall_summary and every runner summary. "
+                "Be specific about class relief or rises, surface and distance switches, and connections. "
+                "Do not over-explain basics.\n"
+            )
+        return (
+            "\nUSER EXPERIENCE LEVEL: intermediate. "
+            "Balance technical and accessible language. "
+            "Include class and form factors and explain their significance.\n"
+        )
     if experience_level == "beginner":
         return (
             "\nUSER EXPERIENCE LEVEL: beginner. "
@@ -915,7 +1048,8 @@ async def build_analyze_request(
     if ts_context:
         ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values())
 
-    cal_context = await get_calibration_context(race_data.get("race_id"))
+    arm = prompt_arm_for_race(race_data.get("race_id"))
+    cal_context = await get_calibration_context(race_data.get("race_id"), arm=arm)
     lessons_context = await get_lessons_context(race_data.get("race_id"))
 
     # Our own accumulated form lines — the NA feed ships every runner with an
@@ -930,8 +1064,9 @@ async def build_analyze_request(
     except Exception:
         form_block = ""
 
-    exp_block = _experience_level_block(experience_level)
+    exp_block = _experience_level_block(experience_level, arm)
     stake_block = _stake_sizing_block(bankroll)
+    pace_spec = _pace_scenario_spec(arm)
     prompt = f"""{exp_block}Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
@@ -963,7 +1098,7 @@ Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else '$100.00 (default)
 Return this JSON exactly:
 {{
   "race_summary": "one sentence",
-  "pace_scenario": "one sentence — must state the field size (N runners) and how that shape affects the pace projection",
+  "pace_scenario": "{pace_spec}",
   "vulnerable_favorite": "horse name or null",
   "runners": [
     {{
@@ -1010,7 +1145,8 @@ Return this JSON exactly:
         "model": model or PICK_MODEL_DEFAULT,
         "max_tokens": 5000,
         "temperature": 0.2,
-        "system": _cached_system(cal_context, ttl=cache_ttl, uncached=lessons_context),
+        "system": _cached_system(cal_context, ttl=cache_ttl, uncached=lessons_context,
+                                 system=system_prompt_for_arm(arm)),
         "messages": [{"role": "user", "content": prompt}],
     }
 
@@ -1026,7 +1162,8 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
 
     # Rolling calibration rides as a cached system block (changes once daily) so
     # Secretariat still learns from its own history without re-billing the tokens.
-    cal_context = await get_calibration_context(race_data.get("race_id"))
+    arm = prompt_arm_for_race(race_data.get("race_id"))
+    cal_context = await get_calibration_context(race_data.get("race_id"), arm=arm)
     lessons_context = await get_lessons_context(race_data.get("race_id"))
 
     # Our own accumulated form lines — the NA feed ships every runner with an
@@ -1041,8 +1178,9 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
     except Exception:
         form_block = ""
 
-    exp_block = _experience_level_block(experience_level)
+    exp_block = _experience_level_block(experience_level, arm)
     stake_block = _stake_sizing_block(bankroll)
+    pace_spec = _pace_scenario_spec(arm)
     prompt = (
         f"RACE ID: {race_data.get('race_id', 'unknown')} | "
         f"MODE: {mode} | "
@@ -1079,7 +1217,7 @@ Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else '$100.00 (default)
 Return this JSON exactly:
 {{
   "race_summary": "one sentence",
-  "pace_scenario": "one sentence — must state the field size (N runners) and how that shape affects the pace projection",
+  "pace_scenario": "{pace_spec}",
   "vulnerable_favorite": "horse name or null",
   "runners": [
     {{
@@ -1129,7 +1267,7 @@ Return this JSON exactly:
         model="claude-haiku-4-5-20251001",
         max_tokens=5000,
         temperature=0.2,
-        system=_cached_system(cal_context, uncached=lessons_context),
+        system=_cached_system(cal_context, uncached=lessons_context, system=system_prompt_for_arm(arm)),
         messages=[{"role": "user", "content": prompt}]
     ) as stream:
         async for text in stream.text_stream:
@@ -2976,15 +3114,17 @@ async def get_lessons_context(race_id: str | None = None) -> str:
         return ""
 
 
-async def get_calibration_context(race_id: str | None = None) -> str:
+async def get_calibration_context(race_id: str | None = None, arm: str | None = None) -> str:
     """
     Returns a context string injected into every analysis prompt.
     Returns empty string if < 20 samples or calibration row missing.
 
-    Identical for every race on the slate, so it caches. The per-race lesson
+    Identical for every race in a prompt arm, so it caches. The per-race lesson
     block lives in get_lessons_context. `race_id` is accepted so both helpers take
-    the same arguments at the call sites.
+    the same arguments at the call sites. `arm` swaps the named grounds for fading
+    the favorite: the honest arm lists only angles its data can show.
     """
+    honest = arm == PROMPT_ARM_HONEST
     try:
         from app.core.database import _AsyncSessionLocal
         from app.models.accuracy import SecretariatCalibration
@@ -3047,11 +3187,18 @@ async def get_calibration_context(race_id: str | None = None) -> str:
                     "market price implies — so ranking a longshot over a shorter-priced "
                     "favorite has been a losing move for you. "
                 )
-            market_line += (
-                "Make predicted_finish.first the morning-line favorite UNLESS you can name "
-                "a SPECIFIC, concrete reason it will underperform (a lone-speed duel it "
+            grounds = (
+                "(a clear class jump, a class drop for your pick, recent off-the-board "
+                "finishes, a long layoff, no top-three finish on today's surface, distance "
+                "or going, a blinkers-off, first-time Lasix or rider change). "
+            ) if honest else (
+                "(a lone-speed duel it "
                 "can't survive, a clear class jump, a bounce off a peak effort, a run-style "
                 "that doesn't fit the projected pace, a troubled-trip or bias angle). "
+            )
+            market_line += (
+                "Make predicted_finish.first the morning-line favorite UNLESS you can name "
+                "a SPECIFIC, concrete reason it will underperform " + grounds +
                 "'Better value' or 'overbet' is NOT a reason to predict a non-favorite to "
                 "WIN — price belongs in your bet recommendations, never in who you think "
                 "crosses the wire first. Diverge from the favorite only when the evidence "
@@ -3060,12 +3207,20 @@ async def get_calibration_context(race_id: str | None = None) -> str:
         else:
             # No reliable market-agreement sample yet — give the discipline without
             # citing numbers we can't stand behind.
+            grounds = (
+                "(class jump or drop, recent off-the-board finishes, long layoff, no "
+                "top-three finish on today's surface, distance or going, equipment, "
+                "medication or rider change)"
+            ) if honest else (
+                "(lone-speed "
+                "duel, class jump, bounce off a peak, run-style that doesn't fit the pace, "
+                "troubled-trip or bias angle)"
+            )
             market_line = (
                 "MARKET DISCIPLINE: the morning-line favorite is the most predictive "
                 "signal in any race. Make predicted_finish.first the favorite UNLESS you "
-                "can name a SPECIFIC, concrete reason it will underperform (lone-speed "
-                "duel, class jump, bounce off a peak, run-style that doesn't fit the pace, "
-                "troubled-trip or bias angle). 'Better value' or 'overbet' is NOT a reason "
+                "can name a SPECIFIC, concrete reason it will underperform " + grounds + ". "
+                "'Better value' or 'overbet' is NOT a reason "
                 "to predict a non-favorite to WIN — price belongs in your bet "
                 "recommendations, never in who crosses the wire first."
             )
@@ -3073,13 +3228,15 @@ async def get_calibration_context(race_id: str | None = None) -> str:
 
         # Makes every divergence from the market name itself, so fades become
         # scoreable instead of one undifferentiated 17% bucket.
-        from app.services.fade_reason import prompt_block
-        lines.append(prompt_block())
+        from app.services.fade_reason import DATA_FADE_REASONS, prompt_block
+        lines.append(prompt_block(DATA_FADE_REASONS if honest else None))
 
         lines.append(
             "Use this to calibrate confidence. "
             "Widen contenders in weak areas. Be decisive in strong areas. "
-            "Apply the lessons above — they come from your own mistakes and wins."
+            + ("Apply the lessons that follow — they come from your own mistakes and wins."
+               if honest else
+               "Apply the lessons above — they come from your own mistakes and wins.")
         )
         return "\n".join(lines)
     except Exception:

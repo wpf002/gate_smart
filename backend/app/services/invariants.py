@@ -64,6 +64,41 @@ async def check_pick_model_mix(db) -> str | None:
     return None
 
 
+async def check_prompt_arm_mix(db) -> str | None:
+    """Yesterday's nightly picks should split between system prompts the way
+    PROMPT_HONEST_PERCENT says.
+
+    Same failure as the pick-model check: an env var changed outside the repo
+    would end or skew the prompt test without anything raising.
+    """
+    from app.services.secretariat import (
+        PROMPT_ARM_HONEST, PROMPT_ARM_LEGACY, PROMPT_HONEST_PERCENT, PROMPT_TEST_START,
+    )
+    # Slates before the test started have no arm at all; that is not a fault.
+    rows = await _fetch(db, f"""
+        SELECT prompt_arm, COUNT(*) n FROM race_predictions
+        WHERE analysis_mode = 'auto_daily' AND user_id IS NULL
+          AND lock_source = 'nightly' AND race_date = CURRENT_DATE - 1
+          AND race_date >= DATE '{PROMPT_TEST_START}'
+        GROUP BY 1
+    """)
+    counts = {r[0]: r[1] for r in rows}
+    total = sum(counts.values())
+    if total < _MIN_PLAUSIBLE_SLATE:
+        return None
+
+    unexpected = {a: n for a, n in counts.items() if a not in (PROMPT_ARM_LEGACY, PROMPT_ARM_HONEST)}
+    if unexpected:
+        return f"nightly picks carry unrecognised or missing prompt arms: {unexpected}"
+
+    share = 100.0 * counts.get(PROMPT_ARM_HONEST, 0) / total
+    if abs(share - PROMPT_HONEST_PERCENT) > 15:
+        return (f"prompt split is {share:.0f}% honest over {total} picks, but "
+                f"PROMPT_HONEST_PERCENT is {PROMPT_HONEST_PERCENT} — "
+                f"configuration and behaviour disagree")
+    return None
+
+
 async def check_provenance_shape(db) -> str | None:
     """lesson_ids and lesson_holdout_ids must be real arrays or SQL NULL, never a
     JSON null, and no lesson may be both carried and withheld by the same race.
@@ -222,6 +257,7 @@ async def check_feed_coverage(db) -> str | None:
 
 CHECKS = (
     ("pick model mix", check_pick_model_mix),
+    ("prompt arm mix", check_prompt_arm_mix),
     ("lesson provenance shape", check_provenance_shape),
     ("form archive integrity", check_form_archive_integrity),
     ("grading self-consistency", check_grading_self_consistency),

@@ -11,7 +11,7 @@ def patched(monkeypatch):
 
     # Takes the race_id the builder now passes through — that argument is what
     # selects the lesson-memory A/B arm for the race.
-    async def fake_cal(race_id=None):
+    async def fake_cal(race_id=None, arm=None):
         return "YOUR RECENT PERFORMANCE: 19% over 2404 races."
 
     async def no_lessons(race_id=None):

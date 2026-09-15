@@ -26,6 +26,23 @@ FADE_REASONS: dict[str, str] = {
     "connections": "a jockey or trainer change that materially matters",
 }
 
+# The honest-prompt arm's vocabulary: only angles its data can actually show.
+# Pace, bounce, run style and trip reasons need speed figures, running positions
+# or chart comments, and none of those reach the prompt for races since 2024.
+DATA_FADE_REASONS: dict[str, str] = {
+    "class_drop": FADE_REASONS["class_drop"],
+    "class_jump": FADE_REASONS["class_jump"],
+    "recent_form": "the favorite's recent archived starts are off the board and my pick's are in the top three",
+    "layoff": "the favorite's last archived start was 60+ days ago and my pick has run recently",
+    "surface_distance": "my pick has a top-three finish on today's surface or at this distance and the favorite has none",
+    "off_track": "today's track is off and my pick has a top-three finish on an off track the favorite lacks",
+    "equipment": "a blinkers-off or first-time Lasix change on my pick",
+    "connections": FADE_REASONS["connections"],
+}
+
+# Every key either arm may record, so both arms normalize and score the same way.
+KNOWN_FADE_REASONS: dict[str, str] = {**FADE_REASONS, **DATA_FADE_REASONS}
+
 # Recorded when the top pick IS the favorite, so agreement is distinguishable
 # from a fade with a missing reason.
 NO_FADE = "sided_with_favorite"
@@ -59,7 +76,7 @@ def normalize_fade_reason(raw: str, top_pick_is_favorite: bool | None = None) ->
     if not text:
         return UNSPECIFIED
     key = re.sub(r"[^a-z_]+", "_", text).strip("_")
-    if key in FADE_REASONS:
+    if key in KNOWN_FADE_REASONS:
         return key
     for pattern, canonical in _ALIASES:
         if re.search(pattern, text):
@@ -67,9 +84,13 @@ def normalize_fade_reason(raw: str, top_pick_is_favorite: bool | None = None) ->
     return UNSPECIFIED
 
 
-def prompt_block() -> str:
-    """The instruction that makes the field answerable rather than decorative."""
-    options = "\n".join(f"    {k} — {v}" for k, v in FADE_REASONS.items())
+def prompt_block(reasons: dict[str, str] | None = None) -> str:
+    """The instruction that makes the field answerable rather than decorative.
+
+    `reasons` defaults to the original vocabulary; the honest-prompt arm passes
+    DATA_FADE_REASONS.
+    """
+    options = "\n".join(f"    {k} — {v}" for k, v in (reasons or FADE_REASONS).items())
     return (
         "\nFADE REASON. If predicted_finish.first is NOT the morning-line favorite, "
         "you are fading the market, and the JSON field \"fade_reason\" must name which "
