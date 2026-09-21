@@ -1,21 +1,37 @@
 #!/usr/bin/env python3
 """
-nightly_predict_all.py — Morning pre-race predictions for all US races.
+nightly_predict_all.py — Morning pre-race predictions for US races.
 Runs the full analyze_race (with a Haiku top-4 fallback for oversized fields)
 so the morning digest and the race-day live page share the same locked pick.
-Runs at 8 AM ET via app.core.scheduler (12:00 UTC). Cost: ~$1.65/day for ~150 races ASSUMING Haiku-only batch. Re-measure via /api/admin/cost/summary — the Sonnet A/B (PICK_MODEL_AB_PERCENT) can multiply this several-fold.
+Runs at 8 AM ET via app.core.scheduler (12:00 UTC).
+
+Cost, measured from llm_call_log rather than assumed: a batch-served race costs
+about $0.036 (Sonnet 4.6, ~5.5k input + ~2.9k output, batch discount already
+applied). The whole North American card is 140–220 races, so pre-computing all
+of it ran $5–8 a day while almost none of those picks were ever opened.
+
+So the nightly warms a SLATE, not the card: the tracks someone actually uses,
+the feature races, and a spread across the remaining tracks to keep the
+reflection loop learning from a broad sample. Every other race still gets the
+same full analysis the moment a person opens it — the live route analyzes on
+demand and writes to the same fingerprint-keyed cache this job writes to, so
+nothing is unavailable, it is just computed when asked for instead of at 8 AM.
+PREDICT_SLATE_SAMPLE sets the size (0 or --all = whole card).
 
 Usage:
     cd backend
     python scripts/nightly_predict_all.py
     python scripts/nightly_predict_all.py --date 2026-04-11
     python scripts/nightly_predict_all.py --dry-run
+    python scripts/nightly_predict_all.py --all        # whole card
+    python scripts/nightly_predict_all.py --sample 60
 """
 import argparse
 import asyncio
 import datetime
 import json
 import os
+import re
 import sys
 import time
 
@@ -395,8 +411,179 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
     return analyses
 
 
+# --- slate selection -----------------------------------------------------
+#
+# How many races the nightly pre-computes. Every race not on the slate is still
+# fully analyzable — the live route does it on first open — so this trades a
+# pre-warmed pick for the ~15s a cold analysis takes, on races nobody opened.
+SLATE_SAMPLE_DEFAULT = int(os.environ.get("PREDICT_SLATE_SAMPLE", "40") or 0)
+
+# A track counts as "used" if anyone opened, picked or watched it this recently.
+SLATE_ENGAGEMENT_DAYS = int(os.environ.get("PREDICT_SLATE_ENGAGEMENT_DAYS", "21") or 21)
+
+# Feature races carry the day's attention, so they are worth warming even at a
+# track nobody has touched yet.
+_FEATURE_TITLE = re.compile(
+    r"\b(stakes|handicap|derby|oaks|futurity|invitational|classic|championship)\b"
+    r"|\bS\.\s*$|\bS\.\s|\bG[123]\b|\bgrade\s*[123]\b",
+    re.IGNORECASE,
+)
+FEATURE_PURSE_USD = int(os.environ.get("PREDICT_FEATURE_PURSE_USD", "75000") or 0)
+
+
+def _race_key(race: dict) -> str:
+    return str(race.get("race_id") or race.get("id") or "")
+
+
+def _track_of(race: dict) -> str:
+    """Track code, from the race_id prefix the rest of the app already uses."""
+    rid = _race_key(race)
+    if "_" in rid:
+        return rid.split("_", 1)[0].upper()
+    return str(race.get("course") or "").strip().upper()
+
+
+def _purse_usd(race: dict) -> int:
+    """Purse as a number. The feed sends '$26,400', '26400' or nothing."""
+    raw = race.get("prize") or race.get("purse") or ""
+    digits = re.sub(r"[^\d]", "", str(raw).split(".")[0])
+    return int(digits) if digits else 0
+
+
+def _is_feature(race: dict) -> bool:
+    title = str(race.get("title") or race.get("race_name") or "")
+    if _FEATURE_TITLE.search(title):
+        return True
+    return FEATURE_PURSE_USD > 0 and _purse_usd(race) >= FEATURE_PURSE_USD
+
+
+def select_slate(entries: list, sample_size: int, watched_tracks: set[str]) -> tuple[list, dict]:
+    """Choose which races the nightly pre-computes.
+
+    Three passes, in priority order:
+      1. every race at a track someone actually uses — those are the ones opened,
+      2. feature races anywhere on the card,
+      3. a round-robin across the remaining tracks, so the reflection loop keeps
+         learning from a spread of tracks and classes rather than one meet.
+
+    Returns (selected entries in the original order, counts by reason). A
+    sample_size of 0 or a card already smaller than it means: take everything.
+    """
+    if sample_size <= 0 or len(entries) <= sample_size:
+        return list(entries), {"whole card": len(entries)}
+
+    chosen: list = []
+    chosen_ids: set[str] = set()
+    why: dict[str, int] = {"used track": 0, "feature": 0, "spread": 0}
+
+    def take(entry, reason: str) -> None:
+        key = _race_key(entry[0])
+        if key in chosen_ids:
+            return
+        chosen_ids.add(key)
+        chosen.append(entry)
+        why[reason] += 1
+
+    watched = {t.upper() for t in watched_tracks if t}
+    for entry in entries:
+        if len(chosen) >= sample_size:
+            break
+        if _track_of(entry[0]) in watched:
+            take(entry, "used track")
+
+    for entry in entries:
+        if len(chosen) >= sample_size:
+            break
+        if _is_feature(entry[0]):
+            take(entry, "feature")
+
+    by_track: dict[str, list] = {}
+    for entry in entries:
+        if _race_key(entry[0]) in chosen_ids:
+            continue
+        by_track.setdefault(_track_of(entry[0]), []).append(entry)
+    for races in by_track.values():
+        races.sort(key=lambda e: str(e[0].get("off_dt") or e[0].get("off_time") or ""))
+
+    tracks = sorted(by_track)
+    i = 0
+    while len(chosen) < sample_size and any(by_track.values()):
+        races = by_track[tracks[i % len(tracks)]]
+        if races:
+            take(races.pop(0), "spread")
+        i += 1
+
+    order = {_race_key(e[0]): n for n, e in enumerate(entries)}
+    chosen.sort(key=lambda e: order.get(_race_key(e[0]), 0))
+    return chosen, {k: v for k, v in why.items() if v}
+
+
+async def _used_tracks(target_date: datetime.date) -> set[str]:
+    """Tracks someone has actually engaged with recently.
+
+    A person opening a race writes a user-owned RacePrediction row; contest
+    picks and watchlist track entries say the same thing more deliberately.
+    Fails open with an empty set — a DB hiccup costs breadth, never the run.
+    """
+    cutoff = target_date - datetime.timedelta(days=SLATE_ENGAGEMENT_DAYS)
+    tracks: set[str] = set()
+    try:
+        from sqlalchemy import text as _text
+
+        from app.core import database as _db
+
+        async with _db._AsyncSessionLocal() as sess:
+            rows = await sess.execute(
+                _text(
+                    "SELECT DISTINCT UPPER(COALESCE(NULLIF(track_code, ''), split_part(race_id, '_', 1))) "
+                    "FROM race_predictions WHERE user_id IS NOT NULL AND race_date >= :cut"
+                ),
+                {"cut": cutoff},
+            )
+            tracks |= {r[0] for r in rows if r[0]}
+            rows = await sess.execute(
+                _text(
+                    "SELECT DISTINCT UPPER(split_part(race_id, '_', 1)) "
+                    "FROM contest_picks WHERE race_date >= :cut"
+                ),
+                {"cut": cutoff},
+            )
+            tracks |= {r[0] for r in rows if r[0]}
+            rows = await sess.execute(
+                _text(
+                    "SELECT DISTINCT UPPER(entity_key) FROM watchlist_items "
+                    "WHERE entity_type IN ('track', 'course', 'meet')"
+                )
+            )
+            tracks |= {r[0] for r in rows if r[0]}
+    except Exception as e:  # noqa: BLE001 — breadth is a nicety, the run is not
+        print(f"  (used-track lookup skipped: {type(e).__name__}: {e})")
+    return tracks
+
+
+async def _spend_today(day: datetime.date) -> tuple[float, int] | None:
+    """Actual spend for the day from llm_call_log, so the run reports the bill
+    rather than a per-race constant that drifts out of date (the old one said
+    $0.011 while the real figure was $0.036)."""
+    try:
+        from sqlalchemy import func, select
+
+        from app.core import database as _db
+        from app.models.accuracy import LLMCallLog
+
+        async with _db._AsyncSessionLocal() as sess:
+            row = await sess.execute(
+                select(func.coalesce(func.sum(LLMCallLog.est_cost_usd), 0.0), func.count(LLMCallLog.id))
+                .where(LLMCallLog.call_date == day)
+            )
+            total, calls = row.one()
+        return float(total or 0.0), int(calls or 0)
+    except Exception:
+        return None
+
+
 async def main(target_date: datetime.date, dry_run: bool, limit: int | None = None,
-               only_missing: bool = False):
+               only_missing: bool = False, sample_size: int | None = None):
     import ssl
 
     import anthropic
@@ -492,6 +679,23 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                 print(f"  Coverage OK: {_today_tracks} tracks (trailing median {_median}).")
     except Exception as _cov_err:
         print(f"  (coverage check skipped: {_cov_err})")
+
+    # Slate, not card. Warm the races people reach and a spread that keeps the
+    # reflection loop fed; everything else is analyzed the first time it is
+    # opened, through the same cache key this job writes.
+    slate_size = SLATE_SAMPLE_DEFAULT if sample_size is None else sample_size
+    if slate_size > 0 and len(all_races) > slate_size:
+        used = await _used_tracks(target_date)
+        all_races, why = select_slate(all_races, slate_size, used)
+        breakdown = ", ".join(f"{n} {reason}" for reason, n in why.items())
+        tracks_on_slate = len({_track_of(r) for r, _ in all_races})
+        print(f"  Slate: {len(all_races)} races across {tracks_on_slate} tracks ({breakdown}). "
+              f"Used tracks: {', '.join(sorted(used)) or 'none yet'}. "
+              f"The rest are analyzed on first open.")
+    elif slate_size > 0:
+        print(f"  Slate: whole card ({len(all_races)} races, under the {slate_size} limit).")
+    else:
+        print(f"  Slate: whole card ({len(all_races)} races) — sampling off.")
 
     # --only-missing: skip races that already have a prediction for this date, so
     # a re-run only backfills the gaps (e.g. tracks the upstream /meets listing
@@ -863,12 +1067,20 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
             await asyncio.sleep(1.0)  # rate-limit only live API calls, not batch-served races
 
     elapsed = time.time() - start_time
-    # Observed means: sync full analysis ~$0.028/race; batch + prompt caching ~$0.011.
     batch_served = sum(1 for rid in batch_analyses if rid)
     sync_served = max(0, predicted - batch_served)
-    cost_est = batch_served * 0.011 + sync_served * 0.028
-    print(f"\n✅ Done: {predicted} predicted ({len(na_races)} NA), {skipped} skipped in {elapsed:.0f}s")
-    print(f"   {batch_served} via batch, ~{sync_served} sync. Estimated cost: ~${cost_est:.2f} (exact: llm_call_log)")
+    print(f"\n✅ Done: {predicted} predicted of {len(na_races)} NA races on the card, "
+          f"{skipped} skipped in {elapsed:.0f}s")
+    # The bill, read back from llm_call_log. A per-race constant drifts: the one
+    # this replaced claimed $0.011 while the ledger said $0.036.
+    spend = await _spend_today(target_date)
+    if spend is not None:
+        total, calls = spend
+        per_race = f", ${total / predicted:.3f}/race" if predicted else ""
+        print(f"   {batch_served} via batch, ~{sync_served} sync. "
+              f"Spent today across all jobs: ${total:.2f} over {calls} calls{per_race}.")
+    else:
+        print(f"   {batch_served} via batch, ~{sync_served} sync. (llm_call_log unreadable — see /api/admin/cost/summary)")
     if dry_run:
         print("   [DRY RUN] No rows written.")
 
@@ -880,8 +1092,13 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=None, help="analyze only the first N races (testing)")
     parser.add_argument("--only-missing", action="store_true",
                         help="only predict races not already stored for the date (cheap backfill/recovery re-run)")
+    parser.add_argument("--sample", type=int, default=None,
+                        help=f"pre-compute this many races (default {SLATE_SAMPLE_DEFAULT}, "
+                             "via PREDICT_SLATE_SAMPLE; 0 = whole card)")
+    parser.add_argument("--all", action="store_true", help="pre-compute the whole card")
     args = parser.parse_args()
 
     target = datetime.date.fromisoformat(args.date) if args.date else datetime.date.today()
+    sample = 0 if args.all else args.sample
     asyncio.run(main(target_date=target, dry_run=args.dry_run, limit=args.limit,
-                     only_missing=args.only_missing))
+                     only_missing=args.only_missing, sample_size=sample))
