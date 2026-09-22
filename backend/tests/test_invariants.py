@@ -165,32 +165,77 @@ def test_every_check_is_registered():
     assert defined == registered, "every check_* must appear in CHECKS"
 
 
-@pytest.mark.asyncio
-async def test_a_missing_third_of_the_card_is_caught(monkeypatch):
-    """A silent gap looks exactly like a light card from the slate alone. The
-    only way to tell them apart is to ask the feed what it offered."""
-    import datetime
-
-    async def fake_feed(date=None):
-        return {"racecards": [{} for _ in range(168)]}
-
-    monkeypatch.setattr("app.services.racing_api.get_na_racecards_full", fake_feed)
-    db = FakeDB([(datetime.date(2026, 9, 4), 73)])
-    msg = await invariants.check_feed_coverage(db)
-    assert msg and "missing" in msg
+def _cards(n, tracks=10):
+    """n racecards spread over `tracks` meets, shaped like the feed."""
+    return {"racecards": [{"race_id": f"T{i % tracks}_1790035200000-{i // tracks + 1}"} for i in range(n)]}
 
 
 @pytest.mark.asyncio
-async def test_a_full_card_and_a_rounding_gap_are_silent(monkeypatch):
+async def test_a_slate_that_did_not_fill_is_caught(monkeypatch):
+    """The nightly warms a 40-race slate, not the card, so picked-below-offered
+    is the design. A slate that came up short is still a fault."""
     import datetime
 
     async def fake_feed(date=None):
-        return {"racecards": [{} for _ in range(168)]}
+        return _cards(168)
 
     monkeypatch.setattr("app.services.racing_api.get_na_racecards_full", fake_feed)
-    assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 168)])) is None
-    # One cancelled race out of 168 must not fire.
-    assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 165)])) is None
+    monkeypatch.setattr(invariants, "_slate_size", lambda: 40)
+    msg = await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 25, 10)]))
+    assert msg and "missing" in msg and "40-race slate" in msg
+
+
+@pytest.mark.asyncio
+async def test_a_track_the_feed_dropped_is_caught(monkeypatch):
+    """The slate round-robins across tracks, so a track with no picks at all
+    means the feed dropped it — the silent gap this check exists for."""
+    import datetime
+
+    async def fake_feed(date=None):
+        return _cards(168, tracks=15)
+
+    monkeypatch.setattr("app.services.racing_api.get_na_racecards_full", fake_feed)
+    monkeypatch.setattr(invariants, "_slate_size", lambda: 40)
+    msg = await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 40, 11)]))
+    assert msg and "track(s) missing" in msg
+
+
+@pytest.mark.asyncio
+async def test_a_full_slate_and_a_rounding_gap_are_silent(monkeypatch):
+    """The live production shape since the slate change: 74 races offered,
+    40 warmed across every track. That is healthy and must stay quiet."""
+    import datetime
+
+    async def fake_feed(date=None):
+        return _cards(74)
+
+    monkeypatch.setattr("app.services.racing_api.get_na_racecards_full", fake_feed)
+    monkeypatch.setattr(invariants, "_slate_size", lambda: 40)
+    assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 40, 10)])) is None
+    # One cancelled race off a full slate must not fire.
+    assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 39, 10)])) is None
+
+
+@pytest.mark.asyncio
+async def test_with_sampling_off_the_whole_card_is_expected(monkeypatch):
+    import datetime
+
+    async def fake_feed(date=None):
+        return _cards(168)
+
+    monkeypatch.setattr("app.services.racing_api.get_na_racecards_full", fake_feed)
+    monkeypatch.setattr(invariants, "_slate_size", lambda: 0)
+    msg = await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 73, 10)]))
+    assert msg and "missing" in msg and "the card" in msg
+    assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 165, 10)])) is None
+
+
+def test_the_slate_size_matches_the_job_that_sets_it():
+    """If the nightly's default changes, the check has to move with it or it
+    alerts every day on a healthy slate."""
+    from scripts.nightly_predict_all import SLATE_SAMPLE_DEFAULT
+
+    assert invariants._slate_size() == SLATE_SAMPLE_DEFAULT
 
 
 @pytest.mark.asyncio
@@ -203,7 +248,7 @@ async def test_an_upstream_outage_does_not_double_alert(monkeypatch):
         raise RuntimeError("upstream 503")
 
     monkeypatch.setattr("app.services.racing_api.get_na_racecards_full", boom)
-    assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 73)])) is None
+    assert await invariants.check_feed_coverage(FakeDB([(datetime.date(2026, 9, 4), 73, 10)])) is None
 
 
 def test_a_naive_heartbeat_still_computes_an_age():

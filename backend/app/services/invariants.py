@@ -211,47 +211,73 @@ async def check_cost_per_pick(db) -> str | None:
     return None
 
 
-async def check_feed_coverage(db) -> str | None:
-    """Every race the feed offered should have a pick.
+def _slate_size() -> int:
+    """How many races the nightly means to warm. 0 means the whole card."""
+    try:
+        from scripts.nightly_predict_all import SLATE_SAMPLE_DEFAULT
+        return SLATE_SAMPLE_DEFAULT
+    except Exception:
+        return int(os.environ.get("PREDICT_SLATE_SAMPLE", "40") or 0)
 
-    A silent gap is indistinguishable from a light card by looking at the slate
-    alone — 73 races on a Monday is normal, 73 races when the feed offered 168
-    is a third of the day missing. The only way to tell them apart is to ask the
-    feed what it had.
+
+async def check_feed_coverage(db) -> str | None:
+    """Every race the nightly MEANT to warm should have a pick, and the slate
+    should reach every track the feed offered.
+
+    Since "Warm a slate, not the whole card" the nightly pre-computes
+    PREDICT_SLATE_SAMPLE races (40 by default) and leaves the rest to be
+    analyzed on first open, so picked-below-offered is the design, not a fault.
+    Two things still have to hold: the slate is actually filled, and it spreads
+    over every track — select_slate round-robins across tracks, so a track
+    missing from the slate means the feed dropped it, which is the silent gap
+    this check exists to catch.
 
     Compares the most recently REPORTED day, so the slate is final. Returns None
     when the feed cannot be reached: an upstream outage is the smoke check's
     problem, and reporting it here too would double-alert on one fault.
     """
     rows = await _fetch(db, """
-        SELECT race_date, COUNT(*) n FROM race_predictions
+        SELECT race_date, COUNT(*) n,
+               COUNT(DISTINCT split_part(race_id, '-', 1)) tracks
+        FROM race_predictions
         WHERE analysis_mode = 'auto_daily' AND user_id IS NULL
           AND race_date = (SELECT MAX(report_date) FROM daily_accuracy_reports)
         GROUP BY 1
     """)
     if not rows:
         return None
-    race_date, predicted = rows[0]
+    race_date, predicted, tracks_picked = rows[0]
     if predicted < _MIN_PLAUSIBLE_SLATE:
         return None
 
     try:
         from app.services.racing_api import get_na_racecards_full
         data = await get_na_racecards_full(date=race_date.isoformat())
-        offered = len(data.get("racecards") or [])
+        cards = data.get("racecards") or []
     except Exception as e:
         log.info(f"[invariants] feed coverage skipped, upstream unreachable: {e}")
         return None
+    offered = len(cards)
     if not offered:
         return None
+    tracks_offered = len({str(c.get("race_id") or "").rsplit("-", 1)[0] for c in cards if c.get("race_id")})
 
-    missing = offered - predicted
-    # 5% slack: a race can legitimately be dropped (cancelled after the slate
-    # was built, no runners, an unparseable card), and flagging one missing race
-    # out of 200 would make this alert noise.
-    if missing > 0 and missing / offered > 0.05:
-        return (f"{race_date}: the feed offered {offered} races but only {predicted} "
-                f"were picked — {missing} missing ({missing/offered:.0%} of the card)")
+    slate = _slate_size()
+    # 5% slack throughout: a race can legitimately be dropped (cancelled after
+    # the slate was built, no runners, an unparseable card), and flagging one
+    # race out of 200 would make this alert noise.
+    expected = offered if slate <= 0 else min(offered, slate)
+    missing = expected - predicted
+    if missing > 0 and missing / expected > 0.05:
+        scope = "the card" if slate <= 0 else f"a {slate}-race slate"
+        return (f"{race_date}: the feed offered {offered} races and the nightly warms {scope}, "
+                f"but only {predicted} were picked — {missing} missing ({missing/expected:.0%})")
+
+    expected_tracks = tracks_offered if slate <= 0 else min(tracks_offered, slate)
+    short = expected_tracks - tracks_picked
+    if short > 0 and short / expected_tracks > 0.05:
+        return (f"{race_date}: the feed offered {tracks_offered} tracks but the picks cover only "
+                f"{tracks_picked} — {short} track(s) missing entirely")
     return None
 
 
