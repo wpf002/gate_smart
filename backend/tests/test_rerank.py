@@ -93,21 +93,35 @@ def test_the_nightly_job_recomputes_market_context_after_a_swap():
     assert "market = compute_market_context(" in after[:900]
 
 
-def test_the_control_arm_leaves_an_eligible_race_alone():
-    """Half the deep-fade races are deliberately untouched. Without a control
-    the only comparison available is re-ranked races against ordinary ones —
-    and those are not comparable, since deep-fade races are the hard ones."""
-    off = next(f"R{i}" for i in range(500) if rerank_arm_for_race(f"R{i}") == "off")
+def test_the_control_arm_leaves_an_eligible_race_alone(monkeypatch):
+    """The rule shipped at 100% on 2026-09-23, but the control arm has to keep
+    working: re-opening one is how any future version gets measured, and
+    re-ranked races can only be compared against untouched deep-fade races."""
+    import app.services.rerank as rr
+
+    monkeypatch.setattr(rr, "RERANK_AB_PERCENT", 50)
+    off = next(f"R{i}" for i in range(500) if rr.rerank_arm_for_race(f"R{i}") == "off")
     a = _analysis()
     assert not apply_deep_fade_demotion(a, {
         "top_pick_odds": 10.0, "favorite_odds": 2.0, "top_pick_is_favorite": False}, off)
     assert a["predicted_finish"]["first"]["horse_name"] == "Longshot"
 
 
-def test_the_arm_split_is_stable_and_roughly_even():
+def test_every_eligible_race_is_re_ranked_now():
+    """Shipped at 100%: the win-rate gain held at p=0.011 and the money
+    difference was inside the noise."""
     from app.services.rerank import RERANK_AB_PERCENT
 
+    assert RERANK_AB_PERCENT == 100
     ids = [f"TRK_{i}-{i % 9}" for i in range(3000)]
-    assert len({rerank_arm_for_race("SAR_4-2") for _ in range(20)}) == 1
-    on = sum(rerank_arm_for_race(r) == "on" for r in ids) / len(ids)
-    assert abs(on * 100 - RERANK_AB_PERCENT) < 5
+    assert all(rerank_arm_for_race(r) == "on" for r in ids)
+
+
+def test_the_arm_split_is_stable_and_roughly_even(monkeypatch):
+    import app.services.rerank as rr
+
+    monkeypatch.setattr(rr, "RERANK_AB_PERCENT", 50)
+    ids = [f"TRK_{i}-{i % 9}" for i in range(3000)]
+    assert len({rr.rerank_arm_for_race("SAR_4-2") for _ in range(20)}) == 1
+    on = sum(rr.rerank_arm_for_race(r) == "on" for r in ids) / len(ids)
+    assert abs(on * 100 - 50) < 5

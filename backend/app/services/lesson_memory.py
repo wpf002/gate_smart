@@ -24,7 +24,15 @@ LESSON_INJECT_LIMIT = int(os.getenv("LESSON_INJECT_LIMIT", "8"))
 LESSON_CONTROL_LIMIT = int(os.getenv("LESSON_CONTROL_LIMIT", "5"))
 # Percentage of races routed to the evidence-ranked arm. 0 ends the experiment
 # and sends every race to the old behaviour.
-LESSON_AB_PERCENT = int(os.getenv("LESSON_AB_PERCENT", "50"))
+#
+# Shipped 2026-09-23. Over 3,214 settled races from 2026-08-24 the evidence-
+# ranked playbook won 27.5% (457/1,659) against 24.3% (378/1,555) for the old
+# five-slot recency window, p=0.036, and flat $2 win bets returned -10.9%
+# against -27.3%. Better on both counts, so every race gets it. Per-lesson
+# holdouts keep measuring individual lessons inside this arm, so shipping it
+# does not end the measurement. 100 is the default rather than an env var so a
+# percentage reset outside the repo falls back to the arm that won.
+LESSON_AB_PERCENT = int(os.getenv("LESSON_AB_PERCENT", "100"))
 # In the measured arm, each lesson is withheld from this share of races, decided
 # per race AND per lesson. Until this existed every measured race carried the
 # same top lessons, so "races that carried lesson X" was just "the measured arm":

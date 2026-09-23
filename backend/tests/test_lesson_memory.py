@@ -163,9 +163,23 @@ def test_arm_is_stable_for_a_race():
     assert len({lesson_arm_for_race("SAR_123-4") for _ in range(20)}) == 1
 
 
-def test_arm_split_is_roughly_even_and_independent_of_the_model_ab():
+def test_every_race_uses_the_measured_playbook_now():
+    """Shipped 2026-09-23: 27.5% vs 24.3% over 3,214 races, p=0.036, and better
+    ROI. Per-lesson holdouts inside this arm keep the measurement running."""
+    from app.services.lesson_memory import LESSON_AB_PERCENT
+
+    assert LESSON_AB_PERCENT == 100
+    assert all(lesson_arm_for_race(f"TRK_{i}-{i % 9}") == ARM_MEASURED for i in range(500))
+
+
+def test_arm_split_is_roughly_even_and_independent_of_the_model_ab(monkeypatch):
+    """The split still has to work: re-opening a control arm is how the next
+    version of the playbook gets measured."""
+    import app.services.lesson_memory as lm
     from app.services.secretariat import pick_model_for_race
 
+    monkeypatch.setattr(lm, "LESSON_AB_PERCENT", 50)
+    lesson_arm_for_race = lm.lesson_arm_for_race
     ids = [f"TRK_{i}-{i % 9}" for i in range(3000)]
     measured = sum(lesson_arm_for_race(r) == ARM_MEASURED for r in ids)
     assert 0.4 < measured / len(ids) < 0.6
@@ -261,12 +275,17 @@ def test_the_lean_arm_is_off_by_default():
 
 
 def test_depth_is_stable_and_independent_of_the_other_experiments(monkeypatch):
+    import app.services.lesson_memory as lm
     import app.services.secretariat as sec
-    from app.services.lesson_memory import ARM_MEASURED, lesson_arm_for_race
+    from app.services.lesson_memory import ARM_MEASURED
     from app.services.secretariat import pick_model_for_race
 
-    # Checked with the split switched on, so a re-run starts from a clean design.
+    # Checked with both splits switched on, so a re-run starts from a clean
+    # design. The lesson arm ships at 100%, and "independent of the lesson arm"
+    # only says something when that arm actually splits.
     monkeypatch.setattr(sec, "PICK_DEPTH_LEAN_PERCENT", 20)
+    monkeypatch.setattr(lm, "LESSON_AB_PERCENT", 50)
+    lesson_arm_for_race = lm.lesson_arm_for_race
     pick_depth_for_race = sec.pick_depth_for_race
 
     assert len({pick_depth_for_race("SAR_9-2") for _ in range(20)}) == 1

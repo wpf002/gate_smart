@@ -37,13 +37,20 @@ log = logging.getLogger(__name__)
 # number of affected races falls; 2.0 was the best trade of the two.
 DEEP_FADE_RATIO = float(os.getenv("DEEP_FADE_RATIO", "2.0"))
 
-# The rule was justified on win rate alone, and win rate was the only thing the
-# data could support: the demoted horse's price was never stored, so the ROI
-# effect of promoting a shorter-priced second choice was literally unmeasurable.
-# Promoting pick #2 takes a shorter price by construction, so a win-rate gain
-# can coexist with a money loss. Until that is measured, the rule runs on half
-# the eligible races and the other half is left alone as a control.
-RERANK_AB_PERCENT = int(os.getenv("RERANK_AB_PERCENT", "50"))
+# Shipped 2026-09-23 after the live A/B confirmed it. Over 356 eligible races
+# from 2026-09-09, promoting pick #2 won 24.3% (44/181) against 13.7% (24/175)
+# for the untouched control, p=0.011.
+#
+# The money question the rule was held at 50% for is now answered, and the
+# answer is "no difference we can see": flat $2 win bets returned -45.9% when
+# promoted against -41.9% when not, on ~180 bets a side, which is well inside
+# the noise of payoffs at these prices. It buys win rate and costs nothing
+# measurable, so it runs on every eligible race.
+#
+# 100 is the default rather than an env var for the reason the model A/B taught:
+# when a percentage is set outside the repo and later reset, the fallback has to
+# be the arm that won. Set RERANK_AB_PERCENT below 100 to re-open a control arm.
+RERANK_AB_PERCENT = int(os.getenv("RERANK_AB_PERCENT", "100"))
 
 
 def rerank_arm_for_race(race_id: str) -> str:
