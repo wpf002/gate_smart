@@ -121,7 +121,7 @@ export default function ContestPage() {
                 {sec?.win_rate !== null && sec?.win_rate !== undefined && (
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                     Bar to beat: Secretariat <strong style={{ color: 'var(--accent-gold-bright)' }}>{(sec.win_rate * 100).toFixed(1)}%</strong> winners
-                    · {sec.races.toLocaleString()} races over {sec.days ?? 30} days
+                    · last {sec.days ?? 30} days
                   </div>
                 )}
               </div>

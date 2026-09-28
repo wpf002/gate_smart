@@ -36,6 +36,11 @@ BET_TYPES: dict[str, dict] = {
 }
 DEFAULT_BET_TYPE = "win"
 
+# A pick the official chart still can't settle after this long is voided: it
+# scores nothing and counts nowhere, rather than being graded a loss we can't
+# demonstrate or re-fetched forever.
+UNSETTLEABLE_AFTER_DAYS = 2
+
 
 def bet_spec(bet_type: str) -> dict:
     """The rules for a bet type, falling back to win for unknown/legacy rows."""
@@ -175,8 +180,13 @@ def best_streak(values: list[bool]) -> int:
     return best
 
 
-async def settle_pending_picks() -> int:
+async def settle_pending_picks(user_id: Optional[int] = None) -> int:
     """Grade every unsettled pick whose race has an official result. Idempotent.
+
+    With `user_id`, grades only that player's picks — cheap enough to run when
+    they open their calls, so a race that just went official doesn't read as
+    "waiting on the result" for up to the scheduler's ten minutes. Meet results
+    are cached, so the common case costs no API call at all.
 
     Returns how many picks were settled.
     """
@@ -192,12 +202,13 @@ async def settle_pending_picks() -> int:
         return 0
 
     async with _db._AsyncSessionLocal() as db:
-        pending = list((await db.execute(
-            select(ContestPick).where(
-                ContestPick.settled == False,  # noqa: E712
-                ContestPick.race_date <= date.today(),
-            )
-        )).scalars().all())
+        where = [
+            ContestPick.settled == False,  # noqa: E712
+            ContestPick.race_date <= date.today(),
+        ]
+        if user_id is not None:
+            where.append(ContestPick.user_id == user_id)
+        pending = list((await db.execute(select(ContestPick).where(*where))).scalars().all())
         if not pending:
             return 0
 
@@ -227,9 +238,19 @@ async def settle_pending_picks() -> int:
                     results[f"{meet_id}-{number}"] = race
 
         settled = 0
+        stale_before = date.today() - timedelta(days=UNSETTLEABLE_AFTER_DAYS)
         for pick in pending:
             race = results.get(pick.race_id)
             if not race:
+                # The chart never arrived. Old meets 404 outright, so without a
+                # cutoff these picks are re-fetched on every pass forever and
+                # sit "waiting on the result" for good.
+                if pick.race_date < stale_before:
+                    pick.correct = None
+                    pick.points = 0
+                    pick.payoff = None
+                    pick.settled = True
+                    settled += 1
                 continue
             runners = race.get("runners") or []
             winner = runners[0].get("horse_name") or ""
@@ -245,7 +266,7 @@ async def settle_pending_picks() -> int:
                 # grade a trifecta). Give the chart two days to fill in, then
                 # void the pick rather than re-fetching the meet forever or
                 # scoring a loss we can't actually demonstrate.
-                if pick.race_date < date.today() - timedelta(days=2):
+                if pick.race_date < stale_before:
                     pick.winner_name = winner[:160]
                     pick.correct = None
                     pick.points = 0

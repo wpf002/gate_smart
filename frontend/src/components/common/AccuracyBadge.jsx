@@ -208,7 +208,7 @@ function GlobalAccuracyBadge() {
           color: 'var(--accent-gold)', letterSpacing: '0.06em',
           lineHeight: 1.2,
         }}>
-          SECRETARIAT · LAST {data.total_predictions}
+          SECRETARIAT · LAST {data.days ?? 30} DAYS
         </div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.3, display: 'flex', alignItems: 'center', gap: 8 }}>
           {stats.map((s, i) => (

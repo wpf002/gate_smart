@@ -43,12 +43,15 @@ function wrap() {
 beforeEach(() => Object.values(api).forEach((f) => f.mockClear()));
 
 describe('LandingPage stat line', () => {
-  it('names the window the win rate covers, not just the race count', async () => {
+  it('names the window as a time period, never a race count', async () => {
     wrap();
     // 100 races used to be half a day of the card, which read 18% while the
-    // 30-day rate was 26.6%. The window has to be on screen beside the number.
-    expect(await screen.findByText(/3,338 settled races in the\s+last 30 days/)).toBeInTheDocument();
+    // 30-day rate was 26.6%, so the window has to be on screen beside the
+    // number — as days, because the race count only ever grows.
+    expect(await screen.findByText(/top pick over the last 30 days/)).toBeInTheDocument();
     expect(screen.getByText('27%')).toBeInTheDocument();
+    // The race count grows without bound and means nothing to a reader.
+    expect(document.body.textContent).not.toMatch(/3,338/);
   });
 });
 
@@ -68,7 +71,9 @@ describe('LandingPage break-even block', () => {
   it('says plainly that the picks do not clear the bar yet', async () => {
     wrap();
     expect(await screen.findByText(/doesn't clear the bar yet/)).toBeInTheDocument();
-    expect(screen.getByText(/3,732 races/)).toBeInTheDocument();
+    expect(screen.getAllByText(/last 30 days/).length).toBeGreaterThan(0);
+    // Windows are stated as time; the race count only ever grows.
+    expect(document.body.textContent).not.toMatch(/3,732/);
   });
 
   it('reads 30 days, not a single day, so one longshot cannot move it', async () => {

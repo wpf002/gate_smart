@@ -20,7 +20,7 @@ from app.models.contest import ContestPick
 from app.models.user import User
 from app.services.contest import (
     BET_TYPES, DEFAULT_BET_TYPE, POINTS_BEAT_BONUS, POINTS_CORRECT, STAKE,
-    beat_secretariat_streak, best_streak, bet_spec, pick_day_streak,
+    beat_secretariat_streak, best_streak, bet_spec, pick_day_streak, settle_pending_picks,
 )
 
 router = APIRouter()
@@ -181,6 +181,16 @@ async def my_picks(race_date: str = "", user: User = Depends(get_current_user),
         day = date.fromisoformat(race_date) if race_date else date.today()
     except ValueError:
         raise HTTPException(status_code=400, detail="race_date must be YYYY-MM-DD")
+    # Grade anything of theirs that has gone official since they last looked.
+    # The scheduler does this every ten minutes anyway; doing it here means a
+    # race that just posted its chart isn't still "waiting on the result" when
+    # the chart is visible on the same screen. Failures are non-fatal — the
+    # scheduler is still the backstop.
+    try:
+        await settle_pending_picks(user_id=user.id)
+    except Exception as e:  # noqa: BLE001
+        print(f"[contest] on-demand settle failed for user {user.id}: {type(e).__name__}: {e}")
+
     where = ContestPick.race_date == day
     if not race_date:
         where = or_(where, and_(ContestPick.race_date > day, ContestPick.settled == False))  # noqa: E712

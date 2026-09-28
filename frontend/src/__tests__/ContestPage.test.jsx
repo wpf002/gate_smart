@@ -123,7 +123,9 @@ describe('ContestPage', () => {
   it('states the window the bar to beat covers', async () => {
     wrap(<ContestPage />);
     // The bar is a fixed 30-day benchmark, so it must not read as "this week".
-    expect(await screen.findByText(/3,338 races over 30 days/)).toBeInTheDocument();
+    expect(await screen.findByText(/last 30 days/)).toBeInTheDocument();
+    // The race count grows without bound and means nothing to a reader.
+    expect(document.body.textContent).not.toMatch(/3,338/);
   });
 
   it('never shows an email address on the board', async () => {

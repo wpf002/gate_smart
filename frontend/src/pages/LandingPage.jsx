@@ -84,9 +84,8 @@ export default function LandingPage({ onGetStarted }) {
         )}
         {hasStats && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.6 }}>
-            Secretariat's top pick over {acc.total_predictions.toLocaleString()} settled races in the
-            last {acc.days ?? 30} days. Every pick is locked before post time and scored against the
-            official results chart.
+            Secretariat's top pick over the last {acc.days ?? 30} days. Every pick is locked before
+            post time and scored against the official results chart.
           </div>
         )}
 
@@ -113,7 +112,7 @@ export default function LandingPage({ onGetStarted }) {
                 A high win rate isn't profit. Most picks win at short prices, so the top pick has to
                 win <strong>{(be.needed_rate * 100).toFixed(1)}%</strong> of the time just to return
                 the stake at the prices it's actually paid. Over the last {be.days ?? 30} days it won{' '}
-                <strong>{(be.hit_rate * 100).toFixed(1)}%</strong> of {be.bets.toLocaleString()} races.
+                <strong>{(be.hit_rate * 100).toFixed(1)}%</strong>.
                 {clears
                   ? ' It clears the bar. We publish the gap every day, priced from official payoffs.'
                   : " It doesn't clear the bar yet. We publish the gap every day, priced from official payoffs, and you'll see it the day it turns."}

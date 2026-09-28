@@ -123,7 +123,9 @@ export default function ContestPick({ raceId, raceDate, runners = [], raceFinish
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
           Your call: <strong>{describeBet(mine)}</strong>
         </span>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Waiting on the result</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          Grades when the official chart posts
+        </span>
       </Shell>
     );
   }

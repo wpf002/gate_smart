@@ -1710,6 +1710,21 @@ def _build_exotics(payoffs: list) -> list[dict]:
     return out
 
 
+_PROGRAM_PREFIX = re.compile(r"^\s*#?\s*\d+[A-Za-z]?\s+")
+
+
+def _contender_key(name) -> str:
+    """Join key for a contender name.
+
+    top_contenders carry the program number ("#1 Apicturesworth") while the
+    results chart carries the bare name, so a plain lowercase compare matched
+    nothing and reported the actual winner as out of the money. Strip the
+    number, then use the same key the rest of the app joins horses on.
+    """
+    from app.services.horse_form import horse_key
+    return horse_key(_PROGRAM_PREFIX.sub("", str(name or "")))
+
+
 def _build_prediction_check(prior_analysis: dict | None, runners: list) -> dict | None:
     """Compare pre-race top contenders against actual finish positions.
 
@@ -1718,10 +1733,14 @@ def _build_prediction_check(prior_analysis: dict | None, runners: list) -> dict 
     if not prior_analysis:
         return None
 
-    finish_by_name = {
-        (r.get("horse_name") or r.get("horse") or "").strip().lower(): r.get("position", "")
-        for r in runners
-    }
+    # The chart carries only the top 3, and its `position` field is often null,
+    # so finish order comes from the list order and anything absent really did
+    # run out of the money.
+    finish_by_name = {}
+    for i, r in enumerate(runners, 1):
+        key = _contender_key(r.get("horse_name") or r.get("horse") or "")
+        if key:
+            finish_by_name.setdefault(key, str(r.get("position") or i))
 
     contenders = prior_analysis.get("top_contenders") or []
     if not contenders and prior_analysis.get("runners"):
@@ -1732,7 +1751,7 @@ def _build_prediction_check(prior_analysis: dict | None, runners: list) -> dict 
     for name in contenders[:5]:
         if not name:
             continue
-        pos = finish_by_name.get(str(name).strip().lower(), "")
+        pos = finish_by_name.get(_contender_key(name), "")
         rows.append({
             "horse": name,
             "actual_finish": pos or "Out of money",

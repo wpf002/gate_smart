@@ -150,3 +150,41 @@ def test_a_pick_made_before_bet_types_existed_still_grades_as_a_win_bet():
     # No bet_type, no hit flag: falls back to "your horse won", worth 10.
     assert score_pick("alpha", "alpha", None) == score_pick("alpha", "alpha", None, "win", True)
     assert score_pick("alpha", "bravo", None)["points"] == 0
+
+
+# ── Reading the finish off a results chart ───────────────────────────────────
+
+def test_a_contender_matches_the_chart_despite_its_program_number():
+    """top_contenders carry "#1 Apicturesworth"; the chart carries the bare name.
+
+    A plain lowercase compare matched nothing, so every contender came back
+    "Out of money" — including the horse that actually won — and the headline
+    badge read "top pick off the board" on a winning pick.
+    """
+    from app.services.secretariat import _build_prediction_check
+
+    chart = [{"horse_name": "Apicturesworth"}, {"horse_name": "Lady of Lords"},
+             {"horse_name": "Channel Me In"}]
+    check = _build_prediction_check(
+        {"top_contenders": ["#1 Apicturesworth", "#2 Lady of Lords", "#11 Too Much Fun"]}, chart)
+    assert [r["actual_finish"] for r in check["contenders"]] == ["1", "2", "Out of money"]
+    assert check["outcome"] == "hit"
+
+
+def test_finish_order_comes_from_the_chart_order_when_position_is_null():
+    """The NA results feed routinely leaves `position` null on every runner."""
+    from app.services.secretariat import _build_prediction_check
+
+    chart = [{"horse_name": "Alpha", "position": None}, {"horse_name": "Bravo", "position": None}]
+    check = _build_prediction_check({"top_contenders": ["Bravo", "Alpha"]}, chart)
+    assert [r["actual_finish"] for r in check["contenders"]] == ["2", "1"]
+    # Second place isn't a hit; it's a partial.
+    assert check["outcome"] == "partial"
+
+
+def test_an_apostrophe_or_hyphen_does_not_break_the_match():
+    from app.services.secretariat import _build_prediction_check
+
+    check = _build_prediction_check(
+        {"top_contenders": ["#3 O'Brien's Lad"]}, [{"horse_name": "OBriens Lad"}])
+    assert check["contenders"][0]["actual_finish"] == "1"
