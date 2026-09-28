@@ -164,7 +164,7 @@ describe('ContestPage', () => {
     expect(screen.getByText('Days In A Row')).toBeInTheDocument();
     expect(screen.getByText('Bets Landed')).toBeInTheDocument();
     expect(screen.getByText('Beat Streak')).toBeInTheDocument();
-    expect(screen.getByText('Total Beats')).toBeInTheDocument();
+    expect(screen.getByText('Wins')).toBeInTheDocument();
   });
 
   it('gives every tile a hint saying what it counts', async () => {

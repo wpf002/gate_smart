@@ -113,7 +113,7 @@ export default function ContestPage() {
                       hint="Your longest run of calls that landed, back to back." />
                 <Stat value={me ? me.beat_secretariat_streak : '–'} label="Beat Streak"
                       hint="Races in a row right now where you were right and Secretariat wasn't. A race you both called right holds the streak." />
-                <Stat value={me ? me.beat_secretariat : '–'} label="Total Beats"
+                <Stat value={me ? me.beat_secretariat : '–'} label="Wins"
                       hint="Every race where your call landed and Secretariat's didn't." />
               </div>
               )}
