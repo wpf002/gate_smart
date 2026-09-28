@@ -218,9 +218,6 @@ export const unsubscribeFromRaceAlerts = (raceId) =>
 export default api;
 
 // ── Bet slips, bet curve, contests ───────────────────────────────────────────
-export const getRaceTicket = (raceId) =>
-  api.get(`/races/ticket/${raceId}`).then((r) => r.data);
-
 export const getBetCurve = (days = 30) =>
   api.get('/accuracy/bet-curve', { params: { days } }).then((r) => r.data);
 

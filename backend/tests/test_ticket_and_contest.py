@@ -1,8 +1,8 @@
 """
-Bet slips and pick contests.
+Pick contests: bet types, scoring, streaks, and what a call would have paid.
 
 Two constraints hold everything here. Payouts come only from the official chart —
-a leg without an official price is "unpriced", never shown as a win or a loss.
+a bet without an official price is unpriced, never scored as a win or a loss.
 And contests involve no wagering and no prizes; they score calls, nothing more.
 """
 from datetime import date
@@ -11,82 +11,17 @@ from app.services.contest import (
     BET_TYPES, POINTS_BEAT_BONUS, POINTS_CORRECT, beat_secretariat_streak, best_streak,
     bet_hit, bet_payoff, pick_day_streak, score_pick,
 )
-from app.services.ticket import build_ticket, grade_ticket, per_stake, ticket_summary
+from app.services.ticket import per_stake
 
-PICKS = [{"name": "Alpha", "number": "7"}, {"name": "Bravo", "number": "1"},
-         {"name": "Charlie", "number": "2"}]
-
-# Shape of one race from the live results feed (Gulfstream R1, 2026-09-13).
-RESULT = {
-    "runners": [{"program_number": "7", "horse_name": "Alpha", "win_payoff": "5.80"},
-                {"program_number": "1", "horse_name": "Bravo"},
-                {"program_number": "2", "horse_name": "Charlie"}],
-    "payoffs": [
-        {"wager_type": "E", "base_amount": 2.0, "payoff_amount": "19.6", "winning_numbers": "7-1"},
-        {"wager_type": "T", "base_amount": 0.5, "payoff_amount": "45.4", "winning_numbers": "7-1-2"},
-    ],
-}
-
-
-# ── Ticket ──────────────────────────────────────────────────────────────────
+# ── Restating a pool at a common stake ────────────────────────────────────────────
 
 def test_exotic_payouts_are_restated_per_2_dollars():
-    """A $0.50 trifecta paying $45.40 is $181.60 on a $2 ticket. Showing the raw
-    figure would understate the trifecta fourfold next to the win leg."""
+    """A $0.50 trifecta paying $45.40 is $181.60 per $2. Showing the raw figure
+    would understate the trifecta fourfold next to a win bet."""
     assert per_stake("45.4", 0.5) == 181.60
     assert per_stake("19.6", 2.0) == 19.60
     assert per_stake("", 2.0) is None
     assert per_stake("10", 0) is None
-
-
-def test_ticket_explains_what_to_say_at_the_window():
-    legs = build_ticket(PICKS, race_number=1)
-    assert [l["type"] for l in legs] == ["win", "exacta", "trifecta"]
-    assert legs[0]["say"] == "$2 to win on #7, race 1"
-    assert legs[2]["say"] == "$2 trifecta 7-1-2, race 1"
-
-
-def test_a_leg_is_never_built_without_program_numbers():
-    """Telling someone to bet a horse without its number isn't a bet they can place."""
-    legs = build_ticket([{"name": "Alpha", "number": "7"}, {"name": "Bravo", "number": ""}], 1)
-    assert [l["type"] for l in legs] == ["win"]
-
-
-def test_hits_carry_the_official_price():
-    graded = grade_ticket(build_ticket(PICKS, 1), RESULT)
-    by = {l["type"]: l for l in graded}
-    assert by["win"]["status"] == "hit" and by["win"]["payout"] == 5.80
-    assert by["exacta"]["status"] == "hit" and by["exacta"]["payout"] == 19.60
-    assert by["trifecta"]["status"] == "hit" and by["trifecta"]["payout"] == 181.60
-
-
-def test_misses_show_what_actually_won():
-    picks = [{"name": "Bravo", "number": "1"}, {"name": "Alpha", "number": "7"},
-             {"name": "Charlie", "number": "2"}]
-    by = {l["type"]: l for l in grade_ticket(build_ticket(picks, 1), RESULT)}
-    assert by["win"]["status"] == "miss" and by["win"]["winning_numbers"] == ["7"]
-    assert by["exacta"]["status"] == "miss" and by["exacta"]["winning_numbers"] == ["7", "1"]
-    assert by["win"]["payout"] is None
-
-
-def test_a_missing_pool_is_unpriced_not_a_loss():
-    """Small fields often run with no trifecta pool. Scoring that as a lost $2
-    would invent a loss that never happened."""
-    no_tri = {**RESULT, "payoffs": [p for p in RESULT["payoffs"] if p["wager_type"] != "T"]}
-    by = {l["type"]: l for l in grade_ticket(build_ticket(PICKS, 1), no_tri)}
-    assert by["trifecta"]["status"] == "unpriced"
-    summary = ticket_summary(list(by.values()))
-    assert summary["legs_priced"] == 2 and summary["staked"] == 4.0
-
-
-def test_no_result_yet_leaves_the_ticket_pending():
-    legs = grade_ticket(build_ticket(PICKS, 1), {"runners": [], "payoffs": []})
-    assert all(l["status"] == "pending" for l in legs)
-
-
-def test_summary_nets_returns_against_stakes():
-    s = ticket_summary(grade_ticket(build_ticket(PICKS, 1), RESULT))
-    assert s == {"legs_priced": 3, "hits": 3, "staked": 6.0, "returned": 207.0, "net": 201.0}
 
 
 # ── Contest scoring ─────────────────────────────────────────────────────────

@@ -40,7 +40,6 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
   const [wpDismissed, setWpDismissed] = useState(!!sessionStorage.getItem('gs_wp_dismissed'));
   const [tellerOpenMap, setTellerOpenMap] = useState({});
   const toggleTeller = (type) => setTellerOpenMap(m => ({ ...m, [type]: !m[type] }));
-  const { addToBetSlip } = useAppStore();
   const experienceLevel = useAppStore(s => s.userProfile?.experienceLevel || 'beginner');
 
   // Beginners always see Plain content with no toggle. Advanced users get the
