@@ -25,7 +25,7 @@ export default function FirstPick({ divider = false }) {
         NO PICKS YET
       </div>
       <div style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 260, lineHeight: 1.5 }}>
-        Call the winner of any race before it starts. Your points and streaks start with your first pick.
+        Call any race before it starts — win, place, show, exacta or trifecta. Your points and streaks start with your first pick.
       </div>
       <button
         className="btn btn-primary"

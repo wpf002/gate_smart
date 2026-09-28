@@ -61,7 +61,7 @@ export default function ContestPage() {
 
   return (
     <div>
-      <PageHeader title="BEAT SECRETARIAT" subtitle="CALL THE WINNER BEFORE POST · FREE TO PLAY" />
+      <PageHeader title="BEAT SECRETARIAT" subtitle="CALL ANY RACE BEFORE POST · FREE TO PLAY" />
 
       <div className="contest-body">
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
