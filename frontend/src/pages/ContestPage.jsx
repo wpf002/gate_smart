@@ -45,9 +45,9 @@ function Bankroll({ data }) {
   );
 }
 
-function Stat({ value, label, highlight = false }) {
+function Stat({ value, label, hint, highlight = false }) {
   return (
-    <div className="contest-stat">
+    <div className="contest-stat" title={hint}>
       <div className="contest-stat-value" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: highlight ? 'var(--accent-gold-bright)' : 'var(--text-primary)' }}>
         {value}
       </div>
@@ -99,12 +99,22 @@ export default function ContestPage() {
               </div>
               {me && !me.total_picks ? <FirstPick /> : (
               <div className="contest-stats">
-                <Stat value={me ? me.points : '–'} label="Points" highlight />
-                <Stat value={me ? me.pick_day_streak : '–'} label="Day Streak" />
-                <Stat value={me ? me.beat_secretariat_streak : '–'} label="Beat Streak" />
-                <Stat value={me ? `${me.wins}/${me.settled}` : '–'} label="Bets Landed" />
-                <Stat value={me ? me.beat_secretariat : '–'} label="Beat Secretariat" />
-                <Stat value={me ? me.best_correct_streak : '–'} label="Best Streak" />
+                {/* Paired by what they measure: scoring, then your calls, then
+                    your record against Secretariat. Three tiles were streaks and
+                    none said what it streaked — "Beat Streak" and "Best Streak"
+                    were one letter apart counting different things. */}
+                <Stat value={me ? me.points : '–'} label="Points" highlight
+                      hint="10 for a winner, less for an easier bet, more for an exotic, +5 whenever Secretariat is wrong." />
+                <Stat value={me ? me.pick_day_streak : '–'} label="Days In A Row"
+                      hint="Days running that you've called at least one race." />
+                <Stat value={me ? `${me.wins}/${me.settled}` : '–'} label="Bets Landed"
+                      hint="Calls that came in, out of the calls the official chart settled." />
+                <Stat value={me ? me.best_correct_streak : '–'} label="Best Run"
+                      hint="Your longest run of calls that landed, back to back." />
+                <Stat value={me ? me.beat_secretariat_streak : '–'} label="Beat Streak"
+                      hint="Races in a row right now where you were right and Secretariat wasn't. A race you both called right holds the streak." />
+                <Stat value={me ? me.beat_secretariat : '–'} label="Total Beats"
+                      hint="Every race where your call landed and Secretariat's didn't." />
               </div>
               )}
               {me?.bankroll?.bets ? <Bankroll data={me.bankroll} /> : null}

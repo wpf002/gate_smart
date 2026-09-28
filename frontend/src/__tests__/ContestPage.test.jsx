@@ -161,8 +161,20 @@ describe('ContestPage', () => {
     useAppStore.setState({ authToken: 'token' });
     wrap(<ContestPage />);
     expect(await screen.findByText('4/8')).toBeInTheDocument();
-    expect(screen.getByText('Day Streak')).toBeInTheDocument();
+    expect(screen.getByText('Days In A Row')).toBeInTheDocument();
+    expect(screen.getByText('Bets Landed')).toBeInTheDocument();
     expect(screen.getByText('Beat Streak')).toBeInTheDocument();
+    expect(screen.getByText('Total Beats')).toBeInTheDocument();
+  });
+
+  it('gives every tile a hint saying what it counts', async () => {
+    useAppStore.setState({ authToken: 'token' });
+    wrap(<ContestPage />);
+    await screen.findByText('4/8');
+    // Three of these are streaks; the labels alone can't carry the difference.
+    const tiles = document.querySelectorAll('.contest-stat');
+    expect(tiles.length).toBe(6);
+    tiles.forEach((t) => expect(t.getAttribute('title')).toBeTruthy());
   });
 
   it('shows a first-pick prompt instead of a card of zeros for a new player', async () => {
