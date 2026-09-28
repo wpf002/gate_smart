@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+import { useAppStore } from '../store';
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL
     ? `${import.meta.env.VITE_API_URL}/api`
@@ -21,6 +23,21 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// A 30-day JWT expires while the app still holds it in localStorage, so the UI
+// keeps rendering as signed in and every authed call comes back 401 with a raw
+// backend string ("Invalid or expired token"). Drop the dead token so the
+// signed-out UI takes over. Only fires on requests we actually sent a token
+// with, so a 401 from /auth/login still surfaces as "wrong email or password".
+api.interceptors.response.use(
+  (r) => r,
+  (error) => {
+    if (error?.response?.status === 401 && error?.config?.headers?.Authorization) {
+      useAppStore.getState().clearAuth();
+    }
+    return Promise.reject(error);
+  }
+);
 
 // ── Races ────────────────────────────────────────────────────────────────────
 export const getRacesToday = (region = null) =>
@@ -207,8 +224,12 @@ export const getRaceTicket = (raceId) =>
 export const getBetCurve = (days = 30) =>
   api.get('/accuracy/bet-curve', { params: { days } }).then((r) => r.data);
 
-export const makeContestPick = (raceId, horseName, programNumber = '') =>
-  api.post('/contest/picks', { race_id: raceId, horse_name: horseName, program_number: programNumber })
+export const makeContestPick = (raceId, horses, betType = 'win') =>
+  api.post('/contest/picks', {
+    race_id: raceId,
+    bet_type: betType,
+    horses: Array.isArray(horses) ? horses : [horses],
+  })
     .then((r) => r.data);
 
 export const getMyContestPicks = (raceDate = '') =>

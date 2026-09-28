@@ -80,9 +80,15 @@ def compute_flat_bet_pnl(rows: list, stake: float = STAKE) -> dict:
     Rows without payoff data are skipped and reported via `unpriced_races`, so
     the ROI denominator only covers bets we can actually price.
 
-    Two strategies:
-      win — $stake to win on every top pick
-      atb — "across the board": $stake each to win, place and show (3x staked)
+    Each strategy carries the two numbers that say whether it can ever pay:
+    `hit_rate`, how often the bet cashed, and `breakeven_rate`, the hit rate it
+    would have needed at the prices those bets actually paid. Their difference
+    is the whole question — a strategy makes money only once hit_rate passes
+    breakeven_rate, and no amount of staking changes that.
+
+    across_the_board (win + place + show on the same horse) is still computed
+    because the stored daily series has its columns, but it is not a strategy
+    anyone should follow: it stakes 3x into the three worst-priced pools at once.
     """
     mult = stake / STAKE  # payoffs are quoted per $2
 
@@ -94,30 +100,47 @@ def compute_flat_bet_pnl(rows: list, stake: float = STAKE) -> dict:
 
     # A None place/show payoff means that pool wasn't offered, so no stake could
     # have been placed. Only count stakes for pools that actually ran.
-    place_rows = [r for r in priced if _get(r, "top_pick_place_payoff") is not None]
-    show_rows = [r for r in priced if _get(r, "top_pick_show_payoff") is not None]
+    pools = {
+        "win": priced,
+        "place": [r for r in priced if _get(r, "top_pick_place_payoff") is not None],
+        "show": [r for r in priced if _get(r, "top_pick_show_payoff") is not None],
+    }
+    returned = {
+        name: sum(_f(_get(r, f"top_pick_{name}_payoff")) for r in rs) * mult
+        for name, rs in pools.items()
+    }
 
-    win_returned = sum(_f(_get(r, "top_pick_win_payoff")) for r in priced) * mult
-    place_returned = sum(_f(_get(r, "top_pick_place_payoff")) for r in place_rows) * mult
-    show_returned = sum(_f(_get(r, "top_pick_show_payoff")) for r in show_rows) * mult
-
-    win_staked = n * stake
-    atb_staked = (n + len(place_rows) + len(show_rows)) * stake
-    atb_returned = win_returned + place_returned + show_returned
-
-    def _pack(staked, returned):
-        net = returned - staked
-        return {
+    def _pack(staked, ret, rs=None, field=None):
+        net = ret - staked
+        out = {
             "staked": round(staked, 2),
-            "returned": round(returned, 2),
+            "returned": round(ret, 2),
             "net": round(net, 2),
             "roi": round(net / staked, 4) if staked else 0.0,
         }
+        if rs is not None:
+            cashed = [_f(_get(r, field)) for r in rs if _f(_get(r, field)) > 0]
+            avg = (sum(cashed) / len(cashed)) if cashed else 0.0
+            out.update({
+                "bets": len(rs),
+                "cashed": len(cashed),
+                "hit_rate": round(len(cashed) / len(rs), 4) if rs else None,
+                "avg_payoff": round(avg, 2),
+                # What fraction of these bets had to cash to get the money back.
+                "breakeven_rate": round(STAKE / avg, 4) if avg else None,
+            })
+            if out["hit_rate"] is not None and out["breakeven_rate"] is not None:
+                out["gap"] = round(out["hit_rate"] - out["breakeven_rate"], 4)
+        return out
 
-    return {
+    result = {
         "races": n,
         "unpriced_races": len(rows) - n,
         "stake": stake,
-        "win": _pack(win_staked, win_returned),
-        "across_the_board": _pack(atb_staked, atb_returned),
     }
+    for name, rs in pools.items():
+        result[name] = _pack(len(rs) * stake, returned[name], rs, f"top_pick_{name}_payoff")
+    result["across_the_board"] = _pack(
+        sum(len(rs) for rs in pools.values()) * stake, sum(returned.values())
+    )
+    return result

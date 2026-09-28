@@ -70,6 +70,9 @@ _STARTUP_MIGRATIONS: list[str] = [
     "ALTER TABLE secretariat_calibration ADD COLUMN IF NOT EXISTS market_calibration JSONB",
     # race_type occasionally arrives as a composite string > 50 chars; widen so
     # it never truncates the whole insert. Idempotent.
+    "ALTER TABLE contest_picks ADD COLUMN IF NOT EXISTS bet_type VARCHAR(12) DEFAULT 'win'",
+    "ALTER TABLE contest_picks ADD COLUMN IF NOT EXISTS selections JSONB",
+    "ALTER TABLE contest_picks ADD COLUMN IF NOT EXISTS payoff DOUBLE PRECISION",
     "ALTER TABLE horse_form_lines ADD COLUMN IF NOT EXISTS jockey VARCHAR(120)",
     "ALTER TABLE horse_form_lines ADD COLUMN IF NOT EXISTS trainer VARCHAR(120)",
     "ALTER TABLE race_predictions ALTER COLUMN race_type TYPE VARCHAR(120)",

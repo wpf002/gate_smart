@@ -8,6 +8,36 @@ import NameEditor from '../components/contest/NameEditor';
 import NextToPost from '../components/contest/NextToPost';
 import FirstPick, { isDefaultName } from '../components/contest/FirstPick';
 
+/**
+ * What flat $2 on every call would have come to, priced off the official charts.
+ * Nothing is wagered and nothing is held — it's the same scorekeeping figure the
+ * Report Card publishes for Secretariat, pointed at your own calls.
+ */
+function Bankroll({ data }) {
+  if (!data || !data.bets) return null;
+  const up = data.net >= 0;
+  const colour = up ? 'var(--accent-green-bright)' : 'var(--accent-red-bright)';
+  return (
+    <div className="contest-bankroll">
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
+        IF YOU'D BET $2 A CALL
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: colour }}>
+          {up ? '+' : '−'}${Math.abs(data.net).toFixed(2)}
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: colour }}>
+          {data.roi === null ? '' : `${data.roi >= 0 ? '+' : '−'}${Math.abs(data.roi * 100).toFixed(1)}%`}
+        </span>
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+        {data.bets} priced {data.bets === 1 ? 'call' : 'calls'} · {data.cashed} cashed
+        {data.unpriced ? ` · ${data.unpriced} with no official price, left out` : ''}
+      </div>
+    </div>
+  );
+}
+
 function Stat({ value, label, highlight = false }) {
   return (
     <div className="contest-stat">
@@ -35,7 +65,8 @@ export default function ContestPage() {
 
       <div className="contest-body">
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-          10 points for the winner, +5 more when Secretariat is wrong. No betting, no money.
+          Call any race win, place, show, exacta or trifecta. Harder bets pay more points,
+          and +5 more when Secretariat is wrong. No betting, no money.
         </div>
 
         <div className="contest-grid">
@@ -69,6 +100,7 @@ export default function ContestPage() {
                 <Stat value={me ? me.best_correct_streak : '–'} label="Best Streak" />
               </div>
               )}
+              {me?.bankroll?.bets ? <Bankroll data={me.bankroll} /> : null}
             </div>
           ) : (
             <div style={{ padding: 14, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>

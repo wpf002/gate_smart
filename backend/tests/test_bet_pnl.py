@@ -53,7 +53,37 @@ def test_win_pnl_matches_hand_calculation():
     p = compute_flat_bet_pnl(rows)
     assert p["races"] == 2
     # $2 x 2 races = $4 staked; returns $4.00 -> break even
-    assert p["win"] == {"staked": 4.0, "returned": 4.0, "net": 0.0, "roi": 0.0}
+    assert {k: p["win"][k] for k in ("staked", "returned", "net", "roi")} == {
+        "staked": 4.0, "returned": 4.0, "net": 0.0, "roi": 0.0}
+
+
+def test_breakeven_rate_is_the_hit_rate_that_returns_the_stake():
+    # One winner in four at $8.00 returns $8 on $8 staked, so 25% is exactly
+    # break-even at that price — and the gap between hit and need is zero.
+    rows = [{"top_pick_win_payoff": v} for v in (8.0, 0.0, 0.0, 0.0)]
+    win = compute_flat_bet_pnl(rows)["win"]
+    assert win["hit_rate"] == 0.25
+    assert win["avg_payoff"] == 8.0
+    assert win["breakeven_rate"] == 0.25
+    assert win["gap"] == 0.0
+    assert win["roi"] == 0.0
+
+
+def test_a_losing_strategy_shows_a_negative_gap():
+    # 20% at $8.00 returns $8 on $10 staked: needed 25%, hit 20%, -5 points.
+    rows = [{"top_pick_win_payoff": v} for v in (8.0, 0.0, 0.0, 0.0, 0.0)]
+    win = compute_flat_bet_pnl(rows)["win"]
+    assert win["hit_rate"] == 0.2
+    assert win["breakeven_rate"] == 0.25
+    assert win["gap"] == -0.05
+    assert win["roi"] == -0.2
+
+
+def test_a_strategy_that_never_cashed_has_no_breakeven_to_quote():
+    win = compute_flat_bet_pnl([{"top_pick_win_payoff": 0.0}] * 3)["win"]
+    assert win["hit_rate"] == 0.0
+    assert win["breakeven_rate"] is None   # no price was ever paid to divide by
+    assert "gap" not in win
 
 
 def test_across_the_board_stakes_three_bets_per_race():

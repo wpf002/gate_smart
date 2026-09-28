@@ -8,7 +8,8 @@ people a reason to come back.
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -28,6 +29,14 @@ class ContestPick(Base):
     horse_name: Mapped[str] = mapped_column(String(160))
     horse_key: Mapped[str] = mapped_column(String(160))
     program_number: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    # win | place | show | exacta | trifecta — see services.contest.BET_TYPES.
+    # NULL on rows made before bet types existed; those are win bets.
+    bet_type: Mapped[Optional[str]] = mapped_column(String(12), nullable=True, default="win")
+    # The full selection, in order: [{"name", "key", "number"}, ...]. One entry
+    # for a straight bet, two for an exacta, three for a trifecta. horse_name /
+    # horse_key / program_number above always mirror selection 1, so every query
+    # and UI written before exotics keeps working unchanged.
+    selections: Mapped[Optional[list]] = mapped_column(JSON(none_as_null=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
@@ -38,3 +47,8 @@ class ContestPick(Base):
     secretariat_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     beat_secretariat: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     points: Mapped[int] = mapped_column(Integer, default=0)
+    # What $2 on this bet returned at the official payoff, stake included: 0.0
+    # is a settled loss, NULL is a pool the chart never priced. Nothing is
+    # wagered — this is a scorekeeping figure, the same one the Report Card
+    # publishes for Secretariat.
+    payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

@@ -19,7 +19,8 @@ from app.core.database import get_db
 from app.models.contest import ContestPick
 from app.models.user import User
 from app.services.contest import (
-    POINTS_BEAT_BONUS, POINTS_CORRECT, beat_secretariat_streak, best_streak, pick_day_streak,
+    BET_TYPES, DEFAULT_BET_TYPE, POINTS_BEAT_BONUS, POINTS_CORRECT, STAKE,
+    beat_secretariat_streak, best_streak, bet_spec, pick_day_streak,
 )
 
 router = APIRouter()
@@ -29,8 +30,13 @@ _NAME_OK = re.compile(r"^[A-Za-z0-9 _.-]{3,40}$")
 
 class PickRequest(msgspec.Struct):
     race_id: str
-    horse_name: str
+    horse_name: str = ""
     program_number: str = ""
+    bet_type: str = DEFAULT_BET_TYPE
+    # Horses in finish order. A straight bet takes one; an exacta two, a
+    # trifecta three. `horse_name` alone is still accepted so older clients
+    # keep working.
+    horses: list[str] = msgspec.field(default_factory=list)
 
 
 class NameRequest(msgspec.Struct):
@@ -53,6 +59,40 @@ def _race_off(race: dict):
     return off if off.tzinfo else off.replace(tzinfo=timezone.utc)
 
 
+def _pick_json(p: ContestPick) -> dict:
+    """One pick as the client sees it, including what $2 on it returned."""
+    bet_type = p.bet_type or "win"
+    return {
+        "race_id": p.race_id, "horse_name": p.horse_name, "program_number": p.program_number,
+        "bet_type": bet_type, "bet_label": bet_spec(bet_type)["label"],
+        "selections": p.selections or [{"name": p.horse_name, "key": p.horse_key,
+                                        "number": p.program_number or ""}],
+        "settled": p.settled, "winner_name": p.winner_name, "correct": p.correct,
+        "secretariat_correct": p.secretariat_correct, "beat_secretariat": p.beat_secretariat,
+        "points": p.points, "stake": STAKE, "payoff": p.payoff,
+        "net": None if p.payoff is None else round(p.payoff - STAKE, 2),
+    }
+
+
+def _bankroll(picks) -> dict:
+    """Flat-$2 P&L across the picks the chart actually priced.
+
+    A pick with no payoff is left out of the denominator rather than counted as
+    a loss — the same rule the Report Card uses for Secretariat.
+    """
+    priced = [p for p in picks if p.payoff is not None]
+    staked = STAKE * len(priced)
+    returned = sum(p.payoff for p in priced)
+    return {
+        "bets": len(priced), "unpriced": sum(1 for p in picks if p.settled and p.payoff is None),
+        "stake": STAKE, "staked": round(staked, 2), "returned": round(returned, 2),
+        "net": round(returned - staked, 2),
+        "roi": round((returned - staked) / staked, 4) if staked else None,
+        "cashed": sum(1 for p in priced if p.payoff > 0),
+        "best": round(max((p.payoff for p in priced), default=0) - STAKE, 2) if priced else None,
+    }
+
+
 @router.post("/picks")
 async def make_pick(request: Request, user: User = Depends(get_current_user),
                     db: AsyncSession = Depends(get_db)):
@@ -72,29 +112,59 @@ async def make_pick(request: Request, user: User = Depends(get_current_user),
     if datetime.now(timezone.utc) >= off:
         raise HTTPException(status_code=409, detail="Picks are locked — this race is already off")
 
-    key = horse_key(req.horse_name)
-    runner = next((r for r in race.get("runners") or [] if horse_key(r.get("horse_name", "")) == key), None)
-    if not runner:
-        raise HTTPException(status_code=400, detail="That horse isn't entered in this race")
+    bet_type = (req.bet_type or DEFAULT_BET_TYPE).lower()
+    if bet_type not in BET_TYPES:
+        raise HTTPException(status_code=400, detail=f"Unknown bet type: {req.bet_type}")
+    needed = bet_spec(bet_type)["picks"]
+
+    names = [n for n in (req.horses or [req.horse_name]) if n and n.strip()]
+    if len(names) != needed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A {BET_TYPES[bet_type]['label'].lower()} needs {needed} horse"
+                   f"{'s' if needed > 1 else ''}, in order",
+        )
+
+    by_key = {horse_key(r.get("horse_name", "")): r for r in race.get("runners") or []}
+    selections = []
+    for name in names:
+        runner = by_key.get(horse_key(name))
+        if not runner:
+            raise HTTPException(status_code=400, detail=f"{name} isn't entered in this race")
+        if runner.get("scratched"):
+            raise HTTPException(status_code=400, detail=f"{name} is scratched")
+        selections.append({
+            "name": runner.get("horse_name", "")[:160],
+            "key": horse_key(runner.get("horse_name", "")),
+            "number": str(runner.get("number") or "")[:10],
+        })
+    if len({s["key"] for s in selections}) != len(selections):
+        raise HTTPException(status_code=400, detail="Each horse can only be used once")
 
     values = {
         "user_id": user.id,
         "race_id": req.race_id,
         "race_date": off.date(),
-        "horse_name": runner.get("horse_name", "")[:160],
-        "horse_key": key,
-        "program_number": str(runner.get("number") or req.program_number or "")[:10] or None,
+        # Selection 1 is mirrored into the flat columns so the leaderboard and
+        # every pre-exotics query keep working untouched.
+        "horse_name": selections[0]["name"],
+        "horse_key": selections[0]["key"],
+        "program_number": selections[0]["number"] or req.program_number[:10] or None,
+        "bet_type": bet_type,
+        "selections": selections,
         "created_at": datetime.now(timezone.utc),
     }
     stmt = pg_insert(ContestPick).values(**values)
     stmt = stmt.on_conflict_do_update(
         constraint="uq_contest_pick_user_race",
-        set_={k: values[k] for k in ("horse_name", "horse_key", "program_number", "created_at")},
+        set_={k: values[k] for k in
+              ("horse_name", "horse_key", "program_number", "bet_type", "selections", "created_at")},
     )
     await db.execute(stmt)
     await db.commit()
     return {"race_id": req.race_id, "horse_name": values["horse_name"],
-            "program_number": values["program_number"], "locks_at": off.isoformat()}
+            "program_number": values["program_number"], "bet_type": bet_type,
+            "selections": selections, "stake": STAKE, "locks_at": off.isoformat()}
 
 
 @router.get("/picks")
@@ -108,13 +178,8 @@ async def my_picks(race_date: str = "", user: User = Depends(get_current_user),
     rows = (await db.execute(
         select(ContestPick).where(ContestPick.user_id == user.id, ContestPick.race_date == day)
     )).scalars().all()
-    return {"date": day.isoformat(), "picks": [
-        {"race_id": p.race_id, "horse_name": p.horse_name, "program_number": p.program_number,
-         "settled": p.settled, "winner_name": p.winner_name, "correct": p.correct,
-         "secretariat_correct": p.secretariat_correct, "beat_secretariat": p.beat_secretariat,
-         "points": p.points}
-        for p in rows
-    ]}
+    return {"date": day.isoformat(), "stake": STAKE,
+            "picks": [_pick_json(p) for p in rows]}
 
 
 @router.get("/leaderboard")
@@ -173,7 +238,9 @@ async def leaderboard(period: str = "week", db: AsyncSession = Depends(get_db)):
     return {
         "period": period,
         "since": since.isoformat(),
-        "scoring": {"correct_winner": POINTS_CORRECT, "beat_secretariat_bonus": POINTS_BEAT_BONUS},
+        "scoring": {"correct_winner": POINTS_CORRECT, "beat_secretariat_bonus": POINTS_BEAT_BONUS,
+                    "bet_types": {k: {"label": v["label"], "points": v["points"], "picks": v["picks"]}
+                                  for k, v in BET_TYPES.items()}},
         "secretariat": {"races": s[0] or 0, "win_rate": round((s[1] or 0) / s[0], 3) if s[0] else None},
         "board": [{k: v for k, v in r.items() if k != "user_id"} for r in board[:100]],
     }
@@ -196,6 +263,10 @@ async def my_progress(user: User = Depends(get_current_user), db: AsyncSession =
         "wins": sum(1 for p in settled if p["correct"]),
         "beat_secretariat": sum(1 for p in settled if p["beat_secretariat"]),
         "points": sum(p.points for p in rows),
+        # What flat $2 on every call would have done. No money moves; this is
+        # the same scorekeeping figure the Report Card publishes for Secretariat.
+        "bankroll": _bankroll(rows),
+        "bankroll_today": _bankroll([p for p in rows if p.race_date == date.today()]),
     }
 
 

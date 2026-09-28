@@ -27,6 +27,8 @@ const BOARD = {
 const ME = {
   display_name: 'Handicapper 7', pick_day_streak: 4, beat_secretariat_streak: 2,
   best_correct_streak: 3, total_picks: 9, settled: 8, wins: 4, beat_secretariat: 2, points: 50,
+  bankroll: { bets: 6, unpriced: 2, stake: 2, staked: 12, returned: 8.4,
+              net: -3.6, roi: -0.3, cashed: 2, best: 4.8 },
 };
 
 // Real /api/accuracy/bet-curve?days=7 response, trimmed to three days.
@@ -91,6 +93,24 @@ beforeEach(() => {
 });
 
 describe('ContestPage', () => {
+  it('shows what flat $2 on every call would have come to', async () => {
+    useAppStore.setState({ authToken: 'token' });
+    wrap(<ContestPage />);
+    expect(await screen.findByText("IF YOU'D BET $2 A CALL")).toBeInTheDocument();
+    expect(screen.getByText('−$3.60')).toBeInTheDocument();
+    expect(screen.getByText('−30.0%')).toBeInTheDocument();
+    // Calls the chart never priced are named, not folded into the loss.
+    expect(screen.getByText(/6 priced calls · 2 cashed · 2 with no official price/)).toBeInTheDocument();
+  });
+
+  it('leaves the bankroll line out until a call has been priced', async () => {
+    useAppStore.setState({ authToken: 'token' });
+    api.getContestProgress.mockImplementationOnce(() => Promise.resolve({ ...ME, bankroll: { bets: 0 } }));
+    wrap(<ContestPage />);
+    await screen.findByText('50');
+    expect(screen.queryByText("IF YOU'D BET $2 A CALL")).not.toBeInTheDocument();
+  });
+
   it('ranks players and shows Secretariat as a win rate to beat', async () => {
     wrap(<ContestPage />);
     expect(await screen.findByText('Longshot Larry')).toBeInTheDocument();
@@ -184,4 +204,5 @@ describe('BetCurve', () => {
     expect(container.querySelectorAll('svg path')).toHaveLength(2); // area + line
     expect(screen.getByText('Break Even')).toBeInTheDocument();
   });
+
 });

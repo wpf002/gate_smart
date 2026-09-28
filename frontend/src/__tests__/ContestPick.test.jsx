@@ -68,12 +68,63 @@ describe('ContestPick', () => {
     expect(screen.getByRole('option', { name: '#4 Alinao Forever' })).toBeInTheDocument();
   });
 
-  it('locks in a pick with the horse and its program number', async () => {
+  it('locks in a win pick with the horse', async () => {
     renderPick();
     await waitFor(() => expect(api.getMyContestPicks).toHaveBeenCalled());
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Alinao Forever' } });
     fireEvent.click(screen.getByText('Lock It In'));
-    await waitFor(() => expect(api.makeContestPick).toHaveBeenCalledWith('GP_1-4', 'Alinao Forever', '4'));
+    await waitFor(() => expect(api.makeContestPick)
+      .toHaveBeenCalledWith('GP_1-4', ['Alinao Forever'], 'win'));
+  });
+
+  it('asks for two horses in order once you choose an exacta', async () => {
+    renderPick();
+    await waitFor(() => expect(api.getMyContestPicks).toHaveBeenCalled());
+    expect(screen.getAllByRole('combobox')).toHaveLength(1);
+    fireEvent.click(screen.getByText('Exacta'));
+    const selects = screen.getAllByRole('combobox');
+    expect(selects).toHaveLength(2);
+    fireEvent.change(selects[0], { target: { value: 'Alinao Forever' } });
+    fireEvent.change(selects[1], { target: { value: 'Magic Heart' } });
+    fireEvent.click(screen.getByText('Lock It In'));
+    await waitFor(() => expect(api.makeContestPick)
+      .toHaveBeenCalledWith('GP_1-4', ['Alinao Forever', 'Magic Heart'], 'exacta'));
+  });
+
+  it('will not send an exotic that uses the same horse twice', async () => {
+    renderPick();
+    await waitFor(() => expect(api.getMyContestPicks).toHaveBeenCalled());
+    fireEvent.click(screen.getByText('Exacta'));
+    const selects = screen.getAllByRole('combobox');
+    fireEvent.change(selects[0], { target: { value: 'Alinao Forever' } });
+    fireEvent.change(selects[1], { target: { value: 'Alinao Forever' } });
+    expect(screen.getByText('Each horse can only be used once.')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Lock It In'));
+    expect(api.makeContestPick).not.toHaveBeenCalled();
+  });
+
+  it('shows what $2 on a settled call returned', async () => {
+    api.getMyContestPicks.mockResolvedValue({ picks: [{
+      race_id: 'GP_1-4', horse_name: 'Alinao Forever', bet_type: 'show', bet_label: 'Show',
+      selections: [{ name: 'Alinao Forever', number: '4' }],
+      settled: true, correct: true, secretariat_correct: true, beat_secretariat: false,
+      points: 5, payoff: 3.4, net: 1.4,
+    }] });
+    renderPick({ raceFinished: true });
+    expect(await screen.findByText('Your show landed. Secretariat got it too.')).toBeInTheDocument();
+    expect(screen.getByText('+$1.40')).toBeInTheDocument();
+  });
+
+  it('shows a losing call as a two dollar loss', async () => {
+    api.getMyContestPicks.mockResolvedValue({ picks: [{
+      race_id: 'GP_1-4', horse_name: 'Magic Heart', bet_type: 'win', bet_label: 'Win',
+      selections: [{ name: 'Magic Heart', number: '2' }],
+      settled: true, correct: false, winner_name: 'Alinao Forever',
+      points: 0, payoff: 0, net: -2,
+    }] });
+    renderPick({ raceFinished: true });
+    expect(await screen.findByText('You had Magic Heart. Alinao Forever won.')).toBeInTheDocument();
+    expect(screen.getByText('−$2.00')).toBeInTheDocument();
   });
 
   it('shows the server reason when a pick is refused', async () => {

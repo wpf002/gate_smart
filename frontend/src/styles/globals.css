@@ -729,6 +729,14 @@ select option {
   padding: 10px 4px;
 }
 
+/* The $2 scoreline sits under the stat grid. On desktop the You card is a tall
+   left column, so this fills the space below the tiles instead of leaving it
+   empty. */
+.contest-bankroll {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
 .contest-stat-value {
   font-size: 22px;
 }
@@ -945,7 +953,61 @@ select option {
 
 .contest-pick-form {
   display: flex;
+  flex-direction: column;
   gap: 8px;
+}
+
+.contest-pick-selects {
+  display: flex;
+  gap: 8px;
+}
+
+/* Bet type picker. Five options, so a segmented row reads faster than a
+   dropdown and shows what's on offer without a click. Wraps on narrow screens
+   rather than scrolling sideways. */
+.bet-type-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.bet-type-btn {
+  padding: 5px 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.bet-type-btn:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-medium);
+}
+
+.bet-type-btn.is-active {
+  color: var(--accent-gold-bright);
+  background: rgba(201, 162, 39, 0.12);
+  border-color: var(--border-gold);
+}
+
+/* Three selects abreast on a phone leaves ~100px each, so trim the padding the
+   native arrow would otherwise clip the label against. */
+.contest-pick-selects .form-select {
+  padding-left: 8px;
+  padding-right: 22px;
+}
+
+@media (min-width: 420px) {
+  .bet-type-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -966,7 +1028,7 @@ select option {
   }
 
   .contest-pick-form {
-    width: 440px;
+    width: 520px;
   }
 
   .contest-pick-note {

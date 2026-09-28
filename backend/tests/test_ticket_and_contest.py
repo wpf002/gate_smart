@@ -8,8 +8,8 @@ And contests involve no wagering and no prizes; they score calls, nothing more.
 from datetime import date
 
 from app.services.contest import (
-    POINTS_BEAT_BONUS, POINTS_CORRECT, beat_secretariat_streak, best_streak,
-    pick_day_streak, score_pick,
+    BET_TYPES, POINTS_BEAT_BONUS, POINTS_CORRECT, beat_secretariat_streak, best_streak,
+    bet_hit, bet_payoff, pick_day_streak, score_pick,
 )
 from app.services.ticket import build_ticket, grade_ticket, per_stake, ticket_summary
 
@@ -134,3 +134,84 @@ def test_beat_streak_extends_on_beats_holds_on_ties_and_breaks_on_misses():
 def test_best_streak_finds_the_longest_run():
     assert best_streak([True, True, False, True, True, True, False]) == 3
     assert best_streak([]) == 0
+
+
+# ── Bet types: win, place, show, exacta, trifecta ────────────────────────────
+
+# A chart the way the results feed serves it: top 3 in finish order, each with
+# the payoffs for the pools that actually ran, plus the exotic pools.
+CHART = {
+    "runners": [
+        {"horse_name": "Alpha", "program_number": "7",
+         "win_payoff": "5.80", "place_payoff": "3.60", "show_payoff": "2.80"},
+        {"horse_name": "Bravo", "program_number": "1",
+         "place_payoff": "4.20", "show_payoff": "3.20"},
+        {"horse_name": "Charlie", "program_number": "2", "show_payoff": "6.40"},
+    ],
+    "payoffs": [
+        {"wager_type": "E", "base_amount": 2.0, "payoff_amount": "19.6", "winning_numbers": "7-1"},
+        {"wager_type": "T", "base_amount": 0.5, "payoff_amount": "24.35", "winning_numbers": "7-1-2"},
+    ],
+}
+FINISH = ["alpha", "bravo", "charlie"]
+
+
+def test_a_straight_bet_lands_anywhere_inside_its_depth():
+    # Charlie ran third: a losing win and place bet, a winning show bet.
+    assert bet_hit("win", ["charlie"], FINISH) is False
+    assert bet_hit("place", ["charlie"], FINISH) is False
+    assert bet_hit("show", ["charlie"], FINISH) is True
+    assert bet_hit("place", ["bravo"], FINISH) is True
+
+
+def test_exotics_need_the_exact_order():
+    assert bet_hit("exacta", ["alpha", "bravo"], FINISH) is True
+    assert bet_hit("exacta", ["bravo", "alpha"], FINISH) is False
+    assert bet_hit("trifecta", ["alpha", "bravo", "charlie"], FINISH) is True
+    assert bet_hit("trifecta", ["alpha", "charlie", "bravo"], FINISH) is False
+
+
+def test_a_chart_too_short_to_grade_the_bet_returns_unknown_not_a_loss():
+    assert bet_hit("trifecta", ["alpha", "bravo", "charlie"], ["alpha", "bravo"]) is None
+    assert bet_hit("exacta", ["alpha", "bravo"], ["alpha"]) is None
+
+
+def test_payoffs_come_from_the_chart_and_are_restated_per_two_dollars():
+    assert bet_payoff("win", ["alpha"], CHART) == 5.80
+    assert bet_payoff("show", ["charlie"], CHART) == 6.40
+    # $2 exacta base, so the price stands as quoted.
+    assert bet_payoff("exacta", ["alpha", "bravo"], CHART) == 19.6
+    # 50c trifecta base restated to $2: 24.35 / 0.5 * 2.
+    assert bet_payoff("trifecta", ["alpha", "bravo", "charlie"], CHART) == 97.4
+
+
+def test_a_losing_bet_returns_zero_and_an_unrun_pool_returns_nothing():
+    assert bet_payoff("win", ["bravo"], CHART) == 0.0
+    # No show pool ran in this race, so a show bet could not have been placed —
+    # that is not a loss.
+    no_show = {"runners": [dict(r) for r in CHART["runners"]], "payoffs": []}
+    for r in no_show["runners"]:
+        r.pop("show_payoff", None)
+    assert bet_payoff("show", ["alpha"], no_show) is None
+    # Nor did this race offer a trifecta.
+    assert bet_payoff("trifecta", ["alpha", "bravo", "charlie"], no_show) is None
+
+
+def test_points_scale_with_how_hard_the_bet_is():
+    assert score_pick("charlie", "alpha", None, "show", True)["points"] == BET_TYPES["show"]["points"]
+    assert score_pick("alpha", "alpha", None, "win", True)["points"] == POINTS_CORRECT
+    assert score_pick("alpha", "alpha", None, "trifecta", True)["points"] == BET_TYPES["trifecta"]["points"]
+    assert BET_TYPES["show"]["points"] < POINTS_CORRECT < BET_TYPES["trifecta"]["points"]
+
+
+def test_an_exotic_that_lands_while_secretariat_misses_still_takes_the_bonus():
+    # Your exacta landed; Secretariat's top pick (yankee) didn't win.
+    graded = score_pick("alpha", "alpha", "yankee", "exacta", True)
+    assert graded["beat_secretariat"] is True
+    assert graded["points"] == BET_TYPES["exacta"]["points"] + POINTS_BEAT_BONUS
+
+
+def test_a_pick_made_before_bet_types_existed_still_grades_as_a_win_bet():
+    # No bet_type, no hit flag: falls back to "your horse won", worth 10.
+    assert score_pick("alpha", "alpha", None) == score_pick("alpha", "alpha", None, "win", True)
+    assert score_pick("alpha", "bravo", None)["points"] == 0
