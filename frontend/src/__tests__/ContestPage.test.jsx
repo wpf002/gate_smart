@@ -17,7 +17,7 @@ const BOARD = {
   period: 'week',
   since: '2026-09-07',
   scoring: { correct_winner: 10, beat_secretariat_bonus: 5 },
-  secretariat: { races: 1098, win_rate: 0.281 },
+  secretariat: { races: 3338, win_rate: 0.266, days: 30 },
   board: [
     { rank: 1, name: 'Longshot Larry', points: 45, picks: 6, wins: 3, win_rate: 0.5, beat_secretariat: 3 },
     { rank: 2, name: 'Handicapper 7', points: 20, picks: 5, wins: 2, win_rate: 0.4, beat_secretariat: 0 },
@@ -116,8 +116,14 @@ describe('ContestPage', () => {
   it('ranks players and shows Secretariat as a win rate to beat', async () => {
     wrap(<ContestPage />);
     expect(await screen.findByText('Longshot Larry')).toBeInTheDocument();
-    expect(screen.getByText('28.1%')).toBeInTheDocument();
+    expect(screen.getByText('26.6%')).toBeInTheDocument();
     expect(screen.getByText('beat S×3')).toBeInTheDocument();
+  });
+
+  it('states the window the bar to beat covers', async () => {
+    wrap(<ContestPage />);
+    // The bar is a fixed 30-day benchmark, so it must not read as "this week".
+    expect(await screen.findByText(/3,338 races over 30 days/)).toBeInTheDocument();
   });
 
   it('never shows an email address on the board', async () => {

@@ -12,7 +12,8 @@ import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const ACCURACY = {
-  total_predictions: 100, win_rate_percent: 18, place_rate_percent: 42, show_rate_percent: 58,
+  total_predictions: 3338, win_rate_percent: 26.6, place_rate_percent: 45.9, show_rate_percent: 59.3,
+  days: 30, since: '2026-08-30',
 };
 
 // Real /api/accuracy/bet-curve?days=30 shape, trimmed to the fields used here.
@@ -40,6 +41,16 @@ function wrap() {
 }
 
 beforeEach(() => Object.values(api).forEach((f) => f.mockClear()));
+
+describe('LandingPage stat line', () => {
+  it('names the window the win rate covers, not just the race count', async () => {
+    wrap();
+    // 100 races used to be half a day of the card, which read 18% while the
+    // 30-day rate was 26.6%. The window has to be on screen beside the number.
+    expect(await screen.findByText(/3,338 settled races in the\s+last 30 days/)).toBeInTheDocument();
+    expect(screen.getByText('27%')).toBeInTheDocument();
+  });
+});
 
 describe('LandingPage break-even block', () => {
   it('states the win rate, the rate needed, and the gap between them', async () => {

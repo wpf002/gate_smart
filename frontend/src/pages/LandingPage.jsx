@@ -84,8 +84,9 @@ export default function LandingPage({ onGetStarted }) {
         )}
         {hasStats && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.6 }}>
-            Secretariat's top pick over its last {acc.total_predictions} settled races. Every pick is
-            locked before post time and scored against the official results chart.
+            Secretariat's top pick over {acc.total_predictions.toLocaleString()} settled races in the
+            last {acc.days ?? 30} days. Every pick is locked before post time and scored against the
+            official results chart.
           </div>
         )}
 

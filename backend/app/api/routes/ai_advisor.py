@@ -644,9 +644,12 @@ async def clear_race_analysis(race_id: str) -> JSONResponse:
     return JSONResponse({"cleared": True, "keys_removed": len(keys)})
 
 
+ACCURACY_WINDOW_DAYS = 30
+
+
 @router.get("/accuracy")
-async def secretariat_accuracy() -> JSONResponse:
-    """Secretariat top-pick performance over the last 100 settled races.
+async def secretariat_accuracy(days: int = ACCURACY_WINDOW_DAYS) -> JSONResponse:
+    """Secretariat top-pick performance over the last `days` of settled races.
 
     All three rates describe the SAME horse (Secretariat's #1 pick):
       win_rate_percent   — top pick finished 1st        (top_pick_correct)
@@ -657,20 +660,30 @@ async def secretariat_accuracy() -> JSONResponse:
     derived by comparing predicted_first to actual_first/_second using
     the same name normalization the settler uses.
 
-    Rolling 100-race window. Cached 1h; underlying data refreshes once a
-    day via nightly_accuracy.py.
+    This was a rolling 100-race window until 2026-09-28. Now that the nightly
+    covers the full card, 100 races is half a day: the window was reporting 18%
+    off a single afternoon while the 30-day rate was 26.6%, and consecutive
+    100-race blocks ran from 16% to 42%. A day's variance is not a win rate, and
+    this figure is the headline on the front door.
+
+    Cached 1h; underlying data refreshes once a day via nightly_accuracy.py.
     """
+    days = max(1, min(int(days), 365))
     # Bump the suffix when the payload schema changes so prior deploys'
     # cached payloads can't shadow new fields.
-    cache_key = "accuracy:rolling100:v3"
+    cache_key = f"accuracy:window{days}d:v1"
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
+
+    import datetime as _dt
 
     from sqlalchemy import select
 
     from app.core import database as _db
     from app.models.accuracy import RacePrediction
+
+    since = _dt.date.today() - _dt.timedelta(days=days - 1)
 
     def _norm(name):
         return (name or "").lower().strip().replace("'", "").replace("-", " ")
@@ -689,9 +702,8 @@ async def secretariat_accuracy() -> JSONResponse:
                 RacePrediction.user_id.is_(None),
                 RacePrediction.analysis_mode == "auto_daily",
                 RacePrediction.top_pick_correct.is_not(None),
+                RacePrediction.race_date >= since,
             )
-            .order_by(RacePrediction.settled_at.desc().nulls_last())
-            .limit(100)
         )
         rows = result.all()
 
@@ -711,6 +723,8 @@ async def secretariat_accuracy() -> JSONResponse:
             "win_rate_percent": None,
             "place_rate_percent": None,
             "show_rate_percent": None,
+            "days": days,
+            "since": since.isoformat(),
             "sample_size_note": "No settled races yet",
             "last_updated": None,
         }
@@ -721,7 +735,9 @@ async def secretariat_accuracy() -> JSONResponse:
             "win_rate_percent": round((wins / total) * 100, 1),
             "place_rate_percent": round((places / total) * 100, 1),
             "show_rate_percent": round((shows / total) * 100, 1),
-            "sample_size_note": f"Last {total} settled races",
+            "days": days,
+            "since": since.isoformat(),
+            "sample_size_note": f"{total:,} settled races over {days} days",
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
 

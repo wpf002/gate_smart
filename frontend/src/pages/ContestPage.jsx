@@ -120,7 +120,8 @@ export default function ContestPage() {
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>LEADERBOARD</div>
                 {sec?.win_rate !== null && sec?.win_rate !== undefined && (
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    Bar to beat: Secretariat <strong style={{ color: 'var(--accent-gold-bright)' }}>{(sec.win_rate * 100).toFixed(1)}%</strong> winners · {sec.races} races
+                    Bar to beat: Secretariat <strong style={{ color: 'var(--accent-gold-bright)' }}>{(sec.win_rate * 100).toFixed(1)}%</strong> winners
+                    · {sec.races.toLocaleString()} races over {sec.days ?? 30} days
                   </div>
                 )}
               </div>

@@ -240,11 +240,17 @@ async def leaderboard(period: str = "week", db: AsyncSession = Depends(get_db)):
     for i, row in enumerate(board, 1):
         row["rank"] = i
 
+    # The bar to beat is a fixed 30-day benchmark, not a window that moves with
+    # the toggle. On "Today" it used to read from races that hadn't been graded
+    # yet and vanish; on "This Week" it was reading four usable days, one of
+    # them capped at 40 races and one with no picks at all.
+    from app.api.routes.ai_advisor import ACCURACY_WINDOW_DAYS
     from app.models.accuracy import RacePrediction
+    bar_since = date.today() - timedelta(days=ACCURACY_WINDOW_DAYS - 1)
     s = (await db.execute(
         select(func.count(), func.sum(case((RacePrediction.top_pick_correct == True, 1), else_=0)))  # noqa: E712
         .where(RacePrediction.analysis_mode == "auto_daily", RacePrediction.user_id.is_(None),
-               RacePrediction.result_fetched == True, RacePrediction.race_date >= since)  # noqa: E712
+               RacePrediction.result_fetched == True, RacePrediction.race_date >= bar_since)  # noqa: E712
     )).one()
     return {
         "period": period,
@@ -252,7 +258,8 @@ async def leaderboard(period: str = "week", db: AsyncSession = Depends(get_db)):
         "scoring": {"correct_winner": POINTS_CORRECT, "beat_secretariat_bonus": POINTS_BEAT_BONUS,
                     "bet_types": {k: {"label": v["label"], "points": v["points"], "picks": v["picks"]}
                                   for k, v in BET_TYPES.items()}},
-        "secretariat": {"races": s[0] or 0, "win_rate": round((s[1] or 0) / s[0], 3) if s[0] else None},
+        "secretariat": {"races": s[0] or 0, "days": ACCURACY_WINDOW_DAYS,
+                        "win_rate": round((s[1] or 0) / s[0], 3) if s[0] else None},
         "board": [{k: v for k, v in r.items() if k != "user_id"} for r in board[:100]],
     }
 
