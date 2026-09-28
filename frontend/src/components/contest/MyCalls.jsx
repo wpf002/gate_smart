@@ -5,10 +5,9 @@ import { formatRaceTime } from '../../utils/timezone';
 import { useAppStore } from '../../store';
 
 /**
- * The calls you've already made: today's, plus anything locked in on a later
- * card that hasn't run. Before this the only trace of a pick was on the race
- * page you made it from, so locking one in and then opening the contest page
- * looked like nothing had happened.
+ * Today's calls, on the contest page. Before this the only trace of a pick was
+ * on the race page you made it from, so locking one in and then opening the
+ * contest page looked like nothing had happened.
  *
  * Track names come from the race cards the page already has in cache. When a
  * card isn't loaded the race_id still carries the track code and race number,
@@ -50,7 +49,11 @@ export default function MyCalls({ now = Date.now() }) {
   const { data: today } = useQuery({ queryKey: ['races', 'today'], queryFn: () => getRacesToday('usa') });
   const { data: tomorrow } = useQuery({ queryKey: ['races', 'tomorrow'], queryFn: () => getRacesByDate('tomorrow', 'usa') });
 
-  const picks = data?.picks || [];
+  // Today only. The endpoint also returns ungraded calls on later cards so
+  // NextToPost can still exclude a race you've already called, but this list is
+  // the day's scoreboard and shouldn't carry tomorrow's picks into it.
+  const dayKey = data?.date;
+  const picks = (data?.picks || []).filter((p) => !dayKey || !p.race_date || p.race_date === dayKey);
   if (!authToken || !picks.length) return null;
 
   const cards = {};
@@ -74,7 +77,7 @@ export default function MyCalls({ now = Date.now() }) {
   return (
     <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>YOUR CALLS</span>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>TODAY'S CALLS</span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
           {open ? `${open} still open · change until the gate` : 'All locked'}
         </span>

@@ -1,8 +1,9 @@
 /**
- * MyCalls — the calls you've already locked in, on the contest page.
+ * MyCalls — today's calls, on the contest page.
  *
- * Two things matter here. A pick must never vanish: not when its race card
- * isn't in cache, and not when it's on tomorrow's card. And a settled call must
+ * Two things matter here. The list is the day's scoreboard, so a call on a
+ * later card must not leak into it — the endpoint still returns those so
+ * NextToPost can exclude a race you've already called. And a settled call must
  * report what actually happened, including the case where the chart carried no
  * price and the bet scored nothing either way.
  */
@@ -99,6 +100,19 @@ describe('MyCalls', () => {
     wrap();
     expect(await screen.findByText('No price')).toBeInTheDocument();
     expect(screen.queryByText('+0')).not.toBeInTheDocument();
+  });
+
+  it('leaves a call on a later card out of the day list', async () => {
+    api.getMyContestPicks.mockImplementationOnce(() => Promise.resolve({
+      ...PICKS,
+      picks: [...PICKS.picks,
+        { race_id: 'GRP_1790640000000-2', race_date: '2026-09-29', horse_name: 'Tomorrow Colt',
+          bet_type: 'win', bet_label: 'Win', selections: [{ name: 'Tomorrow Colt', number: '3' }],
+          settled: false, points: 0, payoff: null, net: null }],
+    }));
+    wrap();
+    await screen.findByText('Apicturesworth');
+    expect(screen.queryByText('Tomorrow Colt')).not.toBeInTheDocument();
   });
 
   it('keeps a call visible when its race card is not in cache', async () => {
