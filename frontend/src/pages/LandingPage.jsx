@@ -1,24 +1,42 @@
 import { useQuery } from '@tanstack/react-query';
-import { getSecretariatAccuracy, getDailyAccuracy } from '../utils/api';
+import { getSecretariatAccuracy, getBetCurve } from '../utils/api';
 import Icon from '../components/common/Icon';
 
 /**
  * Marketing front door for logged-out visitors.
  *
  * Every number on this page is pulled live from the same endpoints the app
- * uses — including the flat-bet P&L, which is usually negative. Showing the
- * losses next to the win rate is the point: it's the one claim competitors
- * can't copy, and it can never drift from what actually happened.
+ * uses, including the one that says the picks don't yet pay. Publishing that is
+ * the point: it's the one claim competitors can't copy, and it can never drift
+ * from what actually happened.
+ *
+ * It's stated as a gap to break-even over 30 days rather than as a single day's
+ * loss. A day is ~130 bets, which swings 15 points on one longshot, so a daily
+ * figure told a visitor whatever the dice gave. The gap is the real number and
+ * it's the one worth watching: the day it turns positive, the picks pay.
  */
+function Figure({ value, label, tone }) {
+  return (
+    <div style={{ flex: 1, textAlign: 'center' }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, color: tone, lineHeight: 1 }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
 export default function LandingPage({ onGetStarted }) {
   const { data: acc } = useQuery({
     queryKey: ['secretariat-accuracy'],
     queryFn: getSecretariatAccuracy,
     staleTime: 5 * 60 * 1000,
   });
-  const { data: daily } = useQuery({
-    queryKey: ['landing-daily'],
-    queryFn: () => getDailyAccuracy(),
+  const { data: curve } = useQuery({
+    queryKey: ['landing-breakeven'],
+    queryFn: () => getBetCurve(30),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -28,8 +46,9 @@ export default function LandingPage({ onGetStarted }) {
     { label: 'Place', value: acc?.place_rate_percent },
     { label: 'Show', value: acc?.show_rate_percent },
   ];
-  const roi = daily?.bet_win_roi;
-  const hasRoi = typeof roi === 'number' && daily?.bet_races > 0;
+  const be = curve?.breakeven;
+  const hasGap = be && typeof be.hit_rate === 'number' && typeof be.needed_rate === 'number' && be.bets > 0;
+  const clears = hasGap && be.gap > 0;
 
   return (
     <div style={{ minHeight: '100%', overflowY: 'auto', background: 'var(--bg-primary)' }}>
@@ -76,19 +95,36 @@ export default function LandingPage({ onGetStarted }) {
           border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
         }}>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--accent-gold)', letterSpacing: '0.06em' }}>
-            A HIGH WIN RATE IS NOT PROFIT
+            THE BAR WE'RE CHASING
           </div>
-          <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6 }}>
-            Most picks win at short prices, so betting them all can still lose money.
-            {hasRoi && (
-              <> Yesterday, a flat $2 win bet on every pick returned{' '}
-                <strong style={{ color: roi >= 0 ? 'var(--accent-green-bright)' : 'var(--accent-red-bright)' }}>
-                  {(roi * 100).toFixed(1)}%
-                </strong>{' '}across {daily.bet_races} races.
-              </>
-            )}{' '}
-            We show that number every day, priced from official payoffs — good or bad.
-          </div>
+          {hasGap ? (
+            <>
+              <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+                <Figure value={`${(be.hit_rate * 100).toFixed(1)}%`} label="Wins" tone="var(--accent-gold-bright)" />
+                <Figure value={`${(be.needed_rate * 100).toFixed(1)}%`} label="Needs" tone="var(--text-secondary)" />
+                <Figure
+                  value={`${be.gap >= 0 ? '+' : '−'}${Math.abs(be.gap * 100).toFixed(1)}`}
+                  label="Gap"
+                  tone={clears ? 'var(--accent-green-bright)' : 'var(--accent-red-bright)'}
+                />
+              </div>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 12, lineHeight: 1.6 }}>
+                A high win rate isn't profit. Most picks win at short prices, so the top pick has to
+                win <strong>{(be.needed_rate * 100).toFixed(1)}%</strong> of the time just to return
+                the stake at the prices it's actually paid. Over the last {be.days ?? 30} days it won{' '}
+                <strong>{(be.hit_rate * 100).toFixed(1)}%</strong> of {be.bets.toLocaleString()} races.
+                {clears
+                  ? ' It clears the bar. We publish the gap every day, priced from official payoffs.'
+                  : " It doesn't clear the bar yet. We publish the gap every day, priced from official payoffs, and you'll see it the day it turns."}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6 }}>
+              A high win rate isn't profit. Most picks win at short prices, so the top pick has to win
+              often enough to clear what the chalk costs. We publish that gap every day, priced from
+              official payoffs — good or bad.
+            </div>
+          )}
         </div>
 
         {/* How it learns */}

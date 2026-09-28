@@ -4,7 +4,7 @@ Accuracy API — daily report retrieval, history, and manual email trigger.
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import desc, func, select
+from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, get_optional_user
@@ -577,6 +577,7 @@ async def bet_curve(days: int = 30, db: AsyncSession = Depends(get_db)):
             RacePrediction.race_date,
             func.count().label("bets"),
             func.sum(func.coalesce(RacePrediction.top_pick_win_payoff, 0)).label("returned"),
+            func.sum(case((RacePrediction.top_pick_win_payoff > 0, 1), else_=0)).label("cashed"),
         )
         .where(base & RacePrediction.top_pick_win_payoff.is_not(None))
         .group_by(RacePrediction.race_date)
@@ -588,9 +589,12 @@ async def bet_curve(days: int = 30, db: AsyncSession = Depends(get_db)):
     )).scalar() or 0
 
     running, points = 0.0, []
-    for race_date, bets, returned in rows:
+    total_returned, total_cashed = 0.0, 0
+    for race_date, bets, returned, cashed in rows:
         net = float(returned or 0) - 2.0 * bets
         running += net
+        total_returned += float(returned or 0)
+        total_cashed += int(cashed or 0)
         points.append({
             "date": race_date.isoformat(),
             "bets": bets,
@@ -599,6 +603,13 @@ async def bet_curve(days: int = 30, db: AsyncSession = Depends(get_db)):
         })
 
     total_bets = sum(p["bets"] for p in points)
+
+    # How often the top pick won, against how often it had to win to get the
+    # money back at the prices it was paid. The difference is the whole question:
+    # a win rate is only worth money once it clears the price of the chalk.
+    avg_payoff = (total_returned / total_cashed) if total_cashed else 0.0
+    hit_rate = (total_cashed / total_bets) if total_bets else None
+    breakeven = (2.0 / avg_payoff) if avg_payoff else None
     return {
         "days": days,
         "points": points,
@@ -607,4 +618,13 @@ async def bet_curve(days: int = 30, db: AsyncSession = Depends(get_db)):
         "net": round(running, 2),
         "roi": round(running / (2.0 * total_bets), 4) if total_bets else None,
         "unpriced_excluded": unpriced,
+        "breakeven": {
+            "bets": total_bets,
+            "cashed": total_cashed,
+            "hit_rate": round(hit_rate, 4) if hit_rate is not None else None,
+            "avg_payoff": round(avg_payoff, 2) if avg_payoff else None,
+            "needed_rate": round(breakeven, 4) if breakeven is not None else None,
+            "gap": round(hit_rate - breakeven, 4)
+                   if hit_rate is not None and breakeven is not None else None,
+        },
     }
