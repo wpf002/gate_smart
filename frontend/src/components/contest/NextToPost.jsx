@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getRacesToday, getRacesByDate } from '../../utils/api';
+import { getRacesToday, getRacesByDate, getMyContestPicks } from '../../utils/api';
 import { formatRaceTime } from '../../utils/timezone';
 import { useAppStore } from '../../store';
 
@@ -12,7 +12,8 @@ const openRaces = (cards, now) => (cards || [])
 
 /**
  * Races still open for a Beat Secretariat pick, soonest first: today's, or
- * tomorrow's once today's last race is off.
+ * tomorrow's once today's last race is off. The hook is unfiltered; the
+ * component below drops the ones already called.
  */
 export function useOpenRaces(now = Date.now()) {
   // Same query keys as the Races page, so this reuses its cache.
@@ -30,8 +31,19 @@ export function useOpenRaces(now = Date.now()) {
 export default function NextToPost({ now = Date.now() }) {
   const navigate = useNavigate();
   const timezone = useAppStore((s) => s.userProfile?.timezone);
+  const authToken = useAppStore((s) => s.authToken);
   const { races: open, showingTomorrow } = useOpenRaces(now);
-  const races = open.slice(0, LIMIT);
+
+  // Races already called live in "Your calls" above, where they can still be
+  // changed. Listing them here too made the two lists read as contradictions.
+  const { data: mine } = useQuery({
+    queryKey: ['contest-picks', ''],
+    queryFn: () => getMyContestPicks(),
+    enabled: !!authToken,
+  });
+  const called = new Set((mine?.picks || []).map((p) => p.race_id));
+
+  const races = open.filter((r) => !called.has(r.race_id)).slice(0, LIMIT);
   if (!races.length) return null;
 
   return (

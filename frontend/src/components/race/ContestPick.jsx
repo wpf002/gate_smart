@@ -154,7 +154,8 @@ export default function ContestPick({ raceId, raceDate, runners = [], raceFinish
     setError('');
     try {
       await makeContestPick(raceId, picked, betType);
-      await queryClient.invalidateQueries({ queryKey: ['contest-picks', raceDate] });
+      // Prefix match: refreshes this race's day and the contest page's list.
+      await queryClient.invalidateQueries({ queryKey: ['contest-picks'] });
     } catch (e) {
       setError(e?.response?.data?.detail || 'Could not save your pick');
     } finally {

@@ -64,6 +64,7 @@ const api = {
   getBetCurve: vi.fn(() => Promise.resolve(CURVE)),
   getRacesToday: vi.fn(() => Promise.resolve({ racecards: [] })),
   getRacesByDate: vi.fn(() => Promise.resolve({ racecards: [] })),
+  getMyContestPicks: vi.fn(() => Promise.resolve({ picks: [] })),
 };
 vi.mock('../utils/api', () => ({
   getLeaderboard: (...a) => api.getLeaderboard(...a),
@@ -72,6 +73,7 @@ vi.mock('../utils/api', () => ({
   getBetCurve: (...a) => api.getBetCurve(...a),
   getRacesToday: (...a) => api.getRacesToday(...a),
   getRacesByDate: (...a) => api.getRacesByDate(...a),
+  getMyContestPicks: (...a) => api.getMyContestPicks(...a),
 }));
 
 import ContestPage from '../pages/ContestPage';

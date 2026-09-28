@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import msgspec
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,7 +63,8 @@ def _pick_json(p: ContestPick) -> dict:
     """One pick as the client sees it, including what $2 on it returned."""
     bet_type = p.bet_type or "win"
     return {
-        "race_id": p.race_id, "horse_name": p.horse_name, "program_number": p.program_number,
+        "race_id": p.race_id, "race_date": p.race_date.isoformat() if p.race_date else None,
+        "horse_name": p.horse_name, "program_number": p.program_number,
         "bet_type": bet_type, "bet_label": bet_spec(bet_type)["label"],
         "selections": p.selections or [{"name": p.horse_name, "key": p.horse_key,
                                         "number": p.program_number or ""}],
@@ -170,13 +171,23 @@ async def make_pick(request: Request, user: User = Depends(get_current_user),
 @router.get("/picks")
 async def my_picks(race_date: str = "", user: User = Depends(get_current_user),
                    db: AsyncSession = Depends(get_db)):
-    """Your calls for a day (default today), graded where the result is in."""
+    """Your calls for a day (default today), graded where the result is in.
+
+    With no date, later dates' ungraded calls come back too. A pick made on
+    tomorrow's card belongs to tomorrow, and leaving it out was the only way to
+    lock one in and then find no trace of it anywhere in the app.
+    """
     try:
         day = date.fromisoformat(race_date) if race_date else date.today()
     except ValueError:
         raise HTTPException(status_code=400, detail="race_date must be YYYY-MM-DD")
+    where = ContestPick.race_date == day
+    if not race_date:
+        where = or_(where, and_(ContestPick.race_date > day, ContestPick.settled == False))  # noqa: E712
     rows = (await db.execute(
-        select(ContestPick).where(ContestPick.user_id == user.id, ContestPick.race_date == day)
+        select(ContestPick)
+        .where(ContestPick.user_id == user.id, where)
+        .order_by(ContestPick.race_date, ContestPick.created_at)
     )).scalars().all()
     return {"date": day.isoformat(), "stake": STAKE,
             "picks": [_pick_json(p) for p in rows]}

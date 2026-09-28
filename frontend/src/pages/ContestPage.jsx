@@ -6,6 +6,7 @@ import { useAppStore } from '../store';
 import PageHeader from '../components/common/PageHeader';
 import NameEditor from '../components/contest/NameEditor';
 import NextToPost from '../components/contest/NextToPost';
+import MyCalls from '../components/contest/MyCalls';
 import FirstPick, { isDefaultName } from '../components/contest/FirstPick';
 
 /**
@@ -170,6 +171,7 @@ export default function ContestPage() {
           </div>
 
           {/* ── Races still open for a pick ─────────────────── */}
+          <MyCalls />
           <NextToPost />
           </div>
         </div>
