@@ -160,10 +160,13 @@ def beat_secretariat_streak(settled_in_order: Iterable[dict]) -> int:
 
     A beat extends it. A miss ends it. A race where you and Secretariat were both
     right is a tie — it neither extends nor breaks the streak, since you didn't
-    lose to it.
+    lose to it. A voided pick (correct is None, no official price) is skipped
+    entirely: it isn't a loss, so it can't break a run.
     """
     streak = 0
     for pick in reversed(list(settled_in_order)):
+        if pick.get("correct") is None:
+            continue  # voided: no result either way, so it can't end a streak
         if pick.get("beat_secretariat"):
             streak += 1
         elif not pick.get("correct"):

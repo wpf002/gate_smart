@@ -100,9 +100,26 @@ describe('ContestPage', () => {
     wrap(<ContestPage />);
     expect(await screen.findByText("IF YOU'D BET $2 A CALL")).toBeInTheDocument();
     expect(screen.getByText('−$3.60')).toBeInTheDocument();
-    expect(screen.getByText('−30.0%')).toBeInTheDocument();
     // Calls the chart never priced are named, not folded into the loss.
     expect(screen.getByText(/6 priced calls · 2 cashed · 2 with no official price/)).toBeInTheDocument();
+  });
+
+  it('holds the ROI back until it is more than one payoff restated', async () => {
+    useAppStore.setState({ authToken: 'token' });
+    // 6 priced calls: the money is real, the percentage isn't a rate yet.
+    wrap(<ContestPage />);
+    await screen.findByText('−$3.60');
+    expect(screen.queryByText('−30.0%')).not.toBeInTheDocument();
+  });
+
+  it('shows the ROI once enough calls have been priced', async () => {
+    useAppStore.setState({ authToken: 'token' });
+    api.getContestProgress.mockImplementationOnce(() => Promise.resolve({
+      ...ME,
+      bankroll: { ...ME.bankroll, bets: 40, staked: 80, returned: 56, net: -24, roi: -0.3, cashed: 9 },
+    }));
+    wrap(<ContestPage />);
+    expect(await screen.findByText('−30.0%')).toBeInTheDocument();
   });
 
   it('leaves the bankroll line out until a call has been priced', async () => {

@@ -9,6 +9,10 @@ import NextToPost from '../components/contest/NextToPost';
 import MyCalls from '../components/contest/MyCalls';
 import FirstPick, { isDefaultName } from '../components/contest/FirstPick';
 
+// Below this, an ROI is one payoff restated as a percentage — a single winning
+// call reads +190%, which says nothing about how the calls are going.
+const ROI_MIN_BETS = 10;
+
 /**
  * What flat $2 on every call would have come to, priced off the official charts.
  * Nothing is wagered and nothing is held — it's the same scorekeeping figure the
@@ -28,7 +32,9 @@ function Bankroll({ data }) {
           {up ? '+' : '−'}${Math.abs(data.net).toFixed(2)}
         </span>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: colour }}>
-          {data.roi === null ? '' : `${data.roi >= 0 ? '+' : '−'}${Math.abs(data.roi * 100).toFixed(1)}%`}
+          {data.roi === null || data.bets < ROI_MIN_BETS
+            ? ''
+            : `${data.roi >= 0 ? '+' : '−'}${Math.abs(data.roi * 100).toFixed(1)}%`}
         </span>
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -66,7 +72,7 @@ export default function ContestPage() {
 
       <div className="contest-body">
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-          Call any race win, place, show, exacta or trifecta. Harder bets pay more points,
+          Call any race — win, place, show, exacta or trifecta. Harder bets pay more points,
           and +5 more when Secretariat is wrong. No betting, no money.
         </div>
 
@@ -96,7 +102,7 @@ export default function ContestPage() {
                 <Stat value={me ? me.points : '–'} label="Points" highlight />
                 <Stat value={me ? me.pick_day_streak : '–'} label="Day Streak" />
                 <Stat value={me ? me.beat_secretariat_streak : '–'} label="Beat Streak" />
-                <Stat value={me ? `${me.wins}/${me.settled}` : '–'} label="Winners" />
+                <Stat value={me ? `${me.wins}/${me.settled}` : '–'} label="Bets Landed" />
                 <Stat value={me ? me.beat_secretariat : '–'} label="Beat Secretariat" />
                 <Stat value={me ? me.best_correct_streak : '–'} label="Best Streak" />
               </div>

@@ -188,3 +188,21 @@ def test_an_apostrophe_or_hyphen_does_not_break_the_match():
     check = _build_prediction_check(
         {"top_contenders": ["#3 O'Brien's Lad"]}, [{"horse_name": "OBriens Lad"}])
     assert check["contenders"][0]["actual_finish"] == "1"
+
+
+# ── Voided picks count nowhere ───────────────────────────────────────────────
+
+def test_a_voided_pick_does_not_break_a_beat_streak():
+    """A bet the chart never priced isn't a loss, so it can't end a run."""
+    # Newest last: beat, voided, beat.
+    picks = [{"correct": True, "beat_secretariat": True},
+             {"correct": None, "beat_secretariat": None},
+             {"correct": True, "beat_secretariat": True}]
+    assert beat_secretariat_streak(picks) == 2
+
+
+def test_a_real_miss_still_breaks_the_beat_streak():
+    picks = [{"correct": True, "beat_secretariat": True},
+             {"correct": False, "beat_secretariat": False},
+             {"correct": True, "beat_secretariat": True}]
+    assert beat_secretariat_streak(picks) == 1

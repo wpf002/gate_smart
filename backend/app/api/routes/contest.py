@@ -223,7 +223,8 @@ async def leaderboard(period: str = "week", db: AsyncSession = Depends(get_db)):
             func.count().label("picks"),
         )
         .join(User, User.id == ContestPick.user_id)
-        .where(ContestPick.settled == True, ContestPick.race_date >= since)  # noqa: E712
+        .where(ContestPick.settled == True, ContestPick.correct.is_not(None),  # noqa: E712
+               ContestPick.race_date >= since)
         .group_by(ContestPick.user_id, User.display_name)
     )).all()
 
@@ -280,7 +281,12 @@ async def my_progress(user: User = Depends(get_current_user), db: AsyncSession =
     rows = list((await db.execute(
         select(ContestPick).where(ContestPick.user_id == user.id).order_by(ContestPick.race_date, ContestPick.created_at)
     )).scalars().all())
-    settled = [{"correct": p.correct, "beat_secretariat": p.beat_secretariat} for p in rows if p.settled]
+    # correct IS NULL means the chart could never settle the bet. It scored
+    # nothing, so it belongs in no record: not the denominator of your hit rate,
+    # and not as a miss that breaks a streak.
+    settled = [{"correct": p.correct, "beat_secretariat": p.beat_secretariat}
+               for p in rows if p.settled and p.correct is not None]
+    voided = sum(1 for p in rows if p.settled and p.correct is None)
     return {
         "display_name": _public_name(user.id, user.display_name),
         "pick_day_streak": pick_day_streak((p.race_date for p in rows), date.today()),
@@ -288,6 +294,7 @@ async def my_progress(user: User = Depends(get_current_user), db: AsyncSession =
         "best_correct_streak": best_streak([bool(p["correct"]) for p in settled]),
         "total_picks": len(rows),
         "settled": len(settled),
+        "voided": voided,
         "wins": sum(1 for p in settled if p["correct"]),
         "beat_secretariat": sum(1 for p in settled if p["beat_secretariat"]),
         "points": sum(p.points for p in rows),
