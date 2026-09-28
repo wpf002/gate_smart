@@ -127,12 +127,12 @@ export default function ContestPage() {
               </div>
               <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                 {[['day', 'Today'], ['week', 'This Week']].map(([k, label]) => (
-                  <button key={k} onClick={() => setPeriod(k)} style={{
-                    fontSize: 12, padding: '4px 10px', borderRadius: 4, cursor: 'pointer',
-                    background: period === k ? 'var(--accent-gold-dim)' : 'transparent',
-                    color: period === k ? 'var(--accent-gold-bright)' : 'var(--text-muted)',
-                    border: '1px solid var(--border-subtle)',
-                  }}>{label}</button>
+                  <button
+                    key={k}
+                    onClick={() => setPeriod(k)}
+                    className={`seg-btn${period === k ? ' is-active' : ''}`}
+                    aria-pressed={period === k}
+                  >{label}</button>
                 ))}
               </div>
             </div>

@@ -962,6 +962,38 @@ select option {
   gap: 8px;
 }
 
+/* Segmented toggles (leaderboard period, bet-curve window).
+   The selected chip used to be gold-bright text on accent-gold-dim, which is
+   3.4:1 — under the 4.5:1 floor for text this size, and unreadable at a glance.
+   Solid gold with black text is 7.6:1 and matches .btn-primary. */
+.seg-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.seg-btn:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-medium);
+}
+
+.seg-btn.is-active {
+  background: var(--accent-gold);
+  color: #000;
+  font-weight: 600;
+  border-color: var(--accent-gold);
+}
+
+.seg-btn-sm {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
 /* Bet type picker. Five options, so a segmented row reads faster than a
    dropdown and shows what's on offer without a click. Wraps on narrow screens
    rather than scrolling sideways. */

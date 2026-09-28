@@ -96,12 +96,12 @@ export default function BetCurve() {
         </span>
         <div style={{ display: 'flex', gap: 4 }}>
           {[7, 30, 90].map((d) => (
-            <button key={d} onClick={() => setDays(d)} style={{
-              fontSize: 11, padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
-              background: days === d ? 'var(--accent-gold-dim)' : 'transparent',
-              color: days === d ? 'var(--accent-gold-bright)' : 'var(--text-muted)',
-              border: '1px solid var(--border-subtle)',
-            }}>{d}D</button>
+            <button
+              key={d}
+              onClick={() => setDays(d)}
+              className={`seg-btn seg-btn-sm${days === d ? ' is-active' : ''}`}
+              aria-pressed={days === d}
+            >{d}D</button>
           ))}
         </div>
       </div>
