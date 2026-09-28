@@ -461,8 +461,8 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
       <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border-subtle)' }}>
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.5 }}>
           {effectiveViewMode === 'beginner'
-            ? 'A Pick 3/4/5/6 needs winners of 3–6 consecutive races. For THIS race (one leg of your ticket), play the single below. If you want extra coverage, "wheel" the single with the backup so your ticket wins if either one comes home. Pick the other legs from the next races on the card.'
-            : 'For this leg of the sequence: single the primary, or wheel primary + backup for coverage. Pair with picks from adjacent races to complete the Pick 3/4/5/6 ticket.'}
+            ? 'A Pick 3/4/5/6 needs the winner of 3–6 races in a row. This race is one leg of that ticket. Play the single below, or use both horses so the leg survives if either one wins — that doubles what the ticket costs. Fill the other legs from the next races on the card.'
+            : 'One leg of the sequence. Single the primary, or use both for coverage — each extra horse in a leg multiplies the ticket. Fill the remaining legs from consecutive races on the card.'}
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 110, flexShrink: 0 }}>This leg · single</span>
@@ -470,7 +470,7 @@ function AnalysisPanel({ analysis, loading, mode, runners = [], userRegion = 'us
         </div>
         {analysis.top_contenders[1] && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 110, flexShrink: 0 }}>This leg · wheel w/</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 110, flexShrink: 0 }}>This leg · or use both</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{analysis.top_contenders[1]}</span>
           </div>
         )}
