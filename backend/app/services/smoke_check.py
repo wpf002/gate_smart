@@ -88,12 +88,29 @@ async def _check_accuracy_freshness() -> tuple[str, int] | None:
     # a false failure on every run.
     yesterday = now_utc.date() - datetime.timedelta(days=1)
     try:
-        from sqlalchemy import select
+        from sqlalchemy import func, select
 
         from app.core import database as _db
-        from app.models.accuracy import DailyAccuracyReport
+        from app.models.accuracy import DailyAccuracyReport, RacePrediction
 
         async with _db._AsyncSessionLocal() as db:
+            # A day with no picks has nothing to settle, so no report is ever
+            # written for it and this check would fail forever. That happened on
+            # 2026-09-27, when the Anthropic account ran out of credits and the
+            # slate came up empty: the missing-report alert then re-fired every
+            # 30 minutes on a day that can never be fixed. The empty slate is
+            # the predict-all check's alarm, on the day it matters.
+            picked = await db.scalar(
+                select(func.count(RacePrediction.id)).where(
+                    RacePrediction.race_date == yesterday,
+                    RacePrediction.analysis_mode == "auto_daily",
+                    RacePrediction.user_id.is_(None),
+                )
+            )
+            if not picked:
+                log.info(f"[smoke] no picks for {yesterday}; no accuracy report expected")
+                return None
+
             result = await db.execute(
                 select(DailyAccuracyReport).where(
                     DailyAccuracyReport.report_date == yesterday

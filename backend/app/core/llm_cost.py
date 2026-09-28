@@ -34,6 +34,22 @@ _BUDGET_CACHE_TTL_SECONDS = 60
 LLM_DAILY_CAP_USD = float(os.getenv("LLM_DAILY_CAP_USD", "0"))
 
 
+def is_billing_error(exc: Exception) -> bool:
+    """True when an Anthropic error means the account is out of credits.
+
+    A 400 with "credit balance" is account-wide: every call, from a user waiting
+    on a race page to the nightly sweep, fails until it is topped up. It is not
+    a per-race fault and retrying it 137 times, as the 2026-09-27 nightly did,
+    only fills the log while the whole day is lost.
+    """
+    import anthropic
+    return isinstance(exc, anthropic.APIStatusError) and "credit balance" in str(exc).lower()
+
+
+class CreditsExhausted(RuntimeError):
+    """Raised to stop unattended work when the API says the account is dry."""
+
+
 class DailyBudgetExceeded(RuntimeError):
     """Raised when unattended work would push today's spend past the hard cap.
 

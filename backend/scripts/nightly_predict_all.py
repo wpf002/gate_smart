@@ -261,8 +261,8 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
         # hand — this submit is the single largest billing event of the day and
         # would otherwise be the one thing the cap could not stop.
         from app.core.llm_cost import (
-            DailyBudgetExceeded, enforce_daily_cap, tracked_create,
-            warn_if_over_soft_budget,
+            CreditsExhausted, DailyBudgetExceeded, enforce_daily_cap, is_billing_error,
+            tracked_create, warn_if_over_soft_budget,
         )
         await warn_if_over_soft_budget("nightly_predict_all_batch")
         await enforce_daily_cap("nightly_predict_all_batch")
@@ -307,22 +307,29 @@ async def run_batch_analyses(client, all_races: list, mode: str) -> dict:
                         messages=[{"role": "user", "content": "."}],
                     )
                 except Exception as e:
+                    if is_billing_error(e):
+                        raise CreditsExhausted(str(e)) from e
                     # Fail open — an unwarmed prefix just pays the write inside
                     # the batch, exactly as it does today.
                     print(f"  batch: pre-warm failed for {_params['model']} "
                           f"({type(e).__name__}: {e}); continuing")
             if warmed:
                 print(f"  batch: pre-warmed {len(warmed)} cached prefix(es)", flush=True)
+        except CreditsExhausted:
+            raise
         except Exception as e:
             print(f"  batch: pre-warm skipped ({type(e).__name__}: {e})")
 
         batch = await client.messages.batches.create(requests=requests)
-    except DailyBudgetExceeded:
+    except (DailyBudgetExceeded, CreditsExhausted):
         # Must NOT be swallowed by the generic handler below: its fallback is to
         # analyze every race synchronously, which bills MORE than the batch we
-        # just refused. Propagate and let main() end the run.
+        # just refused — and when the account is dry, every one of those calls
+        # fails too. Propagate and let main() end the run.
         raise
     except Exception as e:
+        if is_billing_error(e):
+            raise CreditsExhausted(str(e)) from e
         print(f"  batch: submit failed ({type(e).__name__}: {e}) — falling back to sync for all")
         return {}
 
@@ -748,7 +755,9 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         analyze_race, compute_input_fingerprint, pick_depth_for_race, pick_model_for_race,
         prompt_arm_for_race,
     )
-    from app.core.llm_cost import DailyBudgetExceeded, enforce_daily_cap
+    from app.core.llm_cost import (
+        CreditsExhausted, DailyBudgetExceeded, enforce_daily_cap, is_billing_error,
+    )
 
     # Mode used for the cached analysis. Frontend's default risk tolerance
     # is "medium" (see RaceDetailPage MODES const), so caching under "medium"
@@ -776,6 +785,15 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         print(f"   Nothing analyzed for {target_date.isoformat()}. Existing picks "
               f"are untouched and /analyze still serves a write-up on first view. "
               f"Raise LLM_DAILY_CAP_USD and re-run with --only-missing to resume.")
+        return
+    except CreditsExhausted as e:
+        # 2026-09-27: the account ran dry and this fell through to the sync
+        # fallback, which then failed 137 races twice each and wrote nothing.
+        # The day is lost either way; stop on the first refusal so the log says
+        # why in one line and the catchup can retry cheaply once credits are back.
+        print(f"\n⛔ Anthropic credits exhausted: {e}")
+        print(f"   Nothing analyzed for {target_date.isoformat()}. Top up at "
+              f"console.anthropic.com, then re-run with --only-missing.")
         return
     except Exception as e:
         print(f"  batch phase failed entirely ({e}); running all races sync")
@@ -834,6 +852,16 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
                     model=pick_model_for_race(race_id),
                 )
             except Exception as e:
+                if is_billing_error(e):
+                    # Account-wide, not per-race: the cheap fallback below and
+                    # every remaining race would fail identically. On 2026-09-27
+                    # that cost 274 refused calls and an unreadable log for a day
+                    # that was already lost.
+                    print(f"\n⛔ Anthropic credits exhausted: {e}")
+                    print(f"   Stopping the sweep with {len(all_races) - i} races "
+                          f"unanalyzed. Top up at console.anthropic.com, then re-run "
+                          f"with --only-missing.")
+                    break
                 print(f"full analyze failed ({e}); fallback…", end=" ")
 
         if analysis and analysis.get("predicted_finish"):

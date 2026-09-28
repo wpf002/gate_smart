@@ -17,8 +17,11 @@ def _is_billing_error(exc: Exception) -> bool:
     """True when an Anthropic API error is a credit/billing block (400 with a
     'credit balance' message). Worth flagging loudly — it means the whole
     account is out of credits and every LLM call (live analysis AND the nightly
-    learning loop) will fail until it's topped up, not a per-race problem."""
-    return isinstance(exc, anthropic.APIStatusError) and "credit balance" in str(exc).lower()
+    learning loop) will fail until it's topped up, not a per-race problem.
+
+    Shared with the nightly sweep, which stops entirely on this error."""
+    from app.core.llm_cost import is_billing_error
+    return is_billing_error(exc)
 
 
 # User-facing copy for an API/infra failure (billing, auth, rate-limit, upstream
