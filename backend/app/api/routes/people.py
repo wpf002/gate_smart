@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.api.routes.watchlist import normalize_entity
+from app.core.cache import cache_get, cache_set
 from app.services import racing_api
 
 log = logging.getLogger(__name__)
@@ -117,3 +118,77 @@ async def people_search(q: str = "", type: str = "trainer") -> JSONResponse:
         key=lambda r: (not r["racing_today"], -r["runner_count"], r["name"].lower()),
     )[:40]
     return JSONResponse({"results": results, "total": len(results)})
+
+
+# ── Suggestions for an empty search box ──────────────────────────────────────
+
+SUGGEST_WINDOW_DAYS = 90
+SUGGEST_LIMIT = 8
+# Horses turn over: a handful of wins takes longer to accumulate than a
+# trainer's, and a horse that stopped running in June isn't worth suggesting.
+SUGGEST_HORSE_WINDOW_DAYS = 120
+
+
+@router.get("/suggestions")
+async def search_suggestions() -> JSONResponse:
+    """Names worth tapping when the search box is empty.
+
+    Everything here is counted from our own form archive rather than a curated
+    list of famous people, so it stays true as the meets change and it can't
+    quietly go stale. Only wins are shown: the archive stores top-three
+    finishes, so a "starts" denominator would be wrong and any rate built on it
+    would be a fiction.
+    """
+    cache_key = f"people:suggestions:v1:{SUGGEST_WINDOW_DAYS}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return JSONResponse(cached)
+
+    import datetime
+
+    from sqlalchemy import text as _text
+
+    from app.core import database as _db
+
+    if not _db._AsyncSessionLocal:
+        return JSONResponse({"horses": [], "trainers": [], "jockeys": []})
+
+    async def _top(column: str, days: int, min_wins: int = 0):
+        # The cutoff is computed here rather than as CURRENT_DATE - :days:
+        # asyncpg can't infer a type for the bound integer in that expression
+        # and the comparison comes back as "date >= integer".
+        since = datetime.date.today() - datetime.timedelta(days=days)
+        sql = _text(f"""
+            SELECT {column} AS name,
+                   COUNT(*) FILTER (WHERE finish_pos = 1) AS wins,
+                   MAX(race_date) AS last_run
+            FROM horse_form_lines
+            WHERE {column} IS NOT NULL AND {column} <> ''
+              AND race_date >= :since
+            GROUP BY {column}
+            HAVING COUNT(*) FILTER (WHERE finish_pos = 1) >= :min_wins
+            ORDER BY wins DESC, last_run DESC
+            LIMIT :limit
+        """)
+        async with _db._AsyncSessionLocal() as db:
+            rows = (await db.execute(
+                sql, {"since": since, "min_wins": min_wins, "limit": SUGGEST_LIMIT}
+            )).all()
+        return [{"name": r.name, "wins": int(r.wins or 0),
+                 "last_run": r.last_run.isoformat() if r.last_run else None}
+                for r in rows if r.name]
+
+    try:
+        payload = {
+            "horses": await _top("horse_name", SUGGEST_HORSE_WINDOW_DAYS, min_wins=3),
+            "trainers": await _top("trainer", SUGGEST_WINDOW_DAYS),
+            "jockeys": await _top("jockey", SUGGEST_WINDOW_DAYS),
+            "days": SUGGEST_WINDOW_DAYS,
+            "horse_days": SUGGEST_HORSE_WINDOW_DAYS,
+        }
+    except Exception as e:  # noqa: BLE001
+        print(f"[people] suggestions failed: {type(e).__name__}: {e}")
+        return JSONResponse({"horses": [], "trainers": [], "jockeys": []})
+
+    await cache_set(cache_key, payload, ex=6 * 3600)
+    return JSONResponse(payload)

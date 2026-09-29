@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { searchHorses, searchPeople } from '../utils/api';
+import { searchHorses, searchPeople, getSearchSuggestions } from '../utils/api';
 import PageHeader from '../components/common/PageHeader';
 import { getDisplayTime } from '../components/races/RaceCard';
 import { useAppStore } from '../store';
@@ -32,10 +32,24 @@ export default function SearchPage() {
   const horses = isHorseTab ? (data?.horses ?? []) : [];
   const people = isHorseTab ? [] : (data?.results ?? []);
 
-  const handleSearch = () => {
-    const q = query.trim();
-    if (q.length >= 2) setSubmitted(q);
+  const handleSearch = (term) => {
+    const q = (typeof term === 'string' ? term : query).trim();
+    if (q.length >= 2) {
+      setQuery(q);
+      setSubmitted(q);
+    }
   };
+
+  // Names worth tapping before you've typed anything. Counted from our own form
+  // archive, so they follow the meets instead of going stale like a hand-picked
+  // list of famous stables would.
+  const { data: suggestions } = useQuery({
+    queryKey: ['search-suggestions'],
+    queryFn: getSearchSuggestions,
+    staleTime: 60 * 60 * 1000,
+  });
+  const suggested = (suggestions?.[`${tab}s`] ?? []).slice(0, 8);
+  const suggestDays = isHorseTab ? suggestions?.horse_days : suggestions?.days;
 
   const tabLabel = TABS.find((t) => t.key === tab)?.label ?? '';
 
@@ -151,6 +165,28 @@ export default function SearchPage() {
                 ? 'Search by horse name to find entries, form, trainer, and jockey'
                 : `Search ${tabLabel.toLowerCase()} by name, then tap ☆ to follow them`}
             </div>
+
+            {suggested.length > 0 && (
+              <div className="search-suggest">
+                <div className="search-suggest-title">
+                  {isHorseTab ? 'Winning most' : 'Winning most'}
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+                    {suggestDays ? ` · last ${suggestDays} days` : ''}
+                  </span>
+                </div>
+                <div className="search-suggest-list">
+                  {suggested.map((s) => (
+                    <button key={s.name} className="search-suggest-chip" onClick={() => handleSearch(s.name)}>
+                      <span className="search-suggest-name">{s.name}</span>
+                      {/* Wins only. The archive keeps top-three finishes, so a
+                          starts denominator — and any rate built on it — would
+                          be wrong. */}
+                      <span className="search-suggest-wins">{s.wins} {s.wins === 1 ? 'win' : 'wins'}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
