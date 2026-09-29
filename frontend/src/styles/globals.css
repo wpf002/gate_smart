@@ -1252,10 +1252,31 @@ select option {
 }
 
 @media (min-width: 768px) {
+  /* Stretch, not start. Cards sitting side by side at their own natural
+     heights left ragged bottoms and a black hole in the corner — the same
+     mistake as the contest page's stat tiles, in reverse. */
   .person-body {
     padding: 24px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
+    align-items: stretch;
+  }
+
+  /* Latest Winners carries three fields a line and was the card stranded in
+     one column with nothing beside it. */
+  .person-card.is-wide {
+    grid-column: 1 / -1;
+  }
+
+  /* The lists inside a stretched card share the extra height rather than
+     bunching at the top with a gap underneath. */
+  .person-card {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .person-card .person-row {
+    flex: 1;
+    align-items: center;
   }
 
   .person-figures {
@@ -1272,6 +1293,20 @@ select option {
 
   .person-figure {
     border-bottom: none;
+  }
+
+  /* Winners run two to a line on a wide screen instead of eight sparse rows. */
+  .person-card.is-wide .person-rows {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .person-card.is-wide .person-row:nth-child(odd) {
+    border-right: 1px solid var(--border-subtle);
+  }
+
+  .person-card.is-wide .person-row:nth-child(-n + 2) {
+    border-top: none;
   }
 }
 

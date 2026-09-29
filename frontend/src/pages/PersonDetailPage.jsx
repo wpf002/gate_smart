@@ -23,9 +23,9 @@ const day = (iso) => {
 };
 const titleCase = (s) => (s || '').toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 
-function Card({ title, note, children }) {
+function Card({ title, note, wide = false, children }) {
   return (
-    <div className="person-card">
+    <div className={`person-card${wide ? ' is-wide' : ''}`}>
       <div className="person-card-head">
         <span className="person-card-title">{title}</span>
         {note && <span className="person-card-note">{note}</span>}
@@ -94,31 +94,24 @@ export default function PersonDetailPage({ type }) {
                   <Figure value={data.rated.wins.toLocaleString()} label="Wins" />
                   <Figure value={data.rated.starts.toLocaleString()} label="Starts" />
                 </div>
-                <div className="person-card-foot">
-                  {data.rated.wins.toLocaleString()} wins and {data.rated.itm.toLocaleString()} in-the-money
-                  finishes from {data.rated.starts.toLocaleString()} starts, across{' '}
-                  {data.rated.horses.toLocaleString()} horses.
-                </div>
               </Card>
             )}
 
-            <Card title="Since 2024" note={data.recent.last_run ? `Last winner ${day(data.recent.last_run)}` : ''}>
+            {/* No rate on this card: the 2024 archive keeps top-three finishes,
+                so the wins are real but the losing runs were never recorded.
+                The note says so in four words rather than a paragraph. */}
+            <Card title="Since 2024" note="Wins only · top-three on file">
               <div className="person-figures">
                 <Figure value={data.recent.wins.toLocaleString()} label="Wins" highlight />
                 <Figure value={data.recent.itm.toLocaleString()} label="In The Money" />
                 <Figure value={data.recent.tracks} label="Tracks" />
                 <Figure value={data.recent.horses.toLocaleString()} label="Horses" />
               </div>
-              {/* Say why there's no rate here, rather than leaving a reader to
-                  wonder why one card has percentages and the other doesn't. */}
-              <div className="person-card-foot">
-                No win rate for this window: the archive from 2024 keeps top-three finishes only,
-                so the wins are real but the losing runs were never recorded.
-              </div>
             </Card>
 
             {data.top_tracks.length > 0 && (
               <Card title="Best Tracks" note="Since 2024">
+                <div className="person-rows">
                 {data.top_tracks.map((t, i) => (
                   <div key={t.track} className="person-row">
                     <span className="person-row-rank">{i + 1}</span>
@@ -126,22 +119,27 @@ export default function PersonDetailPage({ type }) {
                     <span className="person-row-stat">{t.wins}<span className="person-row-unit"> wins</span></span>
                   </div>
                 ))}
+                </div>
               </Card>
             )}
 
             {data.surfaces.length > 0 && (
               <Card title="Surface" note="Wins since 2024">
+                <div className="person-rows">
                 {data.surfaces.map((s) => (
                   <div key={s.surface} className="person-row">
                     <span className="person-row-name">{s.surface}</span>
                     <span className="person-row-stat">{s.wins}<span className="person-row-unit"> wins</span></span>
                   </div>
                 ))}
+                </div>
               </Card>
             )}
 
             {data.recent_winners.length > 0 && (
-              <Card title="Latest Winners">
+              <Card title="Latest Winners" wide
+                    note={data.recent.last_run ? `Last one ${day(data.recent.last_run)}` : ''}>
+                <div className="person-rows">
                 {data.recent_winners.map((w, i) => (
                   <div key={`${w.horse}-${w.date}-${i}`} className="person-row">
                     <span className="person-row-name">{w.horse}</span>
@@ -151,6 +149,7 @@ export default function PersonDetailPage({ type }) {
                     ) : null}
                   </div>
                 ))}
+                </div>
               </Card>
             )}
           </>

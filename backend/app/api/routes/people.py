@@ -258,7 +258,8 @@ async def search_suggestions() -> JSONResponse:
 #
 # A profile reads all three and labels which window each number came from. It
 # never divides a 2024+ win count by anything.
-PROFILE_RECENT_LIMIT = 8
+PROFILE_RECENT_LIMIT = 12
+PROFILE_TRACK_LIMIT = 8
 
 
 def _person_columns(person_type: str) -> tuple[str, str]:
@@ -326,14 +327,14 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
             SELECT track, COUNT(*) FILTER (WHERE finish_pos = 1) AS wins, COUNT(*) AS itm
             FROM horse_form_lines
             WHERE lower({col}) = :key
-            GROUP BY track ORDER BY wins DESC, itm DESC LIMIT 5
-        """)
+            GROUP BY track ORDER BY wins DESC, itm DESC LIMIT :tracks
+        """, tracks=PROFILE_TRACK_LIMIT)
         surfaces_q = _all(f"""
             SELECT surface, COUNT(*) FILTER (WHERE finish_pos = 1) AS wins
             FROM horse_form_lines
             WHERE lower({col}) = :key AND surface IS NOT NULL AND surface <> ''
             GROUP BY surface HAVING COUNT(*) FILTER (WHERE finish_pos = 1) > 0
-            ORDER BY wins DESC LIMIT 4
+            ORDER BY wins DESC LIMIT 6
         """)
         winners_q = _all(f"""
             SELECT horse_name, track, race_date, win_payoff
