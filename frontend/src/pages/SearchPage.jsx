@@ -163,7 +163,7 @@ export default function SearchPage() {
           // alignment, ragged rows, and no way to read the order at a glance.
           <div className="suggest-card">
             <div className="suggest-head">
-              <span className="suggest-title">Winning Most</span>
+              <span className="suggest-title">Most Wins</span>
               <span className="suggest-window">{suggestDays ? `Last ${suggestDays} days` : ''}</span>
             </div>
             {suggested.map((s, i) => (
