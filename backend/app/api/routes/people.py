@@ -277,7 +277,9 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
     if len(full) < 2:
         raise HTTPException(status_code=400, detail="name must be at least 2 characters")
 
-    cache_key = f"people:profile:v1:{person_type}:{full.lower()}"
+    # v2: more tracks, surfaces and winners per profile. The key has to move
+    # with the payload or a six-hour cache serves the old shape.
+    cache_key = f"people:profile:v2:{person_type}:{full.lower()}"
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
