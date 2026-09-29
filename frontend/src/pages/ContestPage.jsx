@@ -134,12 +134,9 @@ export default function ContestPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', gap: 10, flexShrink: 0 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>LEADERBOARD</div>
-                {sec?.win_rate !== null && sec?.win_rate !== undefined && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    Bar to beat: Secretariat <strong style={{ color: 'var(--accent-gold-bright)' }}>{(sec.win_rate * 100).toFixed(1)}%</strong> winners
-                    · last {sec.days ?? 30} days
-                  </div>
-                )}
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  Hit rate, not points — Secretariat calls every race
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                 {[['day', 'Today'], ['week', 'This Week']].map(([k, label]) => (
@@ -154,10 +151,36 @@ export default function ContestPage() {
             </div>
 
             <div className="contest-board-rows">
+            {/* The game is called Beat Secretariat, so Secretariat is on the
+                board. It has no points — it calls all ~130 races a day, so a
+                points total would bury anyone who picks a handful — and it is
+                ranked by the only thing comparable, how often its call lands. */}
+            {sec?.win_rate !== null && sec?.win_rate !== undefined && (
+              <div style={{
+                display: 'grid', gridTemplateColumns: '28px minmax(0, 1fr) auto auto',
+                gap: 10, alignItems: 'center', padding: '10px 14px',
+                background: 'rgba(201,162,39,0.07)',
+                borderBottom: '1px solid var(--border-gold)',
+              }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)' }}>S</span>
+                <span style={{ minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--accent-gold-bright)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  Secretariat
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>
+                    {sec.days ?? 30}d
+                  </span>
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  {(sec.win_rate * 100).toFixed(1)}%
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: 'var(--text-muted)', minWidth: 40, textAlign: 'right' }}>
+                  &mdash;
+                </span>
+              </div>
+            )}
             {!board?.board?.length ? (
               <div style={{ padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  No graded picks {period === 'day' ? 'today' : 'this week'} yet.
+                  Nothing graded {period === 'day' ? 'today' : 'this week'} yet. Call a race and you're on the board.
                 </span>
                 <button className="btn btn-ghost" style={{ fontSize: 12, padding: '6px 12px', flexShrink: 0 }} onClick={() => navigate('/')}>
                   Make A Pick
@@ -177,8 +200,9 @@ export default function ContestPage() {
                   <span style={{ fontSize: 14, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {row.name}{row.beat_secretariat ? <span style={{ fontSize: 11, color: 'var(--accent-gold)', marginLeft: 6 }}>beat S×{row.beat_secretariat}</span> : null}
                   </span>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                    {row.wins}/{row.picks}
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}
+                        title={`${row.wins} of ${row.picks} calls landed`}>
+                    {(row.win_rate * 100).toFixed(1)}%
                   </span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', minWidth: 40, textAlign: 'right' }}>
                     {row.points}

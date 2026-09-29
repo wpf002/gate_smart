@@ -137,12 +137,23 @@ describe('ContestPage', () => {
     expect(screen.getByText('beat S×3')).toBeInTheDocument();
   });
 
-  it('states the window the bar to beat covers', async () => {
+  it('puts Secretariat on the board as the opponent, not in a caption', async () => {
     wrap(<ContestPage />);
-    // The bar is a fixed 30-day benchmark, so it must not read as "this week".
-    expect(await screen.findByText(/last 30 days/)).toBeInTheDocument();
-    // The race count grows without bound and means nothing to a reader.
-    expect(document.body.textContent).not.toMatch(/3,338/);
+    // The game is called Beat Secretariat; with no other players it is the
+    // only thing to compete with, so it has to be a row.
+    expect(await screen.findByText('Secretariat')).toBeInTheDocument();
+    // Ranked by hit rate over its fixed 30-day window, not by points — it
+    // calls every race, so a points total would bury everyone.
+    expect(screen.getByText('26.6%')).toBeInTheDocument();
+    expect(screen.getByText('30d')).toBeInTheDocument();
+    expect(screen.getByText(/Secretariat calls every race/)).toBeInTheDocument();
+  });
+
+  it('shows each player their hit rate in the same column', async () => {
+    wrap(<ContestPage />);
+    // 3 of 6 and 2 of 5 on the fixture board.
+    expect(await screen.findByText('50.0%')).toBeInTheDocument();
+    expect(screen.getByText('40.0%')).toBeInTheDocument();
   });
 
   it('never shows an email address on the board', async () => {
