@@ -130,8 +130,8 @@ export default function ContestPage() {
           )}
 
           {/* ── Leaderboard ─────────────────────────────────── */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', gap: 10 }}>
+          <div className="contest-board" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', gap: 10, flexShrink: 0 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>LEADERBOARD</div>
                 {sec?.win_rate !== null && sec?.win_rate !== undefined && (
@@ -153,6 +153,7 @@ export default function ContestPage() {
               </div>
             </div>
 
+            <div className="contest-board-rows">
             {!board?.board?.length ? (
               <div style={{ padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
@@ -185,6 +186,7 @@ export default function ContestPage() {
                 </div>
               );
             })}
+            </div>
           </div>
 
           </div>

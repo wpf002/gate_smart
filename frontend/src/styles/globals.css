@@ -736,10 +736,15 @@ select option {
     min-height: 0;
   }
 
+  /* Flex, not height:100% on the grid — the intro line above it is a sibling,
+     and a percentage height ignored it, so the columns ran 26px past the
+     bottom of the window and the padding never showed. */
   .contest-body {
     flex: 1;
     min-height: 0;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
   }
 }
 
@@ -816,21 +821,32 @@ select option {
      the page growing with the length of the card. */
   .contest-grid {
     align-items: start;
-    height: 100%;
+    flex: 1;
     min-height: 0;
   }
 
   /* Your card and the leaderboard are both short; the race list is long. Side
      by side that left a tall empty gutter down the left of the page, so the two
-     short cards stack into one rail beside it. */
+     short cards stack into one rail and the board takes the slack, ending level
+     with the race list instead of a third of the way up it. */
   .contest-rail {
     display: flex;
     flex-direction: column;
     gap: 20px;
-    align-self: start;
-    max-height: 100%;
+    height: 100%;
     min-height: 0;
+  }
+
+  .contest-board {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .contest-board-rows {
     overflow-y: auto;
+    overscroll-behavior-y: contain;
   }
 
   /* Flex, not grid: "Today's calls" renders nothing when you've made none, so
