@@ -167,7 +167,11 @@ export default function SearchPage() {
               <span className="suggest-window">{suggestDays ? `Last ${suggestDays} days` : ''}</span>
             </div>
             {suggested.map((s, i) => (
-              <button key={s.name} className="suggest-row" onClick={() => handleSearch(s.name)}>
+              <button
+                key={s.name}
+                className="suggest-row"
+                onClick={() => (isHorseTab ? handleSearch(s.name) : navigate(`/${tab}/${encodeURIComponent(s.name)}`))}
+              >
                 <span className="suggest-rank">{i + 1}</span>
                 <span className="suggest-name">{s.name}</span>
                 {/* Wins only. The archive keeps top-three finishes, so a starts
@@ -206,14 +210,17 @@ export default function SearchPage() {
               border: '1px solid var(--border-subtle)',
             }}
           >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>{p.name}</div>
+            <button
+              onClick={() => navigate(`/${p.entity_type}/${encodeURIComponent(p.name)}`)}
+              style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer' }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>{p.name}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                 {p.runner_count > 0
                   ? `${p.runner_count} ${p.runner_count === 1 ? 'runner' : 'runners'} entered${p.racing_today ? ' · racing today' : ''}`
                   : 'No current entries'}
               </div>
-            </div>
+            </button>
             <FollowButton entityType={p.entity_type} entityLabel={p.name} entityKey={p.entity_key} size={20} />
           </div>
         ))}

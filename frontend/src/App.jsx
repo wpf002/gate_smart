@@ -16,6 +16,7 @@ import AccuracyPage from './pages/AccuracyPage';
 import WatchlistPage from './pages/WatchlistPage';
 import ContestPage from './pages/ContestPage';
 import LandingPage from './pages/LandingPage';
+import PersonDetailPage from './pages/PersonDetailPage';
 import OnboardingFlow from './components/common/OnboardingFlow';
 import { useAppStore } from './store';
 
@@ -222,6 +223,8 @@ function AppShell() {
             <Route path="/" element={<HomePage />} />
             <Route path="/race/:raceId" element={<RaceDetailPage />} />
             <Route path="/horse/:horseId" element={<HorseDetailPage />} />
+            <Route path="/trainer/:name" element={<PersonDetailPage type="trainer" />} />
+            <Route path="/jockey/:name" element={<PersonDetailPage type="jockey" />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/advisor" element={<AdvisorPage />} />
             <Route path="/education" element={<EducationPage />} />

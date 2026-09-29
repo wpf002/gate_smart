@@ -62,6 +62,9 @@ export const getHorse = (horseId) =>
 export const explainHorse = (horseId) =>
   api.get(`/horses/${horseId}/explain`).then((r) => r.data.analysis);
 
+export const getPersonProfile = (name, type) =>
+  api.get('/people/profile', { params: { name, type } }).then((r) => r.data);
+
 export const getSearchSuggestions = () =>
   api.get('/people/suggestions').then((r) => r.data);
 

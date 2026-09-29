@@ -8,6 +8,7 @@ Combines two sources:
      racing now, which is what a watchlist user cares about.
 Results are deduped by normalized name (same key the watchlist matches on).
 """
+import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException
@@ -190,5 +191,149 @@ async def search_suggestions() -> JSONResponse:
         print(f"[people] suggestions failed: {type(e).__name__}: {e}")
         return JSONResponse({"horses": [], "trainers": [], "jockeys": []})
 
+    await cache_set(cache_key, payload, ex=6 * 3600)
+    return JSONResponse(payload)
+
+
+# ── Trainer / jockey profile ─────────────────────────────────────────────────
+
+# Three archives, three different shapes, and the good one isn't the recent one:
+#
+#   horse_result_charts       2023 only, EVERY runner (42,618 races, fields to
+#                             18th) — the only table with a real start count,
+#                             so the only place a win rate can come from.
+#   horse_past_performances   2012-06 onward, per-horse PP lines carrying speed
+#                             and pace figures, class ratings and odds.
+#   horse_form_lines          2024 onward, top-three finishes only. Wins are
+#                             real; starts are not, because a loss was never
+#                             written down.
+#
+# A profile reads all three and labels which window each number came from. It
+# never divides a 2024+ win count by anything.
+PROFILE_RECENT_LIMIT = 8
+
+
+def _person_columns(person_type: str) -> tuple[str, str]:
+    """(form-archive column, chart/PP name prefix) for a person type."""
+    return ("trainer", "trainer") if person_type == "trainer" else ("jockey", "jockey")
+
+
+@router.get("/profile")
+async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
+    """Everything the three archives know about one trainer or jockey."""
+    person_type = (type or "").lower().strip()
+    if person_type not in _VALID_TYPES:
+        raise HTTPException(status_code=400, detail=f"type must be one of {_VALID_TYPES}")
+    full = (name or "").strip()
+    if len(full) < 2:
+        raise HTTPException(status_code=400, detail="name must be at least 2 characters")
+
+    cache_key = f"people:profile:v1:{person_type}:{full.lower()}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return JSONResponse(cached)
+
+    from sqlalchemy import text as _text
+
+    from app.core import database as _db
+
+    if not _db._AsyncSessionLocal:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    col, prefix = _person_columns(person_type)
+    key = full.lower()
+    chart_name = f"lower({prefix}_first || ' ' || {prefix}_last)"
+
+    async def _one(sql: str, **params):
+        async with _db._AsyncSessionLocal() as db:
+            return (await db.execute(_text(sql), {"key": key, **params})).first()
+
+    async def _all(sql: str, **params):
+        async with _db._AsyncSessionLocal() as db:
+            return (await db.execute(_text(sql), {"key": key, **params})).all()
+
+    # Five independent reads: gathered, not awaited one after another. Serially
+    # this was five round trips and the page waited for all of them end to end.
+    try:
+        # 2023: the only window with losing runs on file, so the only honest rate.
+        rated_q = _one(f"""
+            SELECT COUNT(*) AS starts,
+                   COUNT(*) FILTER (WHERE official_finish = 1) AS wins,
+                   COUNT(*) FILTER (WHERE official_finish <= 3) AS itm,
+                   COUNT(DISTINCT horse_name_key) AS horses
+            FROM horse_result_charts
+            WHERE {chart_name} = :key
+        """)
+        # 2024 onward: wins are real, starts were never recorded.
+        recent_q = _one(f"""
+            SELECT COUNT(*) FILTER (WHERE finish_pos = 1) AS wins,
+                   COUNT(*) AS itm,
+                   COUNT(DISTINCT track) AS tracks,
+                   COUNT(DISTINCT horse_name) AS horses,
+                   MIN(race_date) AS first_line, MAX(race_date) AS last_line
+            FROM horse_form_lines
+            WHERE lower({col}) = :key
+        """)
+        tracks_q = _all(f"""
+            SELECT track, COUNT(*) FILTER (WHERE finish_pos = 1) AS wins, COUNT(*) AS itm
+            FROM horse_form_lines
+            WHERE lower({col}) = :key
+            GROUP BY track ORDER BY wins DESC, itm DESC LIMIT 5
+        """)
+        surfaces_q = _all(f"""
+            SELECT surface, COUNT(*) FILTER (WHERE finish_pos = 1) AS wins
+            FROM horse_form_lines
+            WHERE lower({col}) = :key AND surface IS NOT NULL AND surface <> ''
+            GROUP BY surface HAVING COUNT(*) FILTER (WHERE finish_pos = 1) > 0
+            ORDER BY wins DESC LIMIT 4
+        """)
+        winners_q = _all(f"""
+            SELECT horse_name, track, race_date, win_payoff
+            FROM horse_form_lines
+            WHERE lower({col}) = :key AND finish_pos = 1
+            ORDER BY race_date DESC LIMIT :limit
+        """, limit=PROFILE_RECENT_LIMIT)
+        rated, recent, tracks, surfaces, winners = await asyncio.gather(
+            rated_q, recent_q, tracks_q, surfaces_q, winners_q)
+    except Exception as e:  # noqa: BLE001
+        print(f"[people] profile failed for {person_type} {full!r}: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Could not build that profile")
+
+    if not (rated and rated.starts) and not (recent and recent.itm):
+        raise HTTPException(status_code=404, detail=f"No record for {full}")
+
+    starts = int(rated.starts or 0) if rated else 0
+    wins_2023 = int(rated.wins or 0) if rated else 0
+    payload = {
+        "name": full,
+        "type": person_type,
+        "entity_key": normalize_entity(full),
+        # The rate window, stated as its own thing so it can never be read as
+        # a career figure or mixed with the 2024+ counts.
+        "rated": {
+            "season": 2023,
+            "starts": starts,
+            "wins": wins_2023,
+            "itm": int(rated.itm or 0) if rated else 0,
+            "horses": int(rated.horses or 0) if rated else 0,
+            "win_rate": round(wins_2023 / starts, 4) if starts else None,
+            "itm_rate": round(int(rated.itm or 0) / starts, 4) if starts else None,
+        } if starts else None,
+        "recent": {
+            "since": recent.first_line.isoformat() if recent and recent.first_line else None,
+            "last_run": recent.last_line.isoformat() if recent and recent.last_line else None,
+            "wins": int(recent.wins or 0) if recent else 0,
+            "itm": int(recent.itm or 0) if recent else 0,
+            "tracks": int(recent.tracks or 0) if recent else 0,
+            "horses": int(recent.horses or 0) if recent else 0,
+        },
+        "top_tracks": [{"track": r.track, "wins": int(r.wins or 0), "itm": int(r.itm or 0)}
+                       for r in tracks if r.track],
+        "surfaces": [{"surface": r.surface, "wins": int(r.wins or 0)} for r in surfaces],
+        "recent_winners": [{"horse": r.horse_name, "track": r.track,
+                            "date": r.race_date.isoformat() if r.race_date else None,
+                            "win_payoff": float(r.win_payoff) if r.win_payoff else None}
+                           for r in winners],
+    }
     await cache_set(cache_key, payload, ex=6 * 3600)
     return JSONResponse(payload)
