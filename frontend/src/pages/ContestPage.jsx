@@ -67,7 +67,7 @@ export default function ContestPage() {
   const sec = board?.secretariat;
 
   return (
-    <div>
+    <div className="contest-page">
       <PageHeader title="BEAT SECRETARIAT" subtitle="CALL ANY RACE BEFORE POST · FREE TO PLAY" />
 
       <div className="contest-body">

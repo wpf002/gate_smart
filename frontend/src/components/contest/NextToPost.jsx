@@ -57,11 +57,12 @@ export default function NextToPost({ now = Date.now() }) {
   if (!races.length) return null;
 
   return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
+    <div className="next-to-post" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>NEXT TO POST</span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Pick before the gate opens</span>
       </div>
+      <div className="next-to-post-list">
       {races.map((race, i) => {
         const { time, abbr } = formatRaceTime(race.off_dt, timezone);
         const minutes = Math.round((new Date(race.off_dt).getTime() - now) / 60000);
@@ -94,6 +95,7 @@ export default function NextToPost({ now = Date.now() }) {
           </button>
         );
       })}
+      </div>
     </div>
   );
 }
