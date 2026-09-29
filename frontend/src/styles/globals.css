@@ -1108,56 +1108,114 @@ select option {
   padding: 3px 8px;
 }
 
-/* Suggested names under an empty search box. Counted from the form archive,
-   so they follow the meets rather than going stale like a hand-picked list. */
-.search-suggest {
-  margin-top: 22px;
-  text-align: left;
-  max-width: 560px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.search-suggest-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
-.search-suggest-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.search-suggest-chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 7px 11px;
-  font-size: 13px;
-  color: var(--text-primary);
+/* Suggested names under an empty search box. Counted from the form archive, so
+   they follow the meets rather than going stale like a hand-picked list. Built
+   as a ranked card — same shape as Next To Post and the leaderboard — because
+   chips floating under a centred icon gave mixed alignment, ragged rows and no
+   readable order. */
+.suggest-card {
+  margin-top: 16px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.suggest-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.suggest-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--accent-gold);
+}
+
+.suggest-window {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Flex, not a grid with a 1fr name column: right-aligning the win count put it
+   a thousand pixels from the name it belonged to on a wide screen. Rank, name
+   and wins read as one group; only the arrow goes to the far edge. */
+.suggest-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  width: 100%;
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  text-align: left;
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: background 0.12s ease;
 }
 
-.search-suggest-chip:hover {
-  border-color: var(--border-gold);
-  background: rgba(201, 162, 39, 0.08);
+.suggest-row:first-of-type {
+  border-top: none;
 }
 
-.search-suggest-name {
-  font-weight: 600;
+.suggest-row:hover {
+  background: rgba(201, 162, 39, 0.06);
 }
 
-.search-suggest-wins {
+.suggest-rank {
+  flex-shrink: 0;
+  width: 16px;
   font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.suggest-row:hover .suggest-rank {
+  color: var(--accent-gold);
+}
+
+.suggest-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggest-wins {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.suggest-wins-unit {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.suggest-go {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.suggest-row:hover .suggest-go {
+  color: var(--accent-gold);
+}
+
+.suggest-foot {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
   font-size: 11px;
   color: var(--text-muted);
 }

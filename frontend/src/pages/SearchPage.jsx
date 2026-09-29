@@ -157,7 +157,32 @@ export default function SearchPage() {
           </div>
         )}
 
-        {!submitted && (
+        {!submitted && (suggested.length > 0 ? (
+          // A ranked card, the same shape as Next To Post and the leaderboard.
+          // Chips floating under a centred icon fought the page: mixed
+          // alignment, ragged rows, and no way to read the order at a glance.
+          <div className="suggest-card">
+            <div className="suggest-head">
+              <span className="suggest-title">Winning Most</span>
+              <span className="suggest-window">{suggestDays ? `Last ${suggestDays} days` : ''}</span>
+            </div>
+            {suggested.map((s, i) => (
+              <button key={s.name} className="suggest-row" onClick={() => handleSearch(s.name)}>
+                <span className="suggest-rank">{i + 1}</span>
+                <span className="suggest-name">{s.name}</span>
+                {/* Wins only. The archive keeps top-three finishes, so a starts
+                    denominator — and any rate built on it — would be wrong. */}
+                <span className="suggest-wins">{s.wins}<span className="suggest-wins-unit"> {s.wins === 1 ? 'win' : 'wins'}</span></span>
+                <span className="suggest-go">→</span>
+              </button>
+            ))}
+            <div className="suggest-foot">
+              {isHorseTab
+                ? 'Or search any horse by name for entries, form, trainer and jockey'
+                : `Or search any ${tabLabel.toLowerCase().replace(/s$/, '')} by name, then tap ☆ to follow them`}
+            </div>
+          </div>
+        ) : (
           <div className="search-empty">
             <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="search" size={40} /></div>
             <div className="search-tagline" style={{ fontSize: 13 }}>
@@ -165,30 +190,8 @@ export default function SearchPage() {
                 ? 'Search by horse name to find entries, form, trainer, and jockey'
                 : `Search ${tabLabel.toLowerCase()} by name, then tap ☆ to follow them`}
             </div>
-
-            {suggested.length > 0 && (
-              <div className="search-suggest">
-                <div className="search-suggest-title">
-                  {isHorseTab ? 'Winning most' : 'Winning most'}
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-                    {suggestDays ? ` · last ${suggestDays} days` : ''}
-                  </span>
-                </div>
-                <div className="search-suggest-list">
-                  {suggested.map((s) => (
-                    <button key={s.name} className="search-suggest-chip" onClick={() => handleSearch(s.name)}>
-                      <span className="search-suggest-name">{s.name}</span>
-                      {/* Wins only. The archive keeps top-three finishes, so a
-                          starts denominator — and any rate built on it — would
-                          be wrong. */}
-                      <span className="search-suggest-wins">{s.wins} {s.wins === 1 ? 'win' : 'wins'}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
-        )}
+        ))}
 
         {/* Trainer / jockey results */}
         {people.map((p) => (
