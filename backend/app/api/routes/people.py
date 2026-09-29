@@ -298,8 +298,8 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
     if len(full) < 2:
         raise HTTPException(status_code=400, detail="name must be at least 2 characters")
 
-    # v3: two comparable windows, and jockeys reach back to 2012.
-    cache_key = f"people:profile:v3:{person_type}:{full.lower()}"
+    # v4: adds the Pro analysis record (real starts, a/e, level-stake P/L).
+    cache_key = f"people:profile:v4:{person_type}:{full.lower()}"
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
@@ -400,6 +400,15 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
         print(f"[people] profile failed for {person_type} {full!r}: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail="Could not build that profile")
 
+    # The Pro analysis endpoints are the only source of a true start count for
+    # a US trainer or jockey, and they bring a/e and level-stake profit with it.
+    # A failure here must not take the profile down with it.
+    try:
+        live_form = await racing_api.get_person_form(full, person_type)
+    except Exception as e:  # noqa: BLE001
+        print(f"[people] live form unavailable for {full!r}: {type(e).__name__}: {e}")
+        live_form = None
+
     def _n(row, field):
         return int(getattr(row, field, 0) or 0) if row else 0
 
@@ -433,6 +442,9 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
         "type": person_type,
         "entity_key": normalize_entity(full),
         "season": datetime.date.today().year,
+        # Rolling 12 months from the feed, so it's labelled as recent form
+        # rather than a career record.
+        "form": live_form,
         "prior": prior,
         "current": {
             "wins": _n(season, "wins"),

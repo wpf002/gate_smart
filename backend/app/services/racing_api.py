@@ -1,9 +1,10 @@
 """
-The Racing API client — Standard plan.
+The Racing API client — Pro plan, plus the North America data add-on.
 Endpoint docs: https://api.theracingapi.com
 Rate limit: 5 req/sec. Redis caching keeps us well within this.
 """
 import contextvars
+import re
 
 import httpx
 from fastapi import HTTPException
@@ -1158,9 +1159,101 @@ async def search_trainers(name: str) -> dict:
     )
 
 
-async def get_jockey(jockey_id: str) -> dict:
-    raise HTTPException(status_code=402, detail="Jockey profile requires Pro plan")
+# ── Person form, from the Pro analysis endpoints ─────────────────────────────
+#
+# These carry USA races even though the core racecards and results do not, so a
+# US trainer or jockey has real numbers here: runners, the finish spread, win %,
+# actual-vs-expected, and £1 level-stake profit. They are the only place we can
+# get a true start count, which is what the form archive has never had.
+#
+# The window is the plan's rolling 12 months. A sample of 172 Flavien Prat rides
+# came back entirely 2025-2026, so treat every figure as recent form and label
+# it that way — it is not a career record.
+
+PERSON_FORM_TTL = 24 * 3600  # people's numbers move slowly; the card does not
 
 
-async def get_trainer(trainer_id: str) -> dict:
-    raise HTTPException(status_code=402, detail="Trainer profile requires Pro plan")
+async def find_person_id(name: str, person_type: str) -> str | None:
+    """The API's own id for a trainer or jockey, matched on exact name first."""
+    if not name or person_type not in ("trainer", "jockey"):
+        return None
+    try:
+        data = await (search_trainers(name) if person_type == "trainer" else search_jockeys(name))
+    except Exception:
+        return None
+    rows = (data or {}).get("search_results") or []
+    target = name.strip().lower()
+
+    def _tokens(v: str) -> set[str]:
+        # The API writes "Chad C Brown" where a card says "Chad Brown", and
+        # suffixes drift ("Jr" vs "Jr."). Compare on the words, so a middle
+        # initial on either side doesn't lose the match.
+        return {t for t in re.split(r"[^a-z]+", (v or "").lower()) if len(t) > 1}
+
+    exact = next((r for r in rows if (r.get("name") or "").strip().lower() == target), None)
+    if exact:
+        return exact.get("id")
+    want = _tokens(name)
+    if not want:
+        return None
+    # Every word of the query has to appear, so "Chad Brown" reaches
+    # "Chad C Brown" but never "Chad Summers".
+    loose = next((r for r in rows if want <= _tokens(r.get("name"))), None)
+    return (loose or {}).get("id") if loose else None
+
+
+async def get_person_analysis(person_id: str, person_type: str, facet: str = "courses") -> dict:
+    """Raw analysis payload: per-facet runners, finishes, win %, a/e and P/L."""
+    group = "trainers" if person_type == "trainer" else "jockeys"
+    return await _get(
+        f"/{group}/{person_id}/analysis/{facet}",
+        cache_key=f"person_analysis:{group}:{person_id}:{facet}",
+        ttl=PERSON_FORM_TTL,
+    )
+
+
+def summarise_person_analysis(payload: dict) -> dict | None:
+    """Roll a courses breakdown up into one headline record.
+
+    a/e is weighted by runners — averaging the per-course figures would let a
+    single ride at an outlying track count as much as two hundred.
+    """
+    if not payload:
+        return None
+    rows = payload.get("courses") or []
+    total = payload.get("total_runners") or payload.get("total_rides") or 0
+    if not rows or not total:
+        return None
+    starts = sum(int(r.get("runners") or r.get("rides") or 0) for r in rows)
+    wins = sum(int(r.get("1st") or 0) for r in rows)
+    placed = sum(int(r.get("1st") or 0) + int(r.get("2nd") or 0) + int(r.get("3rd") or 0) for r in rows)
+    profit = sum(float(r.get("1_pl") or 0) for r in rows)
+    ae_num = sum(float(r.get("a/e") or 0) * int(r.get("runners") or r.get("rides") or 0) for r in rows)
+    if not starts:
+        return None
+    return {
+        "starts": starts,
+        "wins": wins,
+        "win_rate": round(wins / starts, 4),
+        "itm_rate": round(placed / starts, 4),
+        "ae": round(ae_num / starts, 2) if starts else None,
+        "profit_per_unit": round(profit / starts, 3),
+        "total_profit": round(profit, 2),
+    }
+
+
+async def get_person_form(name: str, person_type: str) -> dict | None:
+    """Recent-form record for one trainer or jockey, or None if unmatched."""
+    person_id = await find_person_id(name, person_type)
+    if not person_id:
+        return None
+    try:
+        payload = await get_person_analysis(person_id, person_type, "courses")
+    except Exception:
+        return None
+    summary = summarise_person_analysis(payload)
+    if not summary:
+        return None
+    summary["id"] = person_id
+    summary["name"] = payload.get("trainer") or payload.get("jockey") or name
+    return summary

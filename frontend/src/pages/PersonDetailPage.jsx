@@ -124,14 +124,35 @@ export default function PersonDetailPage({ type }) {
               </Card>
             </div>
 
-            {/* The one season with every runner on file, so the one place a
-                rate has a denominator. Its own strip, clearly dated. */}
+            {/* Recent form from the feed's analysis endpoints: a real start
+                count, actual-vs-expected, and what a flat unit on every runner
+                returned. The window is the plan's rolling 12 months, so it says
+                "recent form" and not a career record. */}
+            {data.form && (
+              <Card title="Recent Form" note={`${n(data.form.starts)} starts · last 12 months`}>
+                <Figures items={[
+                  { value: pct(data.form.win_rate), label: 'Win Rate', gold: true },
+                  { value: pct(data.form.itm_rate), label: 'In The Money' },
+                  { value: data.form.ae ?? '—', label: 'Actual / Expected' },
+                  {
+                    value: data.form.profit_per_unit === null || data.form.profit_per_unit === undefined
+                      ? '—'
+                      : `${data.form.profit_per_unit >= 0 ? '+' : '−'}${Math.abs(data.form.profit_per_unit).toFixed(2)}`,
+                    label: 'Profit / Unit',
+                  },
+                ]} />
+              </Card>
+            )}
+
+            {/* The one season on file with every runner, so the one place our
+                own archive can put a denominator behind a rate. */}
             {data.prior.rated_season && (
               <div className="person-rate">
                 <span className="person-rate-value">{pct(data.prior.rated_win_rate)}</span>
                 <span className="person-rate-label">
                   win rate in {data.prior.rated_season} — {n(data.prior.rated_wins)} from{' '}
-                  {n(data.prior.rated_starts)} starts, the one season with every run on file
+                  {n(data.prior.rated_starts)} starts, the one season in our own archive with
+                  every run on file
                 </span>
               </div>
             )}

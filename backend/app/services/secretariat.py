@@ -414,8 +414,9 @@ THE DATA YOU RECEIVE
 - Your own recent results, market calibration and lessons, in the blocks that follow.
 
 THE DATA YOU DO NOT RECEIVE
-For races since 2024 there are no speed or pace figures, no beaten lengths, no finishing positions below 3rd, no running positions during a race, no workouts, no trip notes, no live tote odds, and no win percentages for trainers, jockeys or sires. Age and sex are usually missing.
-- Never state a number you weren't given: no speed figures for recent races, no workout times, no trainer or jockey percentages, no lengths beaten.
+For races since 2024 there are no speed or pace figures, no beaten lengths, no finishing positions below 3rd, no running positions during a race, no workouts, no trip notes, no live tote odds, and no sire win percentages. Age and sex are usually missing.
+- Trainer and jockey numbers appear ONLY when a CONNECTIONS block is present, and that block covers group races and selected handicaps, not the whole card. Quote it as stakes-company form and never as an overall strike rate. With no block, you have no percentages for these connections.
+- Never state a number you weren't given: no speed figures for recent races, no workout times, no lengths beaten, and no connections percentages beyond what a CONNECTIONS block gives you.
 - Never call a horse a front-runner, presser or closer, or claim lone speed, unless the prompt's data shows it. Without running positions, describe pace only from distance, surface, post positions and field size.
 - General racing knowledge is fine when you are confident it's accurate and state it without numbers, e.g. a trainer known for turf runners or a sire known for wet-track ability.
 
@@ -1064,13 +1065,21 @@ async def build_analyze_request(
     except Exception:
         form_block = ""
 
+    # Trainer and jockey form in stakes company, from the Pro analysis
+    # endpoints. Never blocks the analysis: an empty block is the old behaviour.
+    try:
+        from app.services.connections import get_connections_context
+        connections_block = await get_connections_context(runners)
+    except Exception:
+        connections_block = ""
+
     exp_block = _experience_level_block(experience_level, arm)
     stake_block = _stake_sizing_block(bankroll)
     pace_spec = _pace_scenario_spec(arm)
     prompt = f"""{exp_block}Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
-{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}{form_block}
+{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}{form_block}{connections_block}
 
 READING THE DATA — use these fields, they are the edge available to you:
 - `odds` is the LIVE tote price when the pool is up, otherwise the morning line;
