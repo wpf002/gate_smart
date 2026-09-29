@@ -5,27 +5,31 @@ import PageHeader from '../components/common/PageHeader';
 import FollowButton from '../components/common/FollowButton';
 
 /**
- * A trainer or jockey, read from all three archives.
+ * A trainer or jockey.
  *
- * The windows are kept apart on purpose. 2023 is the only season where every
- * runner was recorded, so it is the only place a win rate can come from — the
- * 2024-onward archive keeps top-three finishes, meaning its wins are real but
- * its starts were never written down. Dividing one by the other would invent a
- * number, so the page shows the rate for 2023 and counts for everything since,
- * each labelled with where it came from.
+ * Two windows, the same four measures on each, so the cards read against each
+ * other: everything before this year, and this year. Only the 2023 charts
+ * recorded losing runs, so that season's win rate is the one figure that can be
+ * quoted, and it gets its own strip rather than sitting in a card as though it
+ * covered the same span. Everything else is counts.
+ *
+ * Only the two summary cards sit side by side — four tiles each, so they are
+ * the same height by construction. Lists run full width: pairing an eight-row
+ * card with a four-row one is what put a hole in the corner.
  */
 
 const pct = (v) => (v === null || v === undefined ? '—' : `${(v * 100).toFixed(1)}%`);
+const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const day = (iso) => {
   if (!iso) return '';
   const [y, m, d] = iso.split('-');
-  return `${['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m]} ${+d} ${y}`;
+  return `${MONTHS[+m]} ${+d} ${y}`;
 };
 const titleCase = (s) => (s || '').toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 
-function Card({ title, note, wide = false, children }) {
+function Card({ title, note, children }) {
   return (
-    <div className={`person-card${wide ? ' is-wide' : ''}`}>
+    <div className="person-card">
       <div className="person-card-head">
         <span className="person-card-title">{title}</span>
         {note && <span className="person-card-note">{note}</span>}
@@ -35,11 +39,15 @@ function Card({ title, note, wide = false, children }) {
   );
 }
 
-function Figure({ value, label, highlight = false }) {
+function Figures({ items }) {
   return (
-    <div className="person-figure">
-      <div className={`person-figure-value${highlight ? ' is-gold' : ''}`}>{value}</div>
-      <div className="person-figure-label">{label}</div>
+    <div className="person-figures">
+      {items.map(({ value, label, gold }) => (
+        <div className="person-figure" key={label}>
+          <div className={`person-figure-value${gold ? ' is-gold' : ''}`}>{value}</div>
+          <div className="person-figure-label">{label}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -57,6 +65,7 @@ export default function PersonDetailPage({ type }) {
   });
 
   const notFound = isError && error?.response?.status === 404;
+  const n = (v) => (v ?? 0).toLocaleString();
 
   return (
     <div>
@@ -86,69 +95,86 @@ export default function PersonDetailPage({ type }) {
 
         {data && (
           <>
-            {data.rated && (
-              <Card title={`${data.rated.season} Season`} note="Every start on file">
-                <div className="person-figures">
-                  <Figure value={pct(data.rated.win_rate)} label="Win Rate" highlight />
-                  <Figure value={pct(data.rated.itm_rate)} label="In The Money" />
-                  <Figure value={data.rated.wins.toLocaleString()} label="Wins" />
-                  <Figure value={data.rated.starts.toLocaleString()} label="Starts" />
-                </div>
+            <div className="person-split">
+              {/* "First on file" is where our records start, not where the
+                  career did — the feed's person endpoints aren't on our plan,
+                  so there's no birth date and no true career start to show. */}
+              <Card
+                title={`Before ${data.season}`}
+                note={data.prior.first_run ? `First on file ${day(data.prior.first_run)}` : ''}
+              >
+                <Figures items={[
+                  { value: n(data.prior.wins), label: 'Wins', gold: true },
+                  { value: n(data.prior.itm), label: 'In The Money' },
+                  { value: n(data.prior.tracks), label: 'Tracks' },
+                  { value: n(data.prior.horses), label: 'Horses' },
+                ]} />
               </Card>
+
+              <Card
+                title={String(data.season)}
+                note={data.current.last_run ? `Last winner ${day(data.current.last_run)}` : 'No winners yet'}
+              >
+                <Figures items={[
+                  { value: n(data.current.wins), label: 'Wins', gold: true },
+                  { value: n(data.current.itm), label: 'In The Money' },
+                  { value: n(data.current.tracks), label: 'Tracks' },
+                  { value: n(data.current.horses), label: 'Horses' },
+                ]} />
+              </Card>
+            </div>
+
+            {/* The one season with every runner on file, so the one place a
+                rate has a denominator. Its own strip, clearly dated. */}
+            {data.prior.rated_season && (
+              <div className="person-rate">
+                <span className="person-rate-value">{pct(data.prior.rated_win_rate)}</span>
+                <span className="person-rate-label">
+                  win rate in {data.prior.rated_season} — {n(data.prior.rated_wins)} from{' '}
+                  {n(data.prior.rated_starts)} starts, the one season with every run on file
+                </span>
+              </div>
             )}
 
-            {/* No rate on this card: the 2024 archive keeps top-three finishes,
-                so the wins are real but the losing runs were never recorded.
-                The note says so in four words rather than a paragraph. */}
-            <Card title="Since 2024" note="Wins only · top-three on file">
-              <div className="person-figures">
-                <Figure value={data.recent.wins.toLocaleString()} label="Wins" highlight />
-                <Figure value={data.recent.itm.toLocaleString()} label="In The Money" />
-                <Figure value={data.recent.tracks} label="Tracks" />
-                <Figure value={data.recent.horses.toLocaleString()} label="Horses" />
-              </div>
-            </Card>
-
             {data.top_tracks.length > 0 && (
-              <Card title="Best Tracks" note="Since 2024">
-                <div className="person-rows">
-                {data.top_tracks.map((t, i) => (
-                  <div key={t.track} className="person-row">
-                    <span className="person-row-rank">{i + 1}</span>
-                    <span className="person-row-name">{titleCase(t.track)}</span>
-                    <span className="person-row-stat">{t.wins}<span className="person-row-unit"> wins</span></span>
-                  </div>
-                ))}
+              <Card title="Best Tracks" note="Wins since 2024">
+                <div className="person-rows is-split">
+                  {data.top_tracks.map((t, i) => (
+                    <div key={t.track} className="person-row">
+                      <span className="person-row-rank">{i + 1}</span>
+                      <span className="person-row-name">{titleCase(t.track)}</span>
+                      <span className="person-row-stat">{t.wins}<span className="person-row-unit"> wins</span></span>
+                    </div>
+                  ))}
                 </div>
               </Card>
             )}
 
             {data.surfaces.length > 0 && (
               <Card title="Surface" note="Wins since 2024">
-                <div className="person-rows">
-                {data.surfaces.map((s) => (
-                  <div key={s.surface} className="person-row">
-                    <span className="person-row-name">{s.surface}</span>
-                    <span className="person-row-stat">{s.wins}<span className="person-row-unit"> wins</span></span>
-                  </div>
-                ))}
+                <div className="person-rows is-split">
+                  {data.surfaces.map((s) => (
+                    <div key={s.surface} className="person-row">
+                      <span className="person-row-name">{s.surface}</span>
+                      <span className="person-row-stat">{s.wins}<span className="person-row-unit"> wins</span></span>
+                    </div>
+                  ))}
                 </div>
               </Card>
             )}
 
             {data.recent_winners.length > 0 && (
-              <Card title="Latest Winners" wide
-                    note={data.recent.last_run ? `Last one ${day(data.recent.last_run)}` : ''}>
-                <div className="person-rows">
-                {data.recent_winners.map((w, i) => (
-                  <div key={`${w.horse}-${w.date}-${i}`} className="person-row">
-                    <span className="person-row-name">{w.horse}</span>
-                    <span className="person-row-sub">{titleCase(w.track)} · {day(w.date)}</span>
-                    {w.win_payoff ? (
-                      <span className="person-row-stat">${w.win_payoff.toFixed(2)}</span>
-                    ) : null}
-                  </div>
-                ))}
+              <Card title="Latest Winners" note="$2 win payoff">
+                <div className="person-rows is-split">
+                  {data.recent_winners.map((w, i) => (
+                    <div key={`${w.horse}-${w.date}-${i}`} className="person-row">
+                      <span className="person-row-name">{w.horse}</span>
+                      <span className="person-row-sub">{titleCase(w.track)} · {day(w.date)}</span>
+                      {w.win_payoff ? (
+                        <span className="person-row-stat">${w.win_payoff.toFixed(2)}</span>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
               </Card>
             )}

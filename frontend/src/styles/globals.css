@@ -1150,11 +1150,37 @@ select option {
   text-align: right;
 }
 
-.person-card-foot {
-  padding: 10px 14px;
-  border-top: 1px solid var(--border-subtle);
-  font-size: 11px;
-  line-height: 1.5;
+/* The two summary cards, and only those, sit side by side: four tiles each, so
+   they match height by construction rather than by stretching. */
+.person-split {
+  display: grid;
+  gap: 12px;
+}
+
+/* The 2023 rate gets its own strip. In a card beside the others it read as if
+   it covered the same span, which it doesn't — it's the one season with every
+   run on file. */
+.person-rate {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(201, 162, 39, 0.07);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-md);
+}
+
+.person-rate-value {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent-gold-bright);
+}
+
+.person-rate-label {
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--text-muted);
 }
 
@@ -1203,7 +1229,7 @@ select option {
   border-top: 1px solid var(--border-subtle);
 }
 
-.person-row:first-of-type {
+.person-rows > .person-row:first-child {
   border-top: none;
 }
 
@@ -1252,35 +1278,22 @@ select option {
 }
 
 @media (min-width: 768px) {
-  /* Stretch, not start. Cards sitting side by side at their own natural
-     heights left ragged bottoms and a black hole in the corner — the same
-     mistake as the contest page's stat tiles, in reverse. */
   .person-body {
     padding: 24px;
+    gap: 16px;
+  }
+
+  .person-split {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: stretch;
-  }
-
-  /* Latest Winners carries three fields a line and was the card stranded in
-     one column with nothing beside it. */
-  .person-card.is-wide {
-    grid-column: 1 / -1;
-  }
-
-  /* The lists inside a stretched card share the extra height rather than
-     bunching at the top with a gap underneath. */
-  .person-card {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .person-card .person-row {
-    flex: 1;
-    align-items: center;
+    gap: 16px;
   }
 
   .person-figures {
     grid-template-columns: repeat(4, 1fr);
+  }
+
+  .person-figure {
+    border-bottom: none;
   }
 
   .person-figure:nth-child(odd) {
@@ -1291,21 +1304,17 @@ select option {
     border-right: 1px solid var(--border-subtle);
   }
 
-  .person-figure {
-    border-bottom: none;
-  }
-
-  /* Winners run two to a line on a wide screen instead of eight sparse rows. */
-  .person-card.is-wide .person-rows {
+  /* Full-width lists run two to a line rather than one long sparse column. */
+  .person-rows.is-split {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .person-card.is-wide .person-row:nth-child(odd) {
+  .person-rows.is-split > .person-row:nth-child(odd) {
     border-right: 1px solid var(--border-subtle);
   }
 
-  .person-card.is-wide .person-row:nth-child(-n + 2) {
+  .person-rows.is-split > .person-row:nth-child(-n + 2) {
     border-top: none;
   }
 }

@@ -269,7 +269,28 @@ def _person_columns(person_type: str) -> tuple[str, str]:
 
 @router.get("/profile")
 async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
-    """Everything the three archives know about one trainer or jockey."""
+    """One trainer or jockey, read from every archive that can speak for them.
+
+    Two windows, the same four measures on each, so the cards compare:
+    everything before this year, and this year.
+
+    Which archives feed which:
+
+      jockeys   past performances (2012+, `pp_jockey_*` is the rider in that
+                run — it agrees with the authoritative 2023 chart on 94% of the
+                266,841 runs in both), plus charts and form lines.
+      trainers  charts (2023) and form lines (2024+) only. Past performances
+                has no per-run trainer column; its `trainer_*` sits in the card
+                block beside the card-level `jockey_*`, which agrees with the
+                chart just 45% of the time. Trainers look better at 82% only
+                because trainers rarely change, so crediting those runs would
+                quietly misattribute the ones that did.
+
+    No age and no career start: the feed's person endpoints are not on our plan
+    (404 and 401), and nothing on file carries a birth date. "First on file" is
+    the date our records begin, which is not when the career did, and the page
+    says so in those words.
+    """
     person_type = (type or "").lower().strip()
     if person_type not in _VALID_TYPES:
         raise HTTPException(status_code=400, detail=f"type must be one of {_VALID_TYPES}")
@@ -277,12 +298,13 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
     if len(full) < 2:
         raise HTTPException(status_code=400, detail="name must be at least 2 characters")
 
-    # v2: more tracks, surfaces and winners per profile. The key has to move
-    # with the payload or a six-hour cache serves the old shape.
-    cache_key = f"people:profile:v2:{person_type}:{full.lower()}"
+    # v3: two comparable windows, and jockeys reach back to 2012.
+    cache_key = f"people:profile:v3:{person_type}:{full.lower()}"
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
+
+    import datetime
 
     from sqlalchemy import text as _text
 
@@ -293,7 +315,9 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
 
     col, prefix = _person_columns(person_type)
     key = full.lower()
+    year_start = datetime.date(datetime.date.today().year, 1, 1)
     chart_name = f"lower({prefix}_first || ' ' || {prefix}_last)"
+    is_jockey = person_type == "jockey"
 
     async def _one(sql: str, **params):
         async with _db._AsyncSessionLocal() as db:
@@ -303,28 +327,49 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
         async with _db._AsyncSessionLocal() as db:
             return (await db.execute(_text(sql), {"key": key, **params})).all()
 
-    # Five independent reads: gathered, not awaited one after another. Serially
-    # this was five round trips and the page waited for all of them end to end.
     try:
-        # 2023: the only window with losing runs on file, so the only honest rate.
-        rated_q = _one(f"""
+        # 2023, every runner on file — the only window with a real denominator.
+        chart_q = _one(f"""
             SELECT COUNT(*) AS starts,
                    COUNT(*) FILTER (WHERE official_finish = 1) AS wins,
                    COUNT(*) FILTER (WHERE official_finish <= 3) AS itm,
-                   COUNT(DISTINCT horse_name_key) AS horses
+                   COUNT(DISTINCT horse_name_key) AS horses,
+                   COUNT(DISTINCT track_code) AS tracks,
+                   MIN(race_date) AS first_run
             FROM horse_result_charts
             WHERE {chart_name} = :key
         """)
-        # 2024 onward: wins are real, starts were never recorded.
-        recent_q = _one(f"""
+        # Form lines, split either side of January 1.
+        prior_form_q = _one(f"""
             SELECT COUNT(*) FILTER (WHERE finish_pos = 1) AS wins,
                    COUNT(*) AS itm,
                    COUNT(DISTINCT track) AS tracks,
                    COUNT(DISTINCT horse_name) AS horses,
-                   MIN(race_date) AS first_line, MAX(race_date) AS last_line
+                   MIN(race_date) AS first_run
             FROM horse_form_lines
-            WHERE lower({col}) = :key
-        """)
+            WHERE lower({col}) = :key AND race_date < :year_start
+        """, year_start=year_start)
+        season_q = _one(f"""
+            SELECT COUNT(*) FILTER (WHERE finish_pos = 1) AS wins,
+                   COUNT(*) AS itm,
+                   COUNT(DISTINCT track) AS tracks,
+                   COUNT(DISTINCT horse_name) AS horses,
+                   MAX(race_date) AS last_run
+            FROM horse_form_lines
+            WHERE lower({col}) = :key AND race_date >= :year_start
+        """, year_start=year_start)
+        # Jockeys only: the rides the charts and form lines never saw.
+        pp_q = _one("""
+            SELECT COUNT(*) AS starts,
+                   COUNT(*) FILTER (WHERE official_finish = 1) AS wins,
+                   COUNT(*) FILTER (WHERE official_finish <= 3) AS itm,
+                   COUNT(DISTINCT horse_name_key) AS horses,
+                   COUNT(DISTINCT pp_track_code) AS tracks,
+                   MIN(pp_race_date) AS first_run
+            FROM horse_past_performances
+            WHERE lower(pp_jockey_first || ' ' || pp_jockey_last) = :key
+              AND pp_race_date < '2023-01-01'
+        """) if is_jockey else None
         tracks_q = _all(f"""
             SELECT track, COUNT(*) FILTER (WHERE finish_pos = 1) AS wins, COUNT(*) AS itm
             FROM horse_form_lines
@@ -344,39 +389,57 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
             WHERE lower({col}) = :key AND finish_pos = 1
             ORDER BY race_date DESC LIMIT :limit
         """, limit=PROFILE_RECENT_LIMIT)
-        rated, recent, tracks, surfaces, winners = await asyncio.gather(
-            rated_q, recent_q, tracks_q, surfaces_q, winners_q)
+
+        queries = [chart_q, prior_form_q, season_q, tracks_q, surfaces_q, winners_q]
+        if pp_q is not None:
+            queries.append(pp_q)
+        results = await asyncio.gather(*queries)
+        chart, prior_form, season, tracks, surfaces, winners = results[:6]
+        pp = results[6] if pp_q is not None else None
     except Exception as e:  # noqa: BLE001
         print(f"[people] profile failed for {person_type} {full!r}: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail="Could not build that profile")
 
-    if not (rated and rated.starts) and not (recent and recent.itm):
+    def _n(row, field):
+        return int(getattr(row, field, 0) or 0) if row else 0
+
+    prior_wins = _n(pp, "wins") + _n(chart, "wins") + _n(prior_form, "wins")
+    prior_itm = _n(pp, "itm") + _n(chart, "itm") + _n(prior_form, "itm")
+    if not prior_wins and not _n(season, "itm") and not prior_itm:
         raise HTTPException(status_code=404, detail=f"No record for {full}")
 
-    starts = int(rated.starts or 0) if rated else 0
-    wins_2023 = int(rated.wins or 0) if rated else 0
+    firsts = [getattr(r, "first_run", None) for r in (pp, chart, prior_form) if r]
+    firsts = [str(d) for d in firsts if d]
+    # Tracks and horses can't be summed across archives without double counting
+    # the same track or horse, so each window reports the widest single archive
+    # rather than a total that would be too high.
+    prior = {
+        "wins": prior_wins,
+        "itm": prior_itm,
+        # distinct counts don't add up across archives; take the largest seen
+        "tracks": max(_n(pp, "tracks"), _n(chart, "tracks"), _n(prior_form, "tracks")),
+        "horses": max(_n(pp, "horses"), _n(chart, "horses"), _n(prior_form, "horses")),
+        "first_run": min(firsts) if firsts else None,
+        # 2023 is the one season with losing runs on file, so its rate is the
+        # only one that can be quoted, and it's labelled as that season alone.
+        "rated_season": 2023 if _n(chart, "starts") else None,
+        "rated_starts": _n(chart, "starts"),
+        "rated_wins": _n(chart, "wins"),
+        "rated_win_rate": (round(_n(chart, "wins") / _n(chart, "starts"), 4)
+                           if _n(chart, "starts") else None),
+    }
     payload = {
         "name": full,
         "type": person_type,
         "entity_key": normalize_entity(full),
-        # The rate window, stated as its own thing so it can never be read as
-        # a career figure or mixed with the 2024+ counts.
-        "rated": {
-            "season": 2023,
-            "starts": starts,
-            "wins": wins_2023,
-            "itm": int(rated.itm or 0) if rated else 0,
-            "horses": int(rated.horses or 0) if rated else 0,
-            "win_rate": round(wins_2023 / starts, 4) if starts else None,
-            "itm_rate": round(int(rated.itm or 0) / starts, 4) if starts else None,
-        } if starts else None,
-        "recent": {
-            "since": recent.first_line.isoformat() if recent and recent.first_line else None,
-            "last_run": recent.last_line.isoformat() if recent and recent.last_line else None,
-            "wins": int(recent.wins or 0) if recent else 0,
-            "itm": int(recent.itm or 0) if recent else 0,
-            "tracks": int(recent.tracks or 0) if recent else 0,
-            "horses": int(recent.horses or 0) if recent else 0,
+        "season": datetime.date.today().year,
+        "prior": prior,
+        "current": {
+            "wins": _n(season, "wins"),
+            "itm": _n(season, "itm"),
+            "tracks": _n(season, "tracks"),
+            "horses": _n(season, "horses"),
+            "last_run": season.last_run.isoformat() if season and season.last_run else None,
         },
         "top_tracks": [{"track": r.track, "wins": int(r.wins or 0), "itm": int(r.itm or 0)}
                        for r in tracks if r.track],
