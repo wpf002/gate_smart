@@ -38,8 +38,8 @@ function Bankroll({ data }) {
         </span>
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-        {data.bets} priced {data.bets === 1 ? 'call' : 'calls'} · {data.cashed} cashed
-        {data.unpriced ? ` · ${data.unpriced} with no official price, left out` : ''}
+        {data.cashed} of {data.bets} cashed
+        {data.unpriced ? ` · ${data.unpriced} never got a payout` : ''}
       </div>
     </div>
   );
@@ -135,7 +135,7 @@ export default function ContestPage() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>LEADERBOARD</div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  Hit rate, not points — Secretariat calls every race
+                  Ranked by hit rate
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
@@ -165,9 +165,6 @@ export default function ContestPage() {
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)' }}>S</span>
                 <span style={{ minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--accent-gold-bright)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   Secretariat
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>
-                    {sec.days ?? 30}d
-                  </span>
                 </span>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                   {(sec.win_rate * 100).toFixed(1)}%
@@ -211,6 +208,33 @@ export default function ContestPage() {
               );
             })}
             </div>
+            {/* Past the cut, your own row is pinned here so you never have to
+                scroll a long board to find yourself. */}
+            {board?.you && (
+              <div style={{
+                display: 'grid', gridTemplateColumns: '28px minmax(0, 1fr) auto auto',
+                gap: 10, alignItems: 'center', padding: '10px 14px', flexShrink: 0,
+                background: 'rgba(201,162,39,0.07)', borderTop: '1px solid var(--border-gold)',
+              }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--accent-gold)' }}>{board.you.rank}</span>
+                <span style={{ minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {board.you.name}
+                  {board.you.beat_secretariat ? <span style={{ fontSize: 11, color: 'var(--accent-gold)', marginLeft: 6 }}>beat S×{board.you.beat_secretariat}</span> : null}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}
+                      title={`${board.you.wins} of ${board.you.picks} calls landed`}>
+                  {(board.you.win_rate * 100).toFixed(1)}%
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', minWidth: 40, textAlign: 'right' }}>
+                  {board.you.points}
+                </span>
+              </div>
+            )}
+            {board?.players > (board?.board?.length ?? 0) && (
+              <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, borderTop: '1px solid var(--border-subtle)' }}>
+                Top {board.board.length} of {board.players.toLocaleString()} players
+              </div>
+            )}
           </div>
 
           </div>

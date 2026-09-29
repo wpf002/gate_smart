@@ -14,7 +14,7 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, get_optional_user
 from app.core.database import get_db
 from app.models.contest import ContestPick
 from app.models.user import User
@@ -204,8 +204,12 @@ async def my_picks(race_date: str = "", user: User = Depends(get_current_user),
             "picks": [_pick_json(p) for p in rows]}
 
 
+LEADERBOARD_TOP = 25
+
+
 @router.get("/leaderboard")
-async def leaderboard(period: str = "week", db: AsyncSession = Depends(get_db)):
+async def leaderboard(period: str = "week", user=Depends(get_optional_user),
+                      db: AsyncSession = Depends(get_db)):
     """Standings by points over today or the last 7 days.
 
     Secretariat is shown as the bar to beat, as a win rate rather than a points
@@ -272,7 +276,16 @@ async def leaderboard(period: str = "week", db: AsyncSession = Depends(get_db)):
                                   for k, v in BET_TYPES.items()}},
         "secretariat": {"races": s[0] or 0, "days": ACCURACY_WINDOW_DAYS,
                         "win_rate": round((s[1] or 0) / s[0], 3) if s[0] else None},
-        "board": [{k: v for k, v in r.items() if k != "user_id"} for r in board[:100]],
+        # The board is capped so the card stays a card. `players` is the real
+        # total, and `you` carries the caller's own standing even when their
+        # rank is past the cut, so nobody has to scroll to find themselves.
+        "players": len(board),
+        "board": [{k: v for k, v in r.items() if k != "user_id"} for r in board[:LEADERBOARD_TOP]],
+        "you": next(
+            ({k: v for k, v in r.items() if k != "user_id"}
+             for r in board[LEADERBOARD_TOP:] if user and r["user_id"] == user.id),
+            None,
+        ),
     }
 
 

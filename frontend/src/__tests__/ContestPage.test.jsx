@@ -101,7 +101,7 @@ describe('ContestPage', () => {
     expect(await screen.findByText("IF YOU'D BET $2 A CALL")).toBeInTheDocument();
     expect(screen.getByText('−$3.60')).toBeInTheDocument();
     // Calls the chart never priced are named, not folded into the loss.
-    expect(screen.getByText(/6 priced calls · 2 cashed · 2 with no official price/)).toBeInTheDocument();
+    expect(screen.getByText(/2 of 6 cashed · 2 never got a payout/)).toBeInTheDocument();
   });
 
   it('holds the ROI back until it is more than one payoff restated', async () => {
@@ -145,8 +145,26 @@ describe('ContestPage', () => {
     // Ranked by hit rate over its fixed 30-day window, not by points — it
     // calls every race, so a points total would bury everyone.
     expect(screen.getByText('26.6%')).toBeInTheDocument();
-    expect(screen.getByText('30d')).toBeInTheDocument();
-    expect(screen.getByText(/Secretariat calls every race/)).toBeInTheDocument();
+    expect(screen.getByText('Ranked by hit rate')).toBeInTheDocument();
+  });
+
+  it('pins your own row when your rank is past the cut', async () => {
+    // A long board is capped so the card stays a card; nobody should have to
+    // scroll it to find themselves.
+    api.getLeaderboard.mockImplementationOnce(() => Promise.resolve({
+      ...BOARD,
+      players: 412,
+      you: { rank: 88, name: 'Handicapper 7', points: 20, picks: 5, wins: 2, win_rate: 0.4, beat_secretariat: 1 },
+    }));
+    wrap(<ContestPage />);
+    expect(await screen.findByText('88')).toBeInTheDocument();
+    expect(screen.getByText(/Top 2 of 412 players/)).toBeInTheDocument();
+  });
+
+  it('says nothing about a cut when the whole board fits', async () => {
+    wrap(<ContestPage />);
+    await screen.findByText('Longshot Larry');
+    expect(screen.queryByText(/Top \d+ of/)).not.toBeInTheDocument();
   });
 
   it('shows each player their hit rate in the same column', async () => {
