@@ -152,3 +152,46 @@ def test_missing_pool_does_not_invent_a_loss():
     p = compute_flat_bet_pnl(rows)
     assert p["across_the_board"]["staked"] == 2.0
     assert p["across_the_board"]["net"] == 8.0
+
+
+# ── Edge over a name drawn from the same field ───────────────────────────────
+
+def test_random_baseline_scales_with_field_size():
+    """One winner, two place spots and three show spots per field.
+
+    This is the only baseline our own rows can supply, and it's what separates
+    "the picks are wrong" from "the picks are right and the price is dearer".
+    """
+    rows = [{"field_size": 8, "top_pick_win_payoff": 8.0,
+             "top_pick_place_payoff": 3.0, "top_pick_show_payoff": 2.4}] * 4
+    p = compute_flat_bet_pnl(rows)
+    assert p["win"]["random_rate"] == 0.125      # 1 of 8
+    assert p["place"]["random_rate"] == 0.25     # 2 of 8
+    assert p["show"]["random_rate"] == 0.375     # 3 of 8
+
+
+def test_a_short_field_cannot_give_a_random_rate_above_one():
+    # Three show spots in a four-horse field is 75%, not 100% — but in a
+    # three-horse field every runner shows, so the rate caps at 1.
+    rows = [{"field_size": 3, "top_pick_win_payoff": 4.0,
+             "top_pick_place_payoff": 2.4, "top_pick_show_payoff": 2.1}]
+    p = compute_flat_bet_pnl(rows)
+    assert p["show"]["random_rate"] == 1.0
+    assert p["place"]["random_rate"] == round(2 / 3, 4)
+
+
+def test_lift_is_the_hit_rate_over_the_random_rate():
+    # Two winners in four 8-horse fields: 50% against a 12.5% baseline.
+    rows = [{"field_size": 8, "top_pick_win_payoff": v} for v in (6.0, 6.0, 0.0, 0.0)]
+    win = compute_flat_bet_pnl(rows)["win"]
+    assert win["hit_rate"] == 0.5
+    assert win["lift"] == 4.0
+
+
+def test_no_field_size_means_no_baseline_rather_than_a_wrong_one():
+    rows = [{"top_pick_win_payoff": 6.0}, {"top_pick_win_payoff": 0.0}]
+    win = compute_flat_bet_pnl(rows)["win"]
+    assert win["random_rate"] is None
+    assert win["lift"] is None
+    # The break-even bar doesn't depend on the field, so it still stands.
+    assert win["breakeven_rate"] == round(2 / 6, 4)

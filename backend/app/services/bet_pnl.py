@@ -110,7 +110,20 @@ def compute_flat_bet_pnl(rows: list, stake: float = STAKE) -> dict:
         for name, rs in pools.items()
     }
 
-    def _pack(staked, ret, rs=None, field=None):
+    # How often a name pulled out of the hat would have cashed the same bet in
+    # the same races: 1 winner, 2 place spots and 3 show spots per field. It is
+    # the only baseline available from our own rows, and it's what separates
+    # "the picks are wrong" from "the picks are right and the price is dearer".
+    depth = {"win": 1, "place": 2, "show": 3}
+
+    def _random_rate(rs, places):
+        sized = [_get(r, "field_size") for r in rs]
+        sized = [int(f) for f in sized if f and int(f) > 1]
+        if not sized:
+            return None
+        return sum(min(places / f, 1.0) for f in sized) / len(sized)
+
+    def _pack(staked, ret, rs=None, field=None, name=None):
         net = ret - staked
         out = {
             "staked": round(staked, 2),
@@ -121,13 +134,17 @@ def compute_flat_bet_pnl(rows: list, stake: float = STAKE) -> dict:
         if rs is not None:
             cashed = [_f(_get(r, field)) for r in rs if _f(_get(r, field)) > 0]
             avg = (sum(cashed) / len(cashed)) if cashed else 0.0
+            hit = (len(cashed) / len(rs)) if rs else None
+            rand = _random_rate(rs, depth.get(name, 1))
             out.update({
                 "bets": len(rs),
                 "cashed": len(cashed),
-                "hit_rate": round(len(cashed) / len(rs), 4) if rs else None,
+                "hit_rate": round(hit, 4) if hit is not None else None,
                 "avg_payoff": round(avg, 2),
                 # What fraction of these bets had to cash to get the money back.
                 "breakeven_rate": round(STAKE / avg, 4) if avg else None,
+                "random_rate": round(rand, 4) if rand is not None else None,
+                "lift": round(hit / rand, 2) if hit is not None and rand else None,
             })
             if out["hit_rate"] is not None and out["breakeven_rate"] is not None:
                 out["gap"] = round(out["hit_rate"] - out["breakeven_rate"], 4)
@@ -139,7 +156,7 @@ def compute_flat_bet_pnl(rows: list, stake: float = STAKE) -> dict:
         "stake": stake,
     }
     for name, rs in pools.items():
-        result[name] = _pack(len(rs) * stake, returned[name], rs, f"top_pick_{name}_payoff")
+        result[name] = _pack(len(rs) * stake, returned[name], rs, f"top_pick_{name}_payoff", name)
     result["across_the_board"] = _pack(
         sum(len(rs) for rs in pools.values()) * stake, sum(returned.values())
     )

@@ -2424,91 +2424,77 @@ PNL_STRATEGIES = (("win", "Win"), ("place", "Place"), ("show", "Show"))
 
 
 def _pct(v, digits: int = 1) -> str:
-    return "—" if v is None else f"{v * 100:.{digits}f}%"
+    return "\u2014" if v is None else f"{v * 100:.{digits}f}%"
 
 
 def _render_bet_pnl_html(pnl: dict, rolling: dict | None = None) -> str:
-    """Flat-bet P&L. Renders nothing when no race had official payoffs — better
-    to omit the section than to imply a result we can't price.
+    """How the picks compare to drawing a name out of the hat, and to the price.
 
-    Shows the day beside a 30-day window, and beside the only number that says
-    whether any of this can pay: the hit rate each bet needed at the prices it
-    actually got. Hit below Need is a losing strategy no matter how it's staked.
+    This block used to lead with three rows of flat-bet losses under "If You Bet
+    Every Top Pick". Every figure was real, but it measured a strategy nobody
+    runs \u2014 $2 on all 130 picks, every day \u2014 and reported its loss as the headline,
+    which said nothing about whether the picks are any good.
+
+    Two columns answer that instead. `Random` is how often a name drawn from the
+    same field would have cashed the same bet, so the multiple beside it is the
+    picks' edge over chance. `Break-even` is the hit rate the prices those horses
+    actually paid would have needed. The picks can be well ahead of chance and
+    still behind the price \u2014 they are \u2014 and both facts belong on the page.
+
+    Renders nothing when no race had official payoffs: better to omit the
+    section than to imply a result we can't price.
     """
     if not pnl or not pnl.get("races"):
         return ""
-    roll = rolling if rolling and rolling.get("races") else None
-
-    def _money(d, key="net"):
-        v = d[key]
-        colour = "#2d6a2d" if v > 0 else ("#a33" if v < 0 else "#666")
-        return colour, f"{'+' if v >= 0 else '−'}${abs(v):,.2f}"
-
+    roll = rolling if rolling and rolling.get("races") else pnl
     rows = []
     for key, label in PNL_STRATEGIES:
-        d = pnl.get(key)
-        if not d or not d.get("bets"):
+        d = roll.get(key) or {}
+        if not d.get("bets"):
             continue
-        colour, amount = _money(d)
-        cells = [
-            f'<td style="padding:6px 8px;font-size:13px">${pnl["stake"]:.0f} {label}</td>',
-            f'<td style="padding:6px 8px;text-align:right;font-size:13px;color:{colour};font-weight:bold">{amount}</td>',
-            f'<td style="padding:6px 8px;text-align:right;font-size:13px;color:{colour}">{d["roi"]:+.1%}</td>',
-        ]
-        if roll:
-            r = roll.get(key) or {}
-            rcolour, ramount = _money(r) if r else ("#666", "—")
-            gap = r.get("gap")
-            gap_colour = "#2d6a2d" if (gap or 0) > 0 else "#a33"
-            cells += [
-                f'<td style="padding:6px 8px;text-align:right;font-size:13px;color:{rcolour};font-weight:bold;border-left:1px solid #e5ddcc">{ramount}</td>',
-                f'<td style="padding:6px 8px;text-align:right;font-size:13px;color:{rcolour}">{r.get("roi", 0):+.1%}</td>',
-                f'<td style="padding:6px 8px;text-align:right;font-size:13px">{_pct(r.get("hit_rate"))}</td>',
-                f'<td style="padding:6px 8px;text-align:right;font-size:13px;color:#666">{_pct(r.get("breakeven_rate"))}</td>',
-                f'<td style="padding:6px 8px;text-align:right;font-size:13px;font-weight:bold;color:{gap_colour}">{"—" if gap is None else f"{gap * 100:+.1f}"}</td>',
-            ]
-        rows.append("    <tr>" + "".join(cells) + "</tr>")
-
+        gap = d.get("gap")
+        lift = d.get("lift")
+        lift_colour = "#2d6a2d" if (lift or 0) > 1 else "#666"
+        gap_colour = "#2d6a2d" if (gap or 0) > 0 else "#a33"
+        rows.append(
+            f"""    <tr>
+      <td style="padding:7px 8px;font-size:13px">{label}</td>
+      <td style="padding:7px 8px;text-align:right;font-size:14px;font-weight:bold">{_pct(d.get("hit_rate"))}</td>
+      <td style="padding:7px 8px;text-align:right;font-size:13px;color:#666">{_pct(d.get("random_rate"))}</td>
+      <td style="padding:7px 8px;text-align:right;font-size:14px;font-weight:bold;color:{lift_colour}">{"\u2014" if lift is None else f"{lift:.2f}\u00d7"}</td>
+      <td style="padding:7px 8px;text-align:right;font-size:13px;color:#666;border-left:1px solid #e5ddcc">{_pct(d.get("breakeven_rate"))}</td>
+      <td style="padding:7px 8px;text-align:right;font-size:13px;font-weight:bold;color:{gap_colour}">{"\u2014" if gap is None else f"{abs(gap) * 100:.1f} pts"}</td>
+    </tr>"""
+        )
     if not rows:
         return ""
 
-    head = (
-        '      <td style="padding:6px 8px">Strategy</td>'
-        '<td style="padding:6px 8px;text-align:right">Net</td>'
-        '<td style="padding:6px 8px;text-align:right">ROI</td>'
+    today = " \u00b7 ".join(
+        f"{label.lower()} {'+' if (pnl.get(key) or {}).get('net', 0) >= 0 else '\u2212'}"
+        f"${abs((pnl.get(key) or {}).get('net', 0)):,.2f}"
+        for key, label in PNL_STRATEGIES if (pnl.get(key) or {}).get("bets")
     )
-    if roll:
-        head += (
-            f'<td style="padding:6px 8px;text-align:right;border-left:1px solid #e5ddcc">{roll["days"]}d net</td>'
-            '<td style="padding:6px 8px;text-align:right">ROI</td>'
-            '<td style="padding:6px 8px;text-align:right">Hit</td>'
-            '<td style="padding:6px 8px;text-align:right">Need</td>'
-            '<td style="padding:6px 8px;text-align:right">Gap</td>'
-        )
-    span_note = (
-        f'<b>Hit</b> is how often the bet cashed over {roll["days"]} days ({roll["races"]:,} races); '
-        f'<b>Need</b> is the hit rate that would have broken even at the prices those bets actually paid. '
-        f'<b>Gap</b> is the difference in points. Flat betting only turns a profit once Gap goes positive — '
-        f'staking more, or spreading across pools, cannot close it.'
-        if roll else
-        "One day is too few bets to read an ROI from; treat it as a scoreline, not a verdict."
-    )
-    unpriced = (
-        f" {pnl['unpriced_races']} race(s) had no published payoff and are excluded."
-        if pnl.get("unpriced_races") else ""
-    )
+    window = (f"{roll['races']:,} races over {roll.get('days', 30)} days"
+              if roll is not pnl else f"today's {pnl['races']} priced races")
     return f"""
-  <h2 style="color:#c8a84b">💵 If You Bet Every Top Pick</h2>
+  <h2 style="color:#c8a84b">\U0001f3af Better Than Picking Blind</h2>
   <table style="width:100%;border-collapse:collapse;background:#f8f4ec;border-radius:6px">
     <tr style="color:#666;font-size:11px;text-transform:uppercase">
-{head}
+      <td style="padding:6px 8px">Bet</td>
+      <td style="padding:6px 8px;text-align:right">My top pick</td>
+      <td style="padding:6px 8px;text-align:right">Random</td>
+      <td style="padding:6px 8px;text-align:right">Edge</td>
+      <td style="padding:6px 8px;text-align:right;border-left:1px solid #e5ddcc">Break-even</td>
+      <td style="padding:6px 8px;text-align:right">Short by</td>
     </tr>
 {chr(10).join(rows)}
   </table>
   <p style="font-size:11px;color:#999;margin-top:6px">
-    Flat ${pnl['stake']:.0f} bets on my top pick in all {pnl['races']} priced races today, settled at the
-    official payoffs (quoted per $2).{unpriced} No morning-line estimates.<br>
-    {span_note}
+    {window}. <b>Random</b> is how often a name drawn from the same field would have cashed
+    the same bet, so <b>Edge</b> is what the analysis is worth against chance.
+    <b>Break-even</b> is the hit rate the prices those horses actually paid would have needed \u2014
+    the picks are well ahead of chance and still short of the price.<br>
+    Flat $2 on every top pick in today's {pnl['races']} priced races: {today}. Official payoffs, no estimates.
   </p>
 """
 
@@ -2516,30 +2502,29 @@ def _render_bet_pnl_html(pnl: dict, rolling: dict | None = None) -> str:
 def _render_bet_pnl_text(pnl: dict, rolling: dict | None = None) -> str:
     if not pnl or not pnl.get("races"):
         return ""
-    roll = rolling if rolling and rolling.get("races") else None
-    lines = [f"IF YOU BET EVERY TOP PICK ({pnl['races']} priced races today)", "─" * 78]
-    if roll:
-        window = f"{roll['days']}d net"
-        lines.append(f"{'Strategy':<14}{'today net':>12}{'ROI':>8}{window:>12}"
-                     f"{'ROI':>8}{'hit':>8}{'need':>8}{'gap':>8}")
+    roll = rolling if rolling and rolling.get("races") else pnl
+    lines = ["BETTER THAN PICKING BLIND", "\u2500" * 72,
+             f"{'Bet':<10}{'top pick':>10}{'random':>10}{'edge':>8}{'break-even':>13}{'short by':>11}"]
     for key, label in PNL_STRATEGIES:
-        d = pnl.get(key)
-        if not d or not d.get("bets"):
+        d = roll.get(key) or {}
+        if not d.get("bets"):
             continue
-        row = f"  ${pnl['stake']:.0f} {label:<10}{d['net']:>+11.2f}{d['roi']:>+8.1%}"
-        if roll:
-            r = roll.get(key) or {}
-            gap = r.get("gap")
-            row += (f"{r.get('net', 0):>+12.2f}{r.get('roi', 0):>+8.1%}"
-                    f"{_pct(r.get('hit_rate')):>8}{_pct(r.get('breakeven_rate')):>8}"
-                    f"{('—' if gap is None else f'{gap * 100:+.1f}'):>8}")
-        lines.append(row)
-    lines.append("  Settled at official payoffs (quoted per $2). No morning-line estimates.")
-    if roll:
-        lines.append(f"  Hit vs Need over {roll['days']} days ({roll['races']:,} races): Need is the hit rate")
-        lines.append("  that breaks even at the prices paid. Flat betting pays only once Gap goes positive.")
-    else:
-        lines.append("  One day is too few bets to read an ROI from — a scoreline, not a verdict.")
+        gap, lift = d.get("gap"), d.get("lift")
+        lines.append(
+            f"  {label:<8}{_pct(d.get('hit_rate')):>10}{_pct(d.get('random_rate')):>10}"
+            f"{('\u2014' if lift is None else f'{lift:.2f}x'):>8}"
+            f"{_pct(d.get('breakeven_rate')):>13}"
+            f"{('\u2014' if gap is None else f'{abs(gap) * 100:.1f} pts'):>11}"
+        )
+    window = (f"{roll['races']:,} races over {roll.get('days', 30)} days"
+              if roll is not pnl else f"today's {pnl['races']} priced races")
+    lines.append(f"  {window}. Random = a name drawn from the same field.")
+    lines.append("  Break-even = the hit rate the prices actually paid would have needed.")
+    today = ", ".join(
+        f"{label.lower()} {(pnl.get(key) or {}).get('net', 0):+,.2f}"
+        for key, label in PNL_STRATEGIES if (pnl.get(key) or {}).get("bets")
+    )
+    lines.append(f"  Flat $2 today on {pnl['races']} priced races: {today}")
     return "\n".join(lines) + "\n"
 
 
