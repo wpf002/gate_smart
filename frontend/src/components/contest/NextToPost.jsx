@@ -4,16 +4,20 @@ import { getRacesToday, getRacesByDate, getMyContestPicks } from '../../utils/ap
 import { formatRaceTime } from '../../utils/timezone';
 import { useAppStore } from '../../store';
 
-const LIMIT = 6;
+const LIMIT = 10;
 
 const openRaces = (cards, now) => (cards || [])
   .filter((r) => !r.is_cancelled && !r.has_results && r.off_dt && new Date(r.off_dt).getTime() > now)
   .sort((a, b) => new Date(a.off_dt) - new Date(b.off_dt));
 
 /**
- * Races still open for a Beat Secretariat pick, soonest first: today's, or
- * tomorrow's once today's last race is off. The hook is unfiltered; the
- * component below drops the ones already called.
+ * Races still open for a Beat Secretariat pick, soonest first.
+ *
+ * Today's card first, then tomorrow's to fill out the list. Late in the evening
+ * only a handful of races are left, and the page used to just end there with
+ * half a screen of nothing under it — tomorrow's card is both the honest filler
+ * and the thing you'd want next anyway, since picks lock at the gate.
+ * The hook is unfiltered; the component below drops the ones already called.
  */
 export function useOpenRaces(now = Date.now()) {
   // Same query keys as the Races page, so this reuses its cache.
@@ -22,17 +26,23 @@ export function useOpenRaces(now = Date.now()) {
   const { data: tomorrow } = useQuery({
     queryKey: ['races', 'tomorrow'],
     queryFn: () => getRacesByDate('tomorrow', 'usa'),
-    enabled: !!today && todayOpen.length === 0,
+    enabled: !!today && todayOpen.length < LIMIT,
   });
-  const showingTomorrow = todayOpen.length === 0;
-  return { races: showingTomorrow ? openRaces(tomorrow?.racecards, now) : todayOpen, showingTomorrow };
+  const tomorrowOpen = todayOpen.length < LIMIT ? openRaces(tomorrow?.racecards, now) : [];
+  return {
+    races: [
+      ...todayOpen.map((r) => ({ ...r, tomorrow: false })),
+      ...tomorrowOpen.map((r) => ({ ...r, tomorrow: true })),
+    ],
+    showingTomorrow: todayOpen.length === 0 && tomorrowOpen.length > 0,
+  };
 }
 
 export default function NextToPost({ now = Date.now() }) {
   const navigate = useNavigate();
   const timezone = useAppStore((s) => s.userProfile?.timezone);
   const authToken = useAppStore((s) => s.authToken);
-  const { races: open, showingTomorrow } = useOpenRaces(now);
+  const { races: open } = useOpenRaces(now);
 
   // Races already called live in "Your calls" above, where they can still be
   // changed. Listing them here too made the two lists read as contradictions.
@@ -50,7 +60,7 @@ export default function NextToPost({ now = Date.now() }) {
     <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--accent-gold)' }}>NEXT TO POST</span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{showingTomorrow ? 'Tomorrow' : 'Pick before the gate opens'}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Pick before the gate opens</span>
       </div>
       {races.map((race, i) => {
         const { time, abbr } = formatRaceTime(race.off_dt, timezone);
@@ -66,7 +76,9 @@ export default function NextToPost({ now = Date.now() }) {
               <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
                 {time}{abbr && <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>{abbr}</span>}
               </span>
-              {!showingTomorrow && minutes < 60 && (
+              {race.tomorrow ? (
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>Tomorrow</span>
+              ) : minutes < 60 && (
                 <span style={{ display: 'block', fontSize: 11, color: 'var(--accent-gold-bright)' }}>in {Math.max(minutes, 1)} min</span>
               )}
             </span>

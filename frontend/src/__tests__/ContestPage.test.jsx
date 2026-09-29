@@ -209,7 +209,25 @@ describe('NextToPost', () => {
       'Race 5 · 9 runners', 'Race 7 · 9 runners', 'Race 9 · 9 runners',
     ]);
     expect(screen.getByText('in 20 min')).toBeInTheDocument();
-    expect(api.getRacesByDate).not.toHaveBeenCalled();
+  });
+
+  it("tops the list up with tomorrow's card when today is nearly done", async () => {
+    // Late evening: one race left today, so the page used to end there with
+    // half a screen of nothing under it.
+    api.getRacesToday.mockImplementation(() => Promise.resolve({
+      racecards: [card('CD_1789257600000-5', '2026-09-13T18:20:00+00:00')],
+    }));
+    api.getRacesByDate.mockImplementation(() => Promise.resolve({
+      racecards: [card('SA_1789344000000-1', '2026-09-14T20:00:00+00:00', { course: 'Santa Anita' })],
+    }));
+    wrap(<NextToPost now={NOW} />);
+    // Today's race first with its countdown, then tomorrow's, labelled.
+    expect(await screen.findByText('Santa Anita')).toBeInTheDocument();
+    expect(screen.getByText('in 20 min')).toBeInTheDocument();
+    expect(screen.getByText('Tomorrow')).toBeInTheDocument();
+    expect(screen.getAllByText(/^Race \d/).map((el) => el.textContent)).toEqual([
+      'Race 5 · 9 runners', 'Race 1 · 9 runners',
+    ]);
   });
 
   it("falls back to tomorrow's card once today's last race is off", async () => {
