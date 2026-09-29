@@ -62,7 +62,7 @@ export default function SearchPage() {
         {TABS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
+            onClick={() => { setTab(key); setQuery(''); setSubmitted(''); }}
             style={{
               flex: 1,
               padding: '10px 0',
@@ -164,7 +164,9 @@ export default function SearchPage() {
           <div className="suggest-card">
             <div className="suggest-head">
               <span className="suggest-title">Most Wins</span>
-              <span className="suggest-window">{suggestDays ? `Last ${suggestDays} days` : ''}</span>
+              <span className="suggest-window">
+                {isHorseTab ? 'Running today or tomorrow' : (suggestDays ? `Last ${suggestDays} days` : '')}
+              </span>
             </div>
             {suggested.map((s, i) => (
               <button

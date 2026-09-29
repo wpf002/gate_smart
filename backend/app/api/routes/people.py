@@ -140,12 +140,14 @@ async def search_suggestions() -> JSONResponse:
     finishes, so a "starts" denominator would be wrong and any rate built on it
     would be a fiction.
     """
-    cache_key = f"people:suggestions:v1:{SUGGEST_WINDOW_DAYS}"
+    # v2: horses are now "entered AND winning", which turns over every day, so
+    # the key carries the date and the payload can't outlive the card.
+    import datetime
+
+    cache_key = f"people:suggestions:v2:{datetime.date.today().isoformat()}"
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
-
-    import datetime
 
     from sqlalchemy import text as _text
 
@@ -154,7 +156,7 @@ async def search_suggestions() -> JSONResponse:
     if not _db._AsyncSessionLocal:
         return JSONResponse({"horses": [], "trainers": [], "jockeys": []})
 
-    async def _top(column: str, days: int, min_wins: int = 0):
+    async def _top(column: str, days: int, min_wins: int = 0, limit: int = SUGGEST_LIMIT):
         # The cutoff is computed here rather than as CURRENT_DATE - :days:
         # asyncpg can't infer a type for the bound integer in that expression
         # and the comparison comes back as "date >= integer".
@@ -173,15 +175,61 @@ async def search_suggestions() -> JSONResponse:
         """)
         async with _db._AsyncSessionLocal() as db:
             rows = (await db.execute(
-                sql, {"since": since, "min_wins": min_wins, "limit": SUGGEST_LIMIT}
+                sql, {"since": since, "min_wins": min_wins, "limit": limit}
             )).all()
+        return [{"name": r.name, "wins": int(r.wins or 0),
+                 "last_run": r.last_run.isoformat() if r.last_run else None}
+                for r in rows if r.name]
+
+    async def _entered_horses() -> set[str]:
+        """Horses actually entered in today's or tomorrow's cards, lowercased.
+
+        Horse search only covers live entries, so suggesting the archive's
+        winningest names sent people to "no horses found" for any of them not
+        running this week. The suggestions are now the intersection: in-form
+        horses you can actually open.
+        """
+        names: set[str] = set()
+        for day in ("today", "tomorrow"):
+            try:
+                data = await racing_api.get_na_racecards_full(day)
+            except Exception:
+                continue
+            for race in data.get("racecards", []) or []:
+                for r in race.get("runners", []) or []:
+                    if r.get("scratched") or r.get("non_runner"):
+                        continue
+                    n = (r.get("horse_name") or "").strip().lower()
+                    if n:
+                        names.add(n)
+        return names
+
+    async def _in_form_runners(names: set[str]):
+        """Of the horses entered, the ones winning most lately."""
+        if not names:
+            return []
+        since = datetime.date.today() - datetime.timedelta(days=SUGGEST_HORSE_WINDOW_DAYS)
+        sql = _text("""
+            SELECT horse_name AS name,
+                   COUNT(*) FILTER (WHERE finish_pos = 1) AS wins,
+                   MAX(race_date) AS last_run
+            FROM horse_form_lines
+            WHERE lower(horse_name) = ANY(:names) AND race_date >= :since
+            GROUP BY horse_name
+            HAVING COUNT(*) FILTER (WHERE finish_pos = 1) >= 1
+            ORDER BY wins DESC, last_run DESC
+            LIMIT :limit
+        """)
+        async with _db._AsyncSessionLocal() as db:
+            rows = (await db.execute(sql, {"names": list(names), "since": since,
+                                           "limit": SUGGEST_LIMIT})).all()
         return [{"name": r.name, "wins": int(r.wins or 0),
                  "last_run": r.last_run.isoformat() if r.last_run else None}
                 for r in rows if r.name]
 
     try:
         payload = {
-            "horses": await _top("horse_name", SUGGEST_HORSE_WINDOW_DAYS, min_wins=3),
+            "horses": await _in_form_runners(await _entered_horses()),
             "trainers": await _top("trainer", SUGGEST_WINDOW_DAYS),
             "jockeys": await _top("jockey", SUGGEST_WINDOW_DAYS),
             "days": SUGGEST_WINDOW_DAYS,
