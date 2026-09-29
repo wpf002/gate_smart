@@ -2458,7 +2458,7 @@ def _render_bet_pnl_html(pnl: dict, rolling: dict | None = None) -> str:
         gap_colour = "#2d6a2d" if (gap or 0) > 0 else "#a33"
         rows.append(
             f"""    <tr>
-      <td style="padding:7px 8px;font-size:13px">{label}</td>
+      <td class="lead" style="padding:7px 8px;font-size:13px">{label}</td>
       <td style="padding:7px 8px;text-align:right;font-size:14px;font-weight:bold">{_pct(d.get("hit_rate"))}</td>
       <td style="padding:7px 8px;text-align:right;font-size:13px;color:#666">{_pct(d.get("random_rate"))}</td>
       <td style="padding:7px 8px;text-align:right;font-size:14px;font-weight:bold;color:{lift_colour}">{"\u2014" if lift is None else f"{lift:.2f}\u00d7"}</td>
@@ -2478,14 +2478,14 @@ def _render_bet_pnl_html(pnl: dict, rolling: dict | None = None) -> str:
               if roll is not pnl else f"today's {pnl['races']} priced races")
     return f"""
   <h2 style="color:#c8a84b">\U0001f3af Better Than Picking Blind</h2>
-  <table style="width:100%;border-collapse:collapse;background:#f8f4ec;border-radius:6px">
+  <table class="tight" style="width:100%;border-collapse:collapse;background:#f8f4ec;border-radius:6px">
     <tr style="color:#666;font-size:11px;text-transform:uppercase">
       <td style="padding:6px 8px">Bet</td>
-      <td style="padding:6px 8px;text-align:right">My top pick</td>
+      <td style="padding:6px 8px;text-align:right">Mine</td>
       <td style="padding:6px 8px;text-align:right">Random</td>
       <td style="padding:6px 8px;text-align:right">Edge</td>
-      <td style="padding:6px 8px;text-align:right;border-left:1px solid #e5ddcc">Break-even</td>
-      <td style="padding:6px 8px;text-align:right">Short by</td>
+      <td style="padding:6px 8px;text-align:right;border-left:1px solid #e5ddcc">Needs</td>
+      <td style="padding:6px 8px;text-align:right">Short</td>
     </tr>
 {chr(10).join(rows)}
   </table>
@@ -2928,21 +2928,43 @@ COMPLETE RESULTS ({total} races)
 {text_table}
 """
 
-    html_body = f"""<div style="font-family:Georgia,serif;max-width:800px;margin:auto;color:#1a1a1a">
+    # A bare <div> with a fixed max-width has no viewport meta, so a phone lays
+    # the mail out at its ~980px default and zooms the whole thing out — every
+    # figure in the digest came out unreadable on a handset. A real document
+    # with width=device-width, fluid widths and a narrow-screen style block is
+    # what makes it legible; Gmail drops the <style>, so nothing depends on it.
+    html_body = f"""<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  @media only screen and (max-width:480px) {{
+    .digest {{ padding: 0 10px !important; }}
+    .digest h1 {{ font-size: 21px !important; }}
+    .digest h2 {{ font-size: 17px !important; }}
+    .scorerow td {{ font-size: 17px !important; }}
+    .scorerow-label td {{ font-size: 9px !important; }}
+    .tight td {{ padding: 5px 3px !important; font-size: 11px !important; }}
+    .tight td.lead {{ font-size: 12px !important; }}
+  }}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff">
+<div class="digest" style="font-family:Georgia,serif;max-width:800px;width:100%;margin:auto;color:#1a1a1a;box-sizing:border-box">
   <h1 style="border-bottom:3px solid #c8a84b;padding-bottom:8px">
     🏇 Secretariat Daily Digest
   </h1>
   <p style="color:#666;font-size:13px">{today_str}</p>
 
   <table style="width:100%;background:#f8f4ec;border-radius:6px;padding:16px;margin:16px 0">
-    <tr>
+    <tr class="scorerow">
       <td style="font-size:24px;font-weight:bold;text-align:center">{len(hits)}/{total}</td>
       <td style="font-size:24px;font-weight:bold;text-align:center">{win_pct}</td>
       <td style="font-size:24px;font-weight:bold;text-align:center">{itm_pct}</td>
       <td style="font-size:24px;font-weight:bold;text-align:center">{place_pct}</td>
       <td style="font-size:24px;font-weight:bold;text-align:center">{show_pct}</td>
     </tr>
-    <tr>
+    <tr class="scorerow-label">
       <td style="text-align:center;color:#666;font-size:11px">Wins / Races</td>
       <td style="text-align:center;color:#666;font-size:11px">Win Rate</td>
       <td style="text-align:center;color:#666;font-size:11px">Win Pick ITM</td>
@@ -2967,7 +2989,8 @@ COMPLETE RESULTS ({total} races)
   <p style="font-size:11px;color:#999;margin-top:24px">
     Secretariat · GateSmart · {today_str}
   </p>
-</div>"""
+</div>
+</body></html>"""
 
     return {"subject": subject, "html": html_body, "text": text_body}
 

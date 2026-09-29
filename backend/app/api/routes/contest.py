@@ -20,7 +20,8 @@ from app.models.contest import ContestPick
 from app.models.user import User
 from app.services.contest import (
     BET_TYPES, DEFAULT_BET_TYPE, POINTS_BEAT_BONUS, POINTS_CORRECT, STAKE,
-    beat_secretariat_streak, best_streak, bet_spec, pick_day_streak, settle_pending_picks,
+    beat_secretariat_streak, best_streak, bet_spec, pick_day_streak, racing_day,
+    settle_pending_picks, today_racing_day,
 )
 
 router = APIRouter()
@@ -145,7 +146,7 @@ async def make_pick(request: Request, user: User = Depends(get_current_user),
     values = {
         "user_id": user.id,
         "race_id": req.race_id,
-        "race_date": off.date(),
+        "race_date": racing_day(req.race_id, off),
         # Selection 1 is mirrored into the flat columns so the leaderboard and
         # every pre-exotics query keep working untouched.
         "horse_name": selections[0]["name"],
@@ -178,7 +179,7 @@ async def my_picks(race_date: str = "", user: User = Depends(get_current_user),
     lock one in and then find no trace of it anywhere in the app.
     """
     try:
-        day = date.fromisoformat(race_date) if race_date else date.today()
+        day = date.fromisoformat(race_date) if race_date else today_racing_day()
     except ValueError:
         raise HTTPException(status_code=400, detail="race_date must be YYYY-MM-DD")
     # Grade anything of theirs that has gone official since they last looked.
@@ -213,7 +214,7 @@ async def leaderboard(period: str = "week", db: AsyncSession = Depends(get_db)):
     """
     if period not in ("day", "week"):
         raise HTTPException(status_code=400, detail="period must be day or week")
-    since = date.today() if period == "day" else date.today() - timedelta(days=6)
+    since = today_racing_day() if period == "day" else today_racing_day() - timedelta(days=6)
 
     rows = (await db.execute(
         select(
@@ -289,7 +290,7 @@ async def my_progress(user: User = Depends(get_current_user), db: AsyncSession =
     voided = sum(1 for p in rows if p.settled and p.correct is None)
     return {
         "display_name": _public_name(user.id, user.display_name),
-        "pick_day_streak": pick_day_streak((p.race_date for p in rows), date.today()),
+        "pick_day_streak": pick_day_streak((p.race_date for p in rows), today_racing_day()),
         "beat_secretariat_streak": beat_secretariat_streak(settled),
         "best_correct_streak": best_streak([bool(p["correct"]) for p in settled]),
         "total_picks": len(rows),
@@ -301,7 +302,7 @@ async def my_progress(user: User = Depends(get_current_user), db: AsyncSession =
         # What flat $2 on every call would have done. No money moves; this is
         # the same scorekeeping figure the Report Card publishes for Secretariat.
         "bankroll": _bankroll(rows),
-        "bankroll_today": _bankroll([p for p in rows if p.race_date == date.today()]),
+        "bankroll_today": _bankroll([p for p in rows if p.race_date == today_racing_day()]),
     }
 
 

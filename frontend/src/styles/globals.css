@@ -97,6 +97,24 @@ input, textarea, select {
   overscroll-behavior-y: contain;
 }
 
+/* The header's right slot (the Secretariat strip on Races) is as wide as a
+   phone's whole header, and it was taking that width out of the title. Wrap it
+   onto its own row rather than truncating the product's own name. */
+@media (max-width: 520px) {
+  .page-header {
+    flex-wrap: wrap;
+  }
+
+  .page-header-titles {
+    flex-basis: 60%;
+  }
+
+  .page-header-right {
+    flex-basis: 100%;
+    margin-top: 8px;
+  }
+}
+
 /* ─── App Shell — Desktop (≥768px) ─────────────────────────────────────── */
 @media (min-width: 768px) {
   body {
@@ -730,6 +748,11 @@ select option {
   gap: 16px;
 }
 
+.contest-rail {
+  display: grid;
+  gap: 16px;
+}
+
 .contest-main {
   display: grid;
   gap: 16px;
@@ -797,9 +820,17 @@ select option {
     min-height: 0;
   }
 
-  /* The You card keeps its natural height; only the race column fills. */
-  .contest-you {
+  /* Your card and the leaderboard are both short; the race list is long. Side
+     by side that left a tall empty gutter down the left of the page, so the two
+     short cards stack into one rail beside it. */
+  .contest-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
     align-self: start;
+    max-height: 100%;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   /* Flex, not grid: "Today's calls" renders nothing when you've made none, so

@@ -32,7 +32,7 @@ export default function PageHeader({ title, subtitle, showBack = false, right = 
           ←
         </button>
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="page-header-titles" style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontFamily: 'var(--font-display)',
           fontSize: 20,
@@ -52,7 +52,10 @@ export default function PageHeader({ title, subtitle, showBack = false, right = 
           </div>
         )}
       </div>
-      {right && <div style={{ flexShrink: 0 }}>{right}</div>}
+      {/* On a phone the right slot squeezed the title to 94px for 130px of
+          text, so "GATESMART" itself came out as "GATES…". It drops to its own
+          row under 520px instead of eating the title's width. */}
+      {right && <div className="page-header-right" style={{ flexShrink: 0 }}>{right}</div>}
     </div>
   );
 }

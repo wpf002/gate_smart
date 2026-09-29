@@ -9,7 +9,7 @@ from datetime import date
 
 from app.services.contest import (
     BET_TYPES, POINTS_BEAT_BONUS, POINTS_CORRECT, beat_secretariat_streak, best_streak,
-    bet_hit, bet_payoff, pick_day_streak, score_pick,
+    bet_hit, bet_payoff, pick_day_streak, racing_day, score_pick,
 )
 from app.services.ticket import per_stake
 
@@ -206,3 +206,25 @@ def test_a_real_miss_still_breaks_the_beat_streak():
              {"correct": False, "beat_secretariat": False},
              {"correct": True, "beat_secretariat": True}]
     assert beat_secretariat_streak(picks) == 1
+
+
+# ── The racing day, not the UTC day ──────────────────────────────────────────
+
+def test_a_late_race_belongs_to_tonight_not_tomorrow():
+    """A 7:30pm Central post is already tomorrow in UTC.
+
+    Dating the pick by the server's clock filed tonight's calls under tomorrow
+    and hid them from today's list. The feed's own race_id carries the card's
+    date, and that stamp is the racing day.
+    """
+    assert racing_day("ASD_1790640000000-1") == date(2026, 9, 29)
+    assert racing_day("PID_1790553600000-8") == date(2026, 9, 28)
+
+
+def test_an_unparseable_race_id_falls_back_to_the_post_time_out_east():
+    import datetime as dt
+
+    # 00:30 UTC on the 30th is 8:30pm on the 29th in New York.
+    off = dt.datetime(2026, 9, 30, 0, 30, tzinfo=dt.timezone.utc)
+    assert racing_day("no-stamp-here", off) == date(2026, 9, 29)
+    assert racing_day("", off) == date(2026, 9, 29)

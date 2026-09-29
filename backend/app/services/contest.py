@@ -42,6 +42,40 @@ DEFAULT_BET_TYPE = "win"
 UNSETTLEABLE_AFTER_DAYS = 2
 
 
+# US cards run past midnight UTC — a 7:30pm Central race is already "tomorrow"
+# in UTC — so dating a pick by the server's clock filed tonight's calls under
+# tomorrow and hid them from today's list. The feed's own race_id carries the
+# card's date: "ASD_1790640000000-1" is Assiniboia Downs race 1 on the card
+# stamped 2026-09-29 00:00 UTC. That stamp IS the racing day, and it's what
+# every "today's races" list in the app is already grouped by.
+RACING_TZ = "America/New_York"
+
+
+def racing_day(race_id: str, off=None) -> date:
+    """The date of the card this race belongs to, not the UTC date it starts on."""
+    import datetime as _dt
+
+    try:
+        stamp = int(race_id.rsplit("-", 1)[0].split("_")[1])
+        return _dt.datetime.fromtimestamp(stamp / 1000, tz=_dt.timezone.utc).date()
+    except (AttributeError, IndexError, ValueError, OSError, OverflowError):
+        # No parseable stamp: fall back to the post time read at the track's
+        # end of the continent, which is right for every US card bar the tail
+        # of a late West Coast night.
+        if off is None:
+            return today_racing_day()
+        from zoneinfo import ZoneInfo
+        return off.astimezone(ZoneInfo(RACING_TZ)).date()
+
+
+def today_racing_day() -> date:
+    """Which card is the current one, by the clock the tracks keep."""
+    import datetime as _dt
+    from zoneinfo import ZoneInfo
+
+    return _dt.datetime.now(ZoneInfo(RACING_TZ)).date()
+
+
 def bet_spec(bet_type: str) -> dict:
     """The rules for a bet type, falling back to win for unknown/legacy rows."""
     return BET_TYPES.get(bet_type or DEFAULT_BET_TYPE, BET_TYPES[DEFAULT_BET_TYPE])
@@ -207,7 +241,7 @@ async def settle_pending_picks(user_id: Optional[int] = None) -> int:
     async with _db._AsyncSessionLocal() as db:
         where = [
             ContestPick.settled == False,  # noqa: E712
-            ContestPick.race_date <= date.today(),
+            ContestPick.race_date <= today_racing_day(),
         ]
         if user_id is not None:
             where.append(ContestPick.user_id == user_id)
@@ -241,7 +275,7 @@ async def settle_pending_picks(user_id: Optional[int] = None) -> int:
                     results[f"{meet_id}-{number}"] = race
 
         settled = 0
-        stale_before = date.today() - timedelta(days=UNSETTLEABLE_AFTER_DAYS)
+        stale_before = today_racing_day() - timedelta(days=UNSETTLEABLE_AFTER_DAYS)
         for pick in pending:
             race = results.get(pick.race_id)
             if not race:

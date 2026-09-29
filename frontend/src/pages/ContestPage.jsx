@@ -77,6 +77,7 @@ export default function ContestPage() {
         </div>
 
         <div className="contest-grid">
+          <div className="contest-rail">
           {/* ── You ─────────────────────────────────────────── */}
           {authToken ? (
             <div className="contest-you" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-gold)', borderRadius: 'var(--radius-md)' }}>
@@ -128,7 +129,6 @@ export default function ContestPage() {
             </div>
           )}
 
-          <div className="contest-main">
           {/* ── Leaderboard ─────────────────────────────────── */}
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', gap: 10 }}>
@@ -187,6 +187,9 @@ export default function ContestPage() {
             })}
           </div>
 
+          </div>
+
+          <div className="contest-main">
           {/* ── Races still open for a pick ─────────────────── */}
           <MyCalls />
           <NextToPost />
