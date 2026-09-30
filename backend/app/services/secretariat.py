@@ -2548,157 +2548,20 @@ async def _compute_category_trends(report_date, lookback_days: int = 7) -> dict:
     }
 
 
-ROLLING_PNL_DAYS = 30
 
 
-async def _rolling_bet_pnl(end_date, days: int = ROLLING_PNL_DAYS) -> dict:
-    """Flat-bet P&L over the `days` ending on `end_date`, or {} if unavailable.
-
-    Never raises: the digest must still send if this query fails.
-    """
-    import datetime
-
-    from sqlalchemy import select
-
-    from app.core import database as _db
-    from app.models.accuracy import RacePrediction
-    from app.services.bet_pnl import compute_flat_bet_pnl
-
-    if not _db._AsyncSessionLocal or not end_date:
-        return {}
-    start = end_date - datetime.timedelta(days=days - 1)
-    try:
-        async with _db._AsyncSessionLocal() as db:
-            rows = list((await db.execute(
-                select(RacePrediction).where(
-                    RacePrediction.analysis_mode == "auto_daily",
-                    RacePrediction.user_id.is_(None),
-                    RacePrediction.race_date >= start,
-                    RacePrediction.race_date <= end_date,
-                    RacePrediction.top_pick_win_payoff.isnot(None),
-                )
-            )).scalars().all())
-    except Exception as e:
-        print(f"[digest] rolling bet P&L unavailable: {type(e).__name__}: {e}")
-        return {}
-    if not rows:
-        return {}
-    out = compute_flat_bet_pnl(rows)
-    out["days"] = days
-    out["start"] = start.isoformat()
-    return out
-
-
-# The three flat strategies worth showing, hardest first. "Across the board" is
-# deliberately absent: it stakes $6 a race across the three worst-priced pools at
-# once, nobody bets it, and printing its number only made the email look worse
-# than the picks actually are.
-PNL_STRATEGIES = (("win", "Win"), ("place", "Place"), ("show", "Show"))
-
-
-def _pct(v, digits: int = 1) -> str:
-    return "\u2014" if v is None else f"{v * 100:.{digits}f}%"
-
-
-def _render_bet_pnl_html(pnl: dict, rolling: dict | None = None) -> str:
-    """How the picks compare to drawing a name out of the hat, and to the price.
-
-    This block used to lead with three rows of flat-bet losses under "If You Bet
-    Every Top Pick". Every figure was real, but it measured a strategy nobody
-    runs \u2014 $2 on all 130 picks, every day \u2014 and reported its loss as the headline,
-    which said nothing about whether the picks are any good.
-
-    Two columns answer that instead. `Random` is how often a name drawn from the
-    same field would have cashed the same bet, so the multiple beside it is the
-    picks' edge over chance. `Break-even` is the hit rate the prices those horses
-    actually paid would have needed. The picks can be well ahead of chance and
-    still behind the price \u2014 they are \u2014 and both facts belong on the page.
-
-    Renders nothing when no race had official payoffs: better to omit the
-    section than to imply a result we can't price.
-    """
-    if not pnl or not pnl.get("races"):
-        return ""
-    roll = rolling if rolling and rolling.get("races") else pnl
-    rows = []
-    for key, label in PNL_STRATEGIES:
-        d = roll.get(key) or {}
-        if not d.get("bets"):
-            continue
-        gap = d.get("gap")
-        lift = d.get("lift")
-        lift_colour = "#2d6a2d" if (lift or 0) > 1 else "#666"
-        gap_colour = "#2d6a2d" if (gap or 0) > 0 else "#a33"
-        rows.append(
-            f"""    <tr>
-      <td class="lead" style="padding:7px 8px;font-size:13px">{label}</td>
-      <td style="padding:7px 8px;text-align:right;font-size:14px;font-weight:bold">{_pct(d.get("hit_rate"))}</td>
-      <td style="padding:7px 8px;text-align:right;font-size:13px;color:#666">{_pct(d.get("random_rate"))}</td>
-      <td style="padding:7px 8px;text-align:right;font-size:14px;font-weight:bold;color:{lift_colour}">{"\u2014" if lift is None else f"{lift:.2f}\u00d7"}</td>
-      <td style="padding:7px 8px;text-align:right;font-size:13px;color:#666;border-left:1px solid #e5ddcc">{_pct(d.get("breakeven_rate"))}</td>
-      <td style="padding:7px 8px;text-align:right;font-size:13px;font-weight:bold;color:{gap_colour}">{"\u2014" if gap is None else f"{abs(gap) * 100:.1f} pts"}</td>
-    </tr>"""
-        )
-    if not rows:
-        return ""
-
-    today = " \u00b7 ".join(
-        f"{label.lower()} {'+' if (pnl.get(key) or {}).get('net', 0) >= 0 else '\u2212'}"
-        f"${abs((pnl.get(key) or {}).get('net', 0)):,.2f}"
-        for key, label in PNL_STRATEGIES if (pnl.get(key) or {}).get("bets")
-    )
-    window = (f"{roll['races']:,} races over {roll.get('days', 30)} days"
-              if roll is not pnl else f"today's {pnl['races']} priced races")
-    return f"""
-  <h2 style="color:#c8a84b">\U0001f3af Better Than Picking Blind</h2>
-  <table class="tight" style="width:100%;border-collapse:collapse;background:#f8f4ec;border-radius:6px">
-    <tr style="color:#666;font-size:11px;text-transform:uppercase">
-      <td style="padding:6px 8px">Bet</td>
-      <td style="padding:6px 8px;text-align:right">Mine</td>
-      <td style="padding:6px 8px;text-align:right">Random</td>
-      <td style="padding:6px 8px;text-align:right">Edge</td>
-      <td style="padding:6px 8px;text-align:right;border-left:1px solid #e5ddcc">Needs</td>
-      <td style="padding:6px 8px;text-align:right">Short</td>
-    </tr>
-{chr(10).join(rows)}
-  </table>
-  <p style="font-size:11px;color:#999;margin-top:6px">
-    {window}. <b>Random</b> is how often a name drawn from the same field would have cashed
-    the same bet, so <b>Edge</b> is what the analysis is worth against chance.
-    <b>Break-even</b> is the hit rate the prices those horses actually paid would have needed \u2014
-    the picks are well ahead of chance and still short of the price.<br>
-    Flat $2 on every top pick in today's {pnl['races']} priced races: {today}. Official payoffs, no estimates.
-  </p>
-"""
-
-
-def _render_bet_pnl_text(pnl: dict, rolling: dict | None = None) -> str:
-    if not pnl or not pnl.get("races"):
-        return ""
-    roll = rolling if rolling and rolling.get("races") else pnl
-    lines = ["BETTER THAN PICKING BLIND", "\u2500" * 72,
-             f"{'Bet':<10}{'top pick':>10}{'random':>10}{'edge':>8}{'break-even':>13}{'short by':>11}"]
-    for key, label in PNL_STRATEGIES:
-        d = roll.get(key) or {}
-        if not d.get("bets"):
-            continue
-        gap, lift = d.get("gap"), d.get("lift")
-        lines.append(
-            f"  {label:<8}{_pct(d.get('hit_rate')):>10}{_pct(d.get('random_rate')):>10}"
-            f"{('\u2014' if lift is None else f'{lift:.2f}x'):>8}"
-            f"{_pct(d.get('breakeven_rate')):>13}"
-            f"{('\u2014' if gap is None else f'{abs(gap) * 100:.1f} pts'):>11}"
-        )
-    window = (f"{roll['races']:,} races over {roll.get('days', 30)} days"
-              if roll is not pnl else f"today's {pnl['races']} priced races")
-    lines.append(f"  {window}. Random = a name drawn from the same field.")
-    lines.append("  Break-even = the hit rate the prices actually paid would have needed.")
-    today = ", ".join(
-        f"{label.lower()} {(pnl.get(key) or {}).get('net', 0):+,.2f}"
-        for key, label in PNL_STRATEGIES if (pnl.get(key) or {}).get("bets")
-    )
-    lines.append(f"  Flat $2 today on {pnl['races']} priced races: {today}")
-    return "\n".join(lines) + "\n"
+# The email carried a "Better Than Picking Blind" block here: win/place/show hit
+# rate against a random pick from the same field, the break-even rate the prices
+# demanded, and the day's flat-$2 P&L. Every figure was real, and the block still
+# didn't work — "2.02x better than chance" in green sat on the same row as "8.0
+# pts short" in red, above three negative dollar totals, so a reader couldn't
+# tell whether it was good news. Removed 2026-09-30 at Will's call.
+#
+# Nothing was deleted from the analysis. compute_flat_bet_pnl still runs in the
+# nightly job and behind /api/accuracy/bet-curve, which serves the same window
+# the block used to print: 3,354 races, 26.86% hit rate against a 34.87%
+# break-even, and the flat-bet curve. _rolling_bet_pnl went with the block — it
+# existed only to feed it, and re-queried 30 days of predictions on every send.
 
 
 def _render_trends_html(trends: dict) -> str:
@@ -2799,9 +2662,6 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
     # same math over the last 30 days. One day is ~130 bets, which is far too
     # few to read an ROI off — a single longshot swings it 15 points — so the
     # email shows the day beside a window long enough to mean something.
-    from app.services.bet_pnl import compute_flat_bet_pnl
-    bet_pnl = compute_flat_bet_pnl(predictions)
-    bet_pnl_30d = await _rolling_bet_pnl(report.report_date, days=30)
 
     # ── Build complete results table in Python (every race, no LLM needed) ──
     def _ps_segments(p):
@@ -3085,7 +2945,6 @@ SCORECARD
   Place pick     : {len(place_hits)} ({place_pct})
   Show pick      : {len(show_hits)} ({show_pct})
 
-{_render_bet_pnl_text(bet_pnl, bet_pnl_30d)}
 WHAT WENT RIGHT
 {what_right}
 
@@ -3145,7 +3004,6 @@ COMPLETE RESULTS ({total} races)
       <td style="text-align:center;color:#666;font-size:11px">Show Pick</td>
     </tr>
   </table>
-{_render_bet_pnl_html(bet_pnl, bet_pnl_30d)}
   <h2 style="color:#2d6a2d">✅ What Went Right</h2>
   {_bullets_to_html(what_right)}
 
