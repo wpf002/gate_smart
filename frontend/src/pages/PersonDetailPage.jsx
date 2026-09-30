@@ -78,40 +78,6 @@ function SeasonCard({ title, rec, fallback, fallbackNote }) {
   );
 }
 
-/**
- * Whether the market gets this person right.
- *
- * a/e is actual wins over the wins their own starting prices implied, so 0.80
- * is twenty percent fewer winners than the odds called for. The level-stake
- * profit says the same thing in money. One line says it in words, because
- * "A/E 0.8" and "−$0.24" told you nothing unless you already knew both terms.
- */
-function MarketRead({ form }) {
-  const ae = form.ae;
-  const pl = form.profit_per_unit;
-  if (ae === null || ae === undefined) return null;
-  const gap = Math.round(Math.abs(1 - ae) * 100);
-  const over = ae < 1;
-  // Inside a few percent of even, the sample can't tell you which way it runs.
-  const flat = gap < 5;
-  const money = pl === null || pl === undefined
-    ? null
-    : `${pl >= 0 ? '+' : '−'}$${Math.abs(pl).toFixed(2)} per $1 on every runner`;
-  return (
-    <div className={`person-market${flat ? '' : over ? ' is-over' : ' is-under'}`}>
-      <span className="person-market-value">{ae.toFixed(2)}</span>
-      <span className="person-market-label">
-        {flat
-          ? 'The market prices them about right — they win roughly as often as their odds say they should.'
-          : over
-            ? `The market overrates them: ${gap}% fewer winners than their odds implied.`
-            : `The market underrates them: ${gap}% more winners than their odds implied.`}
-        {money && <span className="person-market-money">{money}</span>}
-      </span>
-    </div>
-  );
-}
-
 function Figures({ items }) {
   return (
     <div className="person-figures">
@@ -195,17 +161,6 @@ export default function PersonDetailPage({ type }) {
                           fallback={data.current} fallbackNote={
                             data.current.last_run ? `Last Winner ${day(data.current.last_run)}` : 'No Winners Yet'} />
             </div>
-
-            {/* A/E and level-stake profit measure the same thing — whether the
-                market prices this person correctly — and neither label meant
-                anything to anyone who didn't already know the term. They read
-                as a sentence instead, with the direction stated. */}
-            {data.form && (
-              <Card title="Against The Market"
-                    note={`Rolling 12 Months · ${n(data.form.starts)} Starts`}>
-                <MarketRead form={data.form} />
-              </Card>
-            )}
 
             {data.top_tracks.length > 0 && (
               <Card title="Best Tracks" note="Wins Since 2024">
