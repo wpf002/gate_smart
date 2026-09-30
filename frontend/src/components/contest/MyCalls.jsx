@@ -82,7 +82,13 @@ export default function MyCalls({ now = Date.now() }) {
           {open ? `${open} still open · change until the gate` : 'All locked'}
         </span>
       </div>
-      {rows.map((r, i) => (
+      {rows.map((r, i) => {
+        // The finish is only worth a line when the bet missed — on a winner
+        // "Won: #1 Apicturesworth" just repeats the selection above it. When it
+        // is shown it replaces the track line, which by then adds nothing but
+        // the bet type already in the title.
+        const showResult = r.settled && r.correct === false && r.finish?.length > 0;
+        return (
         <button
           key={r.race_id}
           onClick={() => navigate(`/race/${r.race_id}`)}
@@ -93,9 +99,11 @@ export default function MyCalls({ now = Date.now() }) {
           }}
         >
           <span>
-            <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {r.off ? formatRaceTime(new Date(r.off).toISOString(), timezone).time : '—'}
-            </span>
+            {r.off && (
+              <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {formatRaceTime(new Date(r.off).toISOString(), timezone).time}
+              </span>
+            )}
             <span style={{ display: 'block', fontSize: 11, color: r.open ? 'var(--accent-gold-bright)' : 'var(--text-muted)' }}>
               {r.open ? 'Open' : r.settled ? 'Graded' : 'Running'}
             </span>
@@ -104,10 +112,12 @@ export default function MyCalls({ now = Date.now() }) {
             <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {describeBet(r)}
             </span>
-            <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {r.bet_label || 'Win'} · {r.course}{r.number ? ` Race ${r.number}` : ''}
-            </span>
-            {r.settled && r.finish?.length > 0 && (
+            {!showResult && (
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {r.bet_label || 'Win'} · {r.course}{r.number ? ` Race ${r.number}` : ''}
+              </span>
+            )}
+            {showResult && (
               <span style={{ display: 'block', fontSize: 11, marginTop: 3, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 <span style={{ color: 'var(--accent-gold-bright)' }}>
                   Won: {r.finish[0].number ? `#${r.finish[0].number} ` : ''}{r.finish[0].name}
@@ -121,7 +131,8 @@ export default function MyCalls({ now = Date.now() }) {
           </span>
           <Outcome pick={r} />
         </button>
-      ))}
+        );
+      })}
     </div>
   );
 }

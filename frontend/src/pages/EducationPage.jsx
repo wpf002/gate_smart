@@ -820,25 +820,45 @@ function BankrollTab() {
   );
 }
 
+// 87 terms in one scroll is a wall. A page is short enough to read and long
+// enough that the two desktop columns stay full.
+const TERMS_PER_PAGE = 20;
+
 function GlossaryTab() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
   const filtered = GLOSSARY.filter(g =>
     g.term.toLowerCase().includes(search.toLowerCase()) ||
     g.def.toLowerCase().includes(search.toLowerCase())
   );
+  const pages = Math.max(1, Math.ceil(filtered.length / TERMS_PER_PAGE));
+  // A search that shrinks the list can leave you on a page past the end.
+  const current = Math.min(page, pages - 1);
+  const start = current * TERMS_PER_PAGE;
+  const shown = filtered.slice(start, start + TERMS_PER_PAGE);
+
+  const go = (n) => {
+    setPage(n);
+    // Paging with the list scrolled down lands you mid-way through the new
+    // page, which reads as though nothing happened.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div>
       <input
         value={search}
-        onChange={e => setSearch(e.target.value)}
+        onChange={e => { setSearch(e.target.value); setPage(0); }}
         placeholder="Search terms…"
         style={{ width: '100%', padding: '10px 14px', marginBottom: 16, fontSize: 14 }}
       />
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        {filtered.length} terms
+        {filtered.length === 0
+          ? 'No terms match'
+          : `${start + 1}–${start + shown.length} of ${filtered.length} terms`}
       </div>
       <div className="learn-grid learn-grid--terms">
-      {filtered.map(({ term, def, plain_english }) => (
+      {shown.map(({ term, def, plain_english }) => (
         <div key={term} style={{
           padding: '12px 0',
           borderBottom: '1px solid var(--border-subtle)',
@@ -855,6 +875,27 @@ function GlossaryTab() {
         </div>
       ))}
       </div>
+
+      {pages > 1 && (
+        <div className="glossary-pager">
+          <button className="glossary-page-btn" onClick={() => go(current - 1)}
+                  disabled={current === 0}>‹ Prev</button>
+          <div className="glossary-page-nums">
+            {Array.from({ length: pages }, (_, i) => (
+              <button
+                key={i}
+                className={`glossary-page-num${i === current ? ' is-current' : ''}`}
+                onClick={() => go(i)}
+                aria-current={i === current ? 'page' : undefined}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+          <button className="glossary-page-btn" onClick={() => go(current + 1)}
+                  disabled={current >= pages - 1}>Next ›</button>
+        </div>
+      )}
     </div>
   );
 }
