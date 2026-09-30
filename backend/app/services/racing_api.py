@@ -209,17 +209,30 @@ def _normalize_result(r: dict) -> dict:
     }
 
 
-async def get_results(date: str = None, region: str = None) -> dict:
-    """Results endpoint: /results/today or /results/YYYY-MM-DD."""
-    path = f"/results/{date}" if date and date != "today" else "/results/today"
-    params = {}
-    if region:
-        params["region"] = region
+async def get_results(date: str = None, region: str = None, **filters) -> dict:
+    """Results for a day, or an advanced query across the last twelve months.
+
+    With no filters this is /results/today or /results/YYYY-MM-DD, unchanged.
+    Pass any of start_date, end_date, course, type, going, race_class,
+    min_distance_y, max_distance_y, age_band or sex_restriction and it moves to
+    /results, which is the endpoint that actually answers "every class 2 handicap
+    on soft ground over a mile since January".
+    """
+    advanced = _result_filters(region=region, **filters)
+    if any(k != "region" for k in advanced):
+        path = "/results"
+        params = advanced
+        if date and date not in ("today",) and "start_date" not in params:
+            params["start_date"] = params["end_date"] = date
+        params.setdefault("limit", 100)
+    else:
+        path = f"/results/{date}" if date and date != "today" else "/results/today"
+        params = {"region": region} if region else {}
 
     raw = await _get(
         path,
         params=params or None,
-        cache_key=f"results:{region or 'all'}:{date or 'today'}",
+        cache_key=f"results:{path}:{_params_key(params)}",
         ttl=1800,
     )
     results = [_normalize_result(r) for r in raw.get("results", [])]
@@ -227,6 +240,124 @@ async def get_results(date: str = None, region: str = None) -> dict:
 
 
 # ── Horses ────────────────────────────────────────────────────────────────────
+
+# ── Advanced result queries ──────────────────────────────────────────────────
+#
+# /results and every per-entity results endpoint take the same filter set, so
+# it's built once. Array parameters go as repeated keys, which httpx does for a
+# list value, and the API's own names are used verbatim rather than aliased —
+# a caller reading their docs can pass what the docs say.
+
+_RESULT_FILTERS = (
+    "start_date", "end_date", "region", "course", "type", "going", "race_class",
+    "min_distance_y", "max_distance_y", "age_band", "sex_restriction",
+)
+
+
+def _result_filters(**kwargs) -> dict:
+    """The subset of advanced filters the caller actually set."""
+    out = {}
+    for key in _RESULT_FILTERS:
+        val = kwargs.get(key)
+        if val in (None, "", [], ()):
+            continue
+        out[key] = list(val) if isinstance(val, (list, tuple, set)) else val
+    return out
+
+
+def _params_key(params: dict) -> str:
+    """A stable cache-key fragment for a parameter dict."""
+    parts = []
+    for k in sorted(params or {}):
+        v = params[k]
+        parts.append(f"{k}={','.join(map(str, v)) if isinstance(v, list) else v}")
+    return "|".join(parts) or "none"
+
+
+# ── Courses and regions ──────────────────────────────────────────────────────
+
+async def get_course_regions() -> list[dict]:
+    """Every country the feed knows, as {region, region_code}. 55 of them."""
+    data = await _get(
+        "/courses/regions",
+        cache_key="courses:regions:v1",
+        ttl=30 * 24 * 3600,  # countries do not come and go
+    )
+    return data if isinstance(data, list) else (data or {}).get("regions", [])
+
+
+async def get_courses(region_codes: list[str] | None = None) -> dict:
+    """Tracks, optionally narrowed to some countries.
+
+    The parameter is region_codes, plural and repeated — a single region_code
+    is silently ignored and you get the whole world back.
+    """
+    params = {"region_codes": list(region_codes)} if region_codes else None
+    return await _get(
+        "/courses",
+        params=params,
+        cache_key=f"courses:{_params_key(params or {})}",
+        ttl=7 * 24 * 3600,
+    )
+
+
+# ── Pro racecards ────────────────────────────────────────────────────────────
+#
+# /racecards/standard and /racecards/pro carry the same races; pro carries far
+# more about each runner. Per runner it adds every bookmaker's price (29 on a
+# sample Catterick card) with its own movement history, RPR, topspeed, official
+# rating, the Racing Post spotlight comment and stable tour quotes, the
+# trainer's last-14-days record and RTF, headgear and wind-surgery flags, plus
+# date of birth, colour, sex, owner and breeder. Odds are UK and IRE only.
+
+RACECARDS_PRO_PAGE = 500  # the endpoint's own maximum
+
+
+async def get_racecards_pro(date: str = None, region_codes: list[str] | None = None,
+                            course_ids: list[str] | None = None) -> dict:
+    """Every Pro racecard for a day, following the pagination to the end."""
+    base: dict = {}
+    if date:
+        base["date"] = date
+    if region_codes:
+        base["region_codes"] = list(region_codes)
+    if course_ids:
+        base["course_ids"] = list(course_ids)
+
+    cache_key = f"racecards:pro:{_params_key(base)}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    cards: list[dict] = []
+    skip = 0
+    while True:
+        page = await _get("/racecards/pro", params={**base, "limit": RACECARDS_PRO_PAGE, "skip": skip})
+        rows = page.get("racecards") or []
+        cards.extend(rows)
+        # skip caps at 500, so one more page is all the endpoint will give.
+        if len(rows) < RACECARDS_PRO_PAGE or skip >= RACECARDS_PRO_PAGE:
+            break
+        skip += RACECARDS_PRO_PAGE
+
+    out = {"racecards": cards, "total": len(cards)}
+    await cache_set(cache_key, out, ex=600)
+    return out
+
+
+async def get_big_races() -> dict:
+    """The feed's own list of upcoming Group and Grade races worldwide."""
+    return await _get("/racecards/big-races", cache_key="racecards:big_races:v1", ttl=3600)
+
+
+async def get_odds_history(race_id: str, horse_id: str) -> dict:
+    """Every bookmaker's price for one runner, with its movement since market open."""
+    return await _get(
+        f"/odds/{race_id}/{horse_id}",
+        cache_key=f"odds_history:{race_id}:{horse_id}",
+        ttl=120,  # prices move; this is the shortest useful life
+    )
+
 
 async def search_horses(name: str) -> dict:
     """Search horses by name (Standard plan)."""
@@ -247,17 +378,45 @@ async def search_horses(name: str) -> dict:
 
 
 async def get_horse(horse_id: str) -> dict:
-    """Horse profile — not available on Standard. Search racecard data."""
-    raise HTTPException(
-        status_code=404,
-        detail="Individual horse profiles require a Pro plan. Use search to find horses in upcoming races.",
+    """Breeding, date of birth, sex and colour for one horse.
+
+    Refused outright until the Pro upgrade, which is why anything asking for a
+    horse profile quietly got nothing back.
+    """
+    if not horse_id:
+        raise HTTPException(status_code=400, detail="horse_id required")
+    return await _get(
+        f"/horses/{horse_id}/pro",
+        cache_key=f"horse_pro:{horse_id}",
+        ttl=7 * 24 * 3600,  # a date of birth does not change
     )
 
 
-async def get_horse_results(horse_id: str, limit: int = 10) -> dict:
-    raise HTTPException(
-        status_code=402,
-        detail="Horse past results require a Pro plan",
+async def get_horse_results(horse_id: str, limit: int = 10, **filters) -> dict:
+    """A horse's own past runs, newest first.
+
+    Takes the same advanced filters as /results — start_date, end_date, region,
+    course, type, going, race_class, min_distance_y, max_distance_y, age_band,
+    sex_restriction — so "this horse on soft ground over a mile" is one call.
+    """
+    if not horse_id:
+        raise HTTPException(status_code=400, detail="horse_id required")
+    params = {"limit": max(1, min(int(limit or 10), 100))}
+    params.update(_result_filters(**filters))
+    return await _get(
+        f"/horses/{horse_id}/results",
+        params=params,
+        cache_key=f"horse_results:{horse_id}:{_params_key(params)}",
+        ttl=6 * 3600,
+    )
+
+
+async def get_horse_distance_times(horse_id: str) -> dict:
+    """Per-distance times and win rates for one horse."""
+    return await _get(
+        f"/horses/{horse_id}/analysis/distance-times",
+        cache_key=f"horse_dist_times:{horse_id}",
+        ttl=24 * 3600,
     )
 
 
@@ -1159,6 +1318,54 @@ async def search_trainers(name: str) -> dict:
     )
 
 
+async def search_owners(name: str) -> dict:
+    """Owners. The fourth searchable party, and the one we never asked for."""
+    return await _get(
+        "/owners/search",
+        params={"name": name},
+        cache_key=f"owner_search:{name.lower()}",
+        ttl=3600,
+    )
+
+
+# Every group that has both /search and /{id}/results, mapped from the singular
+# name a caller would use to the plural the API wants in the path.
+ENTITY_GROUPS = {
+    "horse": "horses", "jockey": "jockeys", "trainer": "trainers",
+    "owner": "owners", "sire": "sires", "dam": "dams", "damsire": "damsires",
+}
+
+
+async def search_entity(name: str, entity_type: str) -> dict:
+    """Name search for any of the seven searchable parties."""
+    group = ENTITY_GROUPS.get((entity_type or "").lower())
+    if not group:
+        raise HTTPException(status_code=400, detail=f"entity_type must be one of {sorted(ENTITY_GROUPS)}")
+    return await _get(
+        f"/{group}/search",
+        params={"name": name},
+        cache_key=f"{group}_search:{(name or '').lower()}",
+        ttl=3600,
+    )
+
+
+async def get_entity_results(entity_id: str, entity_type: str, limit: int = 20,
+                             **filters) -> dict:
+    """Historical results for any horse, jockey, trainer, owner, sire, dam or
+    damsire, with the full advanced filter set applied."""
+    group = ENTITY_GROUPS.get((entity_type or "").lower())
+    if not group:
+        raise HTTPException(status_code=400, detail=f"entity_type must be one of {sorted(ENTITY_GROUPS)}")
+    params = {"limit": max(1, min(int(limit or 20), 100))}
+    params.update(_result_filters(**filters))
+    return await _get(
+        f"/{group}/{entity_id}/results",
+        params=params,
+        cache_key=f"{group}_results:{entity_id}:{_params_key(params)}",
+        ttl=6 * 3600,
+    )
+
+
 # ── Person form, from the Pro analysis endpoints ─────────────────────────────
 #
 # These carry USA races even though the core racecards and results do not, so a
@@ -1174,11 +1381,11 @@ PERSON_FORM_TTL = 24 * 3600  # people's numbers move slowly; the card does not
 
 
 async def find_person_id(name: str, person_type: str) -> str | None:
-    """The API's own id for a trainer or jockey, matched on exact name first."""
-    if not name or person_type not in ("trainer", "jockey"):
+    """The API's own id for a trainer, jockey or owner, matched on exact name first."""
+    if not name or person_type not in ("trainer", "jockey", "owner"):
         return None
     try:
-        data = await (search_trainers(name) if person_type == "trainer" else search_jockeys(name))
+        data = await search_entity(name, person_type)
     except Exception:
         return None
     rows = (data or {}).get("search_results") or []
@@ -1203,8 +1410,13 @@ async def find_person_id(name: str, person_type: str) -> str | None:
 
 
 async def get_person_analysis(person_id: str, person_type: str, facet: str = "courses") -> dict:
-    """Raw analysis payload: per-facet runners, finishes, win %, a/e and P/L."""
-    group = "trainers" if person_type == "trainer" else "jockeys"
+    """Raw analysis payload: per-facet runners, finishes, win %, a/e and P/L.
+
+    Facets differ by group: trainers have courses, distances, jockeys, owners
+    and horse-age; jockeys have courses, distances, trainers and owners; owners
+    have courses, distances, jockeys and trainers.
+    """
+    group = ENTITY_GROUPS.get(person_type, "jockeys")
     return await _get(
         f"/{group}/{person_id}/analysis/{facet}",
         cache_key=f"person_analysis:{group}:{person_id}:{facet}",

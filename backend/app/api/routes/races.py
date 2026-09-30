@@ -149,3 +149,115 @@ async def race_detail(race_id: str):
         raise
     except Exception:
         raise HTTPException(status_code=502, detail="Racing data unavailable")
+
+
+# ── International card, grouped by country ───────────────────────────────────
+#
+# The US view runs off the North America add-on, which is a separate dataset
+# and has no notion of anywhere else. This one runs off the core feed —
+# UK, Ireland, France and whatever group races are carded elsewhere — and
+# groups by country first, then by track within it.
+#
+# It reads /racecards/pro rather than /racecards/standard. Same races, far more
+# per runner: every bookmaker's price and its movement, RPR, topspeed, official
+# rating, the spotlight comment, the trainer's last fourteen days. None of that
+# reaches this list, but the race detail behind it can use all of it without a
+# second fetch.
+
+INTERNATIONAL_TTL = 600
+
+
+def _fold(cards: list[dict], names: dict[str, str]) -> list[dict]:
+    """Races -> countries -> tracks, each sorted the way it will be read."""
+    countries: dict[str, dict] = {}
+    for race in cards:
+        code = (race.get("region") or "").upper()
+        if not code:
+            continue
+        country = countries.setdefault(code, {
+            "region_code": code.lower(),
+            "region": names.get(code.lower(), code),
+            "tracks": {},
+        })
+        course = (race.get("course") or "Unknown").strip()
+        track = country["tracks"].setdefault(course, {
+            "course": course,
+            "course_id": race.get("course_id"),
+            "races": [],
+        })
+        track["races"].append({
+            "race_id": race.get("race_id"),
+            "race_name": race.get("race_name"),
+            "off_time": race.get("off_time"),
+            "off_dt": race.get("off_dt"),
+            "distance": race.get("distance_round") or race.get("distance"),
+            "going": race.get("going"),
+            "race_class": race.get("race_class"),
+            "pattern": race.get("pattern"),
+            "age_band": race.get("age_band"),
+            "prize": race.get("prize"),
+            "field_size": race.get("field_size"),
+            "big_race": bool(race.get("big_race")),
+            "is_abandoned": bool(race.get("is_abandoned")),
+        })
+
+    out = []
+    for country in countries.values():
+        tracks = []
+        for track in country["tracks"].values():
+            track["races"].sort(key=lambda r: (r.get("off_dt") or "", r.get("off_time") or ""))
+            track["race_count"] = len(track["races"])
+            tracks.append(track)
+        tracks.sort(key=lambda t: t["course"].lower())
+        out.append({
+            "region": country["region"],
+            "region_code": country["region_code"],
+            "tracks": tracks,
+            "track_count": len(tracks),
+            "race_count": sum(t["race_count"] for t in tracks),
+        })
+    # Most racing first, so the countries with a full card lead.
+    out.sort(key=lambda c: (-c["race_count"], c["region"]))
+    return out
+
+
+@router.get("/international")
+async def races_international(date: str = None):
+    """Today's or a given day's non-US card, grouped by country then track."""
+    import datetime as _dt
+
+    day = (date or "today").strip().lower()
+    if day == "today":
+        iso = _dt.date.today().isoformat()
+    elif day == "tomorrow":
+        iso = (_dt.date.today() + _dt.timedelta(days=1)).isoformat()
+    else:
+        try:
+            iso = _dt.date.fromisoformat(day).isoformat()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="date must be today, tomorrow or YYYY-MM-DD")
+
+    cache_key = f"races:international:v1:{iso}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        cards, regions = await asyncio.gather(
+            racing_api.get_racecards_pro(date=iso),
+            racing_api.get_course_regions(),
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="Racing data unavailable")
+
+    names = {r.get("region_code"): r.get("region") for r in regions or []}
+    countries = _fold(cards.get("racecards") or [], names)
+    payload = {
+        "date": iso,
+        "countries": countries,
+        "total": sum(c["race_count"] for c in countries),
+    }
+    await cache_set(cache_key, payload, ex=INTERNATIONAL_TTL)
+    return payload

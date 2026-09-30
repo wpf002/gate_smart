@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { getRacesToday, getRacesByDate } from '../utils/api';
+import { getRacesToday, getRacesByDate, getInternationalRaces } from '../utils/api';
 import { RaceCard, RaceCardSkeleton } from '../components/races/RaceCard';
+import InternationalCard from '../components/races/InternationalCard';
 import PageHeader from '../components/common/PageHeader';
 import AccuracyBadge from '../components/common/AccuracyBadge';
 import Icon from '../components/common/Icon';
@@ -10,6 +11,14 @@ import Icon from '../components/common/Icon';
 const DATE_TABS = [
   { key: 'today', label: 'Today' },
   { key: 'tomorrow', label: 'Tomorrow' },
+];
+
+// Two feeds, not two filters on one. The US view is the North America add-on;
+// the international view is the core feed — Britain, Ireland, France and
+// whatever group races are carded elsewhere — so they can't be merged.
+const VIEW_TABS = [
+  { key: 'usa', label: 'United States' },
+  { key: 'intl', label: 'International' },
 ];
 
 function TrackSection({ course, races, isTomorrow }) {
@@ -68,16 +77,20 @@ function TrackSection({ course, races, isTomorrow }) {
 
 export default function HomePage() {
   const [selectedDay, setSelectedDay] = useState('today');
+  const [view, setView] = useState('usa');
   const [trackSearch, setTrackSearch] = useState('');
+  const isIntl = view === 'intl';
 
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['races', selectedDay],
+    queryKey: ['races', view, selectedDay],
     queryFn: () =>
-      selectedDay === 'today'
-        ? getRacesToday('usa')
-        : getRacesByDate('tomorrow', 'usa'),
+      isIntl
+        ? getInternationalRaces(selectedDay)
+        : selectedDay === 'today'
+          ? getRacesToday('usa')
+          : getRacesByDate('tomorrow', 'usa'),
     // Keep last-good data visible while refetching or during a transient
     // failure, so a brief Railway redeploy or network blip doesn't blank
     // the screen with a scary error.
@@ -88,13 +101,15 @@ export default function HomePage() {
   useEffect(() => {
     const otherDay = selectedDay === 'today' ? 'tomorrow' : 'today';
     queryClient.prefetchQuery({
-      queryKey: ['races', otherDay],
+      queryKey: ['races', view, otherDay],
       queryFn: () =>
-        otherDay === 'today'
-          ? getRacesToday('usa')
-          : getRacesByDate('tomorrow', 'usa'),
+        isIntl
+          ? getInternationalRaces(otherDay)
+          : otherDay === 'today'
+            ? getRacesToday('usa')
+            : getRacesByDate('tomorrow', 'usa'),
     });
-  }, [selectedDay, queryClient]);
+  }, [selectedDay, view, isIntl, queryClient]);
 
   const races = data?.racecards ?? [];
 
@@ -138,6 +153,19 @@ export default function HomePage() {
         right={<AccuracyBadge />}
       />
 
+      {/* Which feed */}
+      <div className="view-toggle">
+        {VIEW_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            className={`view-toggle-btn${view === key ? ' is-active' : ''}`}
+            onClick={() => setView(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Date tabs */}
       <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border-subtle)', marginTop: 12 }}>
         {DATE_TABS.map(({ key, label }) => (
@@ -163,7 +191,9 @@ export default function HomePage() {
         ))}
       </div>
 
-      {/* Track search */}
+      {/* Track search — US view only; the international view groups by country
+          first, so filtering tracks across all of them reads wrong. */}
+      {!isIntl && (
       <div style={{ padding: '10px 16px 0' }}>
         <div style={{ position: 'relative' }}>
           <span style={{
@@ -189,6 +219,7 @@ export default function HomePage() {
           />
         </div>
       </div>
+      )}
 
       <div style={{ padding: '16px 20px' }}>
         {isError && (
@@ -217,6 +248,22 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+        ) : isIntl ? (
+          (data?.countries || []).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="horse" size={48} /></div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22 }}>No international racing</div>
+              <div style={{ fontSize: 13, marginTop: 6 }}>Nothing carded outside the US for this day</div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                {data.total} races across {data.countries.length}{' '}
+                {data.countries.length === 1 ? 'country' : 'countries'}
+              </div>
+              <InternationalCard countries={data.countries} />
+            </>
+          )
         ) : tracks.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
             <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="horse" size={48} /></div>

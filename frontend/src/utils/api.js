@@ -46,6 +46,9 @@ export const getRacesToday = (region = null) =>
 export const getRacesByDate = (date, region = null) =>
   api.get(`/races/date/${date}`, { params: region ? { region } : {} }).then((r) => r.data);
 
+export const getInternationalRaces = (date = 'today') =>
+  api.get('/races/international', { params: { date } }).then((r) => r.data);
+
 export const getRaceDetail = (raceId) =>
   api.get(`/races/${raceId}`).then((r) => r.data);
 
