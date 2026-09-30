@@ -30,33 +30,45 @@ export default function HomePage() {
 
   const queryClient = useQueryClient();
 
-  const { data, isLoading, isError } = useQuery({
+  const fetchFor = (v, day) =>
+    v === 'intl'
+      ? getInternationalRaces(day)
+      : day === 'today'
+        ? getRacesToday('usa')
+        : getRacesByDate('tomorrow', 'usa');
+
+  const { data, isLoading, isFetching, isError } = useQuery({
     queryKey: ['races', view, selectedDay],
-    queryFn: () =>
-      isIntl
-        ? getInternationalRaces(selectedDay)
-        : selectedDay === 'today'
-          ? getRacesToday('usa')
-          : getRacesByDate('tomorrow', 'usa'),
+    queryFn: () => fetchFor(view, selectedDay),
     // Keep last-good data visible while refetching or during a transient
     // failure, so a brief Railway redeploy or network blip doesn't blank
     // the screen with a scary error.
     placeholderData: keepPreviousData,
   });
 
-  // Warm the cache for the other day so toggling tabs feels instant.
+  // keepPreviousData hands over the PREVIOUS key's payload, so switching to
+  // International arrived holding the US response — which has racecards and no
+  // countries, and read as "no international racing" until the fetch landed.
+  // A payload only belongs to this view if it has the shape this view returns.
+  const fits = isIntl ? Array.isArray(data?.countries) : Array.isArray(data?.racecards);
+  const showSkeleton = isLoading || (isFetching && !fits);
+
+  // Warm every other combination — the other day in this view, and both days in
+  // the view you aren't looking at. Four small payloads, fetched once, so the
+  // toggle never waits on the network.
   useEffect(() => {
-    const otherDay = selectedDay === 'today' ? 'tomorrow' : 'today';
-    queryClient.prefetchQuery({
-      queryKey: ['races', view, otherDay],
-      queryFn: () =>
-        isIntl
-          ? getInternationalRaces(otherDay)
-          : otherDay === 'today'
-            ? getRacesToday('usa')
-            : getRacesByDate('tomorrow', 'usa'),
-    });
-  }, [selectedDay, view, isIntl, queryClient]);
+    for (const v of ['usa', 'intl']) {
+      for (const day of ['today', 'tomorrow']) {
+        if (v === view && day === selectedDay) continue;
+        queryClient.prefetchQuery({
+          queryKey: ['races', v, day],
+          queryFn: () => fetchFor(v, day),
+          staleTime: 5 * 60 * 1000,
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDay, view, queryClient]);
 
   const races = data?.racecards ?? [];
 
@@ -184,7 +196,7 @@ export default function HomePage() {
           </div>
         )}
 
-        {isLoading ? (
+        {showSkeleton ? (
           <div>
             {[...Array(3)].map((_, t) => (
               <div key={t} style={{ marginBottom: 24 }}>
@@ -196,7 +208,7 @@ export default function HomePage() {
             ))}
           </div>
         ) : isIntl ? (
-          (data?.countries || []).length === 0 ? (
+          !fits || data.countries.length === 0 ? (
             <div className="races-empty">
               <div className="races-empty-title">No international racing</div>
               <div className="races-empty-note">Nothing carded outside the US for this day</div>

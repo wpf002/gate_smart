@@ -48,10 +48,38 @@ async def _settle_predictions(race_ids: list[str]) -> None:
             continue
 
 
+# ── List payloads ────────────────────────────────────────────────────────────
+#
+# The races list draws a card per race and shows nothing about any individual
+# runner — the field size is all it reads, and the race page fetches its own
+# race when you open one. Shipping the whole field with the list cost 544 KB for
+# a US day and 3 MB for an international one, which is most of why the page felt
+# slow before a single card appeared.
+
+_LIST_DROP = {
+    "runners", "betting_forecast", "tip", "verdict", "rail_movements",
+    "stalls", "going_detailed", "distance_round", "race_status", "raw",
+}
+
+
+def list_card(race: dict) -> dict:
+    """One race as the list needs it: everything but the field."""
+    card = {k: v for k, v in race.items() if k not in _LIST_DROP}
+    # RaceCard reads runners.length first and falls back to this, so the count
+    # survives with no runners attached.
+    card["no_of_runners"] = (
+        race.get("field_size") or len(race.get("runners") or []) or None)
+    return card
+
+
+def list_payload(data: dict) -> dict:
+    return {**data, "racecards": [list_card(r) for r in (data.get("racecards") or [])]}
+
+
 @router.get("/today")
 async def races_today(region: str = None):
     try:
-        return await racing_api.get_na_racecards_full()
+        return list_payload(await racing_api.get_na_racecards_full())
     except HTTPException:
         raise
     except Exception:
@@ -133,7 +161,7 @@ async def results_by_date(result_date: str, region: str = None):
 @router.get("/date/{race_date}")
 async def races_by_date(race_date: str, region: str = None):
     try:
-        return await racing_api.get_na_racecards_full(date=race_date)
+        return list_payload(await racing_api.get_na_racecards_full(date=race_date))
     except HTTPException:
         raise
     except Exception:
@@ -163,6 +191,11 @@ async def races_by_date(race_date: str, region: str = None):
 INTERNATIONAL_TTL = 600
 
 
+def _card(race: dict) -> dict:
+    """One international race, normalised, trimmed to what the list draws."""
+    return list_card(racing_api._normalize_race(race))
+
+
 def _fold(cards: list[dict], names: dict[str, str]) -> list[dict]:
     """Races -> countries -> tracks, each sorted the way it will be read."""
     countries: dict[str, dict] = {}
@@ -181,7 +214,7 @@ def _fold(cards: list[dict], names: dict[str, str]) -> list[dict]:
             "course_id": race.get("course_id"),
             "races": [],
         })
-        track["races"].append(racing_api._normalize_race(race))
+        track["races"].append(_card(race))
 
     out = []
     for country in countries.values():
@@ -219,7 +252,8 @@ async def races_international(date: str = None):
         except ValueError:
             raise HTTPException(status_code=400, detail="date must be today, tomorrow or YYYY-MM-DD")
 
-    cache_key = f"races:international:v1:{iso}"
+    # v2: the runner list no longer rides along.
+    cache_key = f"races:international:v2:{iso}"
     cached = await cache_get(cache_key)
     if cached is not None:
         return cached

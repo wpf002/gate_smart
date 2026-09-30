@@ -31,7 +31,33 @@ async def test_races_today_returns_api_data(client):
                new=AsyncMock(return_value=FAKE_NA_RACECARDS)):
         r = await client.get("/api/races/today")
     assert r.status_code == 200
-    assert r.json() == FAKE_NA_RACECARDS
+    got = r.json()["racecards"][0]
+    for key, value in FAKE_NA_RACECARDS["racecards"][0].items():
+        assert got[key] == value
+
+
+@pytest.mark.asyncio
+async def test_the_list_drops_the_field_and_keeps_the_count(client):
+    # The list draws a card per race and reads nothing but the field size, and
+    # the race page fetches its own race — so shipping every runner cost 544 KB
+    # on a US day and 3 MB on an international one before a card appeared.
+    card = {"race_id": "IND_1-1", "course": "Indianapolis", "field_size": 9,
+            "runners": [{"horse_name": f"H{i}"} for i in range(9)]}
+    with patch("app.api.routes.races.racing_api.get_na_racecards_full",
+               new=AsyncMock(return_value={"racecards": [card]})):
+        r = await client.get("/api/races/today")
+    got = r.json()["racecards"][0]
+    assert "runners" not in got
+    assert got["no_of_runners"] == 9
+
+
+@pytest.mark.asyncio
+async def test_the_count_falls_back_to_the_field_when_there_is_no_size(client):
+    card = {"race_id": "IND_1-1", "runners": [{"horse_name": "A"}, {"horse_name": "B"}]}
+    with patch("app.api.routes.races.racing_api.get_na_racecards_full",
+               new=AsyncMock(return_value={"racecards": [card]})):
+        r = await client.get("/api/races/today")
+    assert r.json()["racecards"][0]["no_of_runners"] == 2
 
 
 @pytest.mark.asyncio
