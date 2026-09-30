@@ -232,16 +232,30 @@ async def get_horse_record(name: str) -> dict:
         results = await racing_api.get_horse_results(hid, limit=MAX_HORSE_RUNS)
     except Exception:
         results = {}
+    # The finishing position, the price and the chart comment belong to this
+    # horse's row inside the race, not to the race — reading them off the
+    # result gave every run a null position.
     runs = []
     for r in (results.get("results") or [])[:MAX_HORSE_RUNS]:
+        mine = next((x for x in (r.get("runners") or [])
+                     if x.get("horse_id") == hid), {})
         runs.append({
             "date": r.get("date"),
             "track": r.get("course"),
             "distance": r.get("dist"),
             "going": r.get("going"),
-            "position": r.get("position"),
-            "sp": r.get("sp"),
             "race": r.get("race_name"),
+            "class": r.get("class"),
+            "field_size": len(r.get("runners") or []) or None,
+            "position": mine.get("position"),
+            "beaten_lengths": mine.get("ovr_btn") or mine.get("btn"),
+            "sp": mine.get("sp"),
+            "jockey": mine.get("jockey"),
+            "trainer": mine.get("trainer"),
+            "official_rating": mine.get("or"),
+            # The chart caller's account of the trip — a horse that was blocked
+            # or short of room ran better than its position.
+            "note": mine.get("comment"),
         })
     return {"horse": horse.get("name") or name, "sire": horse.get("sire"),
             "dam": horse.get("dam"), "runs": runs}
