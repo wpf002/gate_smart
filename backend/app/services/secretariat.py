@@ -1937,6 +1937,55 @@ async def _needs_web_search(question: str, user_id: int | None = None) -> bool:
         return False
 
 
+async def _answer_with_tools(msgs, tools, create_args, user_id):
+    """Run the question to completion, serving any racing-feed tool calls.
+
+    Web search resolves on Anthropic's side and never comes back to us. Our own
+    tools do, as tool_use blocks, so each round is: ask, run whatever it asked
+    for, hand back the results. Capped at advisor_tools.MAX_TOOL_ROUNDS.
+
+    The cap is spent by asking for the answer, not by withholding the tools.
+    Dropping `tools` for the last round while the history still ended in a
+    tool_result came back end_turn with no content blocks at all, so the round
+    keeps its tools and carries an instruction to stop looking things up.
+    """
+    from app.services import advisor_tools
+
+    msgs = list(msgs)
+    last = None
+    for round_no in range(advisor_tools.MAX_TOOL_ROUNDS):
+        if round_no == advisor_tools.MAX_TOOL_ROUNDS - 1:
+            msgs.append({"role": "user", "content": (
+                "You now have everything you are going to get. Write the final "
+                "answer from what you already have — no further lookups. If a "
+                "detail is missing, say so and answer around it."
+            )})
+        last = await tracked_create(
+            client,
+            endpoint="ask_sonnet_tools",
+            user_id=user_id,
+            messages=msgs,
+            tools=tools,
+            **create_args,
+        )
+        if last.stop_reason != "tool_use":
+            return last
+
+        calls = [b for b in last.content
+                 if getattr(b, "type", None) == "tool_use" and b.name in advisor_tools.TOOL_NAMES]
+        if not calls:
+            return last
+
+        outputs = await asyncio.gather(
+            *(advisor_tools.run_tool(b.name, b.input) for b in calls))
+        msgs.append({"role": "assistant", "content": last.content})
+        msgs.append({"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": b.id, "content": out}
+            for b, out in zip(calls, outputs)
+        ]})
+    return last
+
+
 async def answer_betting_question(question: str, context: dict = None, history: list[dict] = None, user_id: int | None = None) -> str:
     """Free-form Q&A — Secretariat answers any horse-racing question.
 
@@ -2031,30 +2080,30 @@ Reply with the FINAL markdown answer directly — no JSON wrapper, no preface, n
     msgs.append({"role": "user", "content": prompt})
 
     if use_search:
-        # Live-racing intent: pay for Sonnet + web search (≈$0.07/call)
+        # Live-racing intent: Sonnet, with the racing feed as tools and web
+        # search kept for what the feed doesn't carry — news, workout reports,
+        # anything outside a racecard.
+        from app.services import advisor_tools
+
         create_args = dict(
             model="claude-sonnet-4-6",
             max_tokens=2000,
             temperature=0.3,
             system=_cached_system(),
-            messages=msgs,
         )
-        web_search_tool = [{
+        tools = advisor_tools.TOOLS + [{
             "type": "web_search_20250305",
             "name": "web_search",
             "max_uses": 3,
         }]
         try:
-            response = await tracked_create(
-                client,
-                endpoint="ask_sonnet_search",
-                user_id=user_id,
-                tools=web_search_tool,
-                **create_args,
-            )
+            response = await _answer_with_tools(msgs, tools, create_args, user_id)
         except anthropic.APIError:
-            # Web search unavailable — answer from training instead of swallowing the cost twice
-            response = await tracked_create(client, endpoint="ask_sonnet_nosearch", user_id=user_id, **create_args)
+            # Tools or search unavailable — answer from training rather than
+            # paying for the same question twice.
+            response = await tracked_create(
+                client, endpoint="ask_sonnet_nosearch", user_id=user_id,
+                messages=msgs, **create_args)
         return await _finalize_answer(_extract_text(response), user_id)
 
     # Default: Haiku, no web search (≈$0.003/call) for evergreen handicapping/strategy/history
