@@ -63,3 +63,36 @@ def test_the_person_tool_states_what_the_dataset_covers():
     # The same limit the profile page carries: stakes company, not a strike rate.
     desc = next(x for x in t.TOOLS if x["name"] == "get_person_record")["description"]
     assert "not an overall strike rate" in desc
+
+
+# ── The connections block's course lookup ────────────────────────────────────
+
+def test_a_course_matches_across_the_country_suffix():
+    from app.services.connections import _course_key
+    # The analysis endpoint writes "Belmont Park (USA)"; the NA feed writes
+    # "Belmont Park". Without stripping it, no US track ever matched.
+    assert _course_key("Belmont Park (USA)") == _course_key("Belmont Park")
+    assert _course_key("Meydan (UAE)") == "meydan"
+    assert _course_key("Newmarket") == "newmarket"
+
+
+def test_a_track_record_needs_a_real_sample():
+    from app.services.connections import _at_course, MIN_COURSE_STARTS
+    rows = [{"course": "Saratoga (USA)", "runners": MIN_COURSE_STARTS - 1,
+             "1st": 5, "win_%": 0.33, "a/e": 1.4}]
+    assert _at_course(rows, "Saratoga") is None
+
+
+def test_a_track_record_reads_back_the_feeds_own_figures():
+    from app.services.connections import _at_course
+    rows = [{"course": "Santa Anita (USA)", "runners": 642, "1st": 154,
+             "win_%": 0.24, "a/e": 0.92}]
+    got = _at_course(rows, "Santa Anita")
+    assert got == {"course": "Santa Anita", "starts": 642, "wins": 154,
+                   "win_rate": 0.24, "ae": 0.92}
+
+
+def test_an_unraced_course_returns_nothing():
+    from app.services.connections import _at_course
+    assert _at_course([{"course": "Ascot", "runners": 200, "1st": 20}], "Saratoga") is None
+    assert _at_course([], "Saratoga") is None

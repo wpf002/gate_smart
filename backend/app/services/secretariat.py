@@ -1069,8 +1069,11 @@ async def build_analyze_request(
 
     # Connections and pedigree, from the Pro analysis endpoints. Both are
     # distance-aware, so they describe today's trip rather than a career
-    # average. Neither can block the analysis: an empty block is what the
-    # prompt saw before these existed.
+    # average, and connections is course-aware too — the analysis dataset
+    # carries US tracks, so a barn's record at today's track comes out of the
+    # same payload that builds its headline figure, at no extra call. Neither
+    # can block the analysis: an empty block is what the prompt saw before
+    # these existed.
     try:
         furlongs = float(race_data.get("distance_f") or 0)
     except (TypeError, ValueError):
@@ -1084,7 +1087,7 @@ async def build_analyze_request(
 
         counts = await form_counts_for(runners)
         connections_block, pedigree_block, figures_block = await asyncio.gather(
-            get_connections_context(runners, furlongs),
+            get_connections_context(runners, furlongs, race_data.get("course") or ""),
             get_pedigree_context(runners, furlongs, counts),
             get_figures_context(runners),
         )

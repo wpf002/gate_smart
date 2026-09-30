@@ -52,15 +52,20 @@ def test_tracks_are_alphabetical_and_races_run_in_time_order():
         "2026-09-29T14:00", "2026-09-29T15:30"]
 
 
-def test_distance_round_is_preferred_over_the_raw_distance():
-    # The feed writes "1m0f0y" or a bare "8" in `distance`; distance_round reads.
+def test_races_come_through_the_same_normaliser_as_the_us_view():
+    # RaceCard reads time/title/distance_f and formats the distance itself, so
+    # the race has to carry the normalised keys and not a bespoke subset.
     out = _fold([_race("GB", "Ayr", "2026-09-29T14:00",
-                       distance="1m0f0y", distance_round="1m")], NAMES)
-    assert out[0]["tracks"][0]["races"][0]["distance"] == "1m"
-
-
-def test_group_races_and_abandonments_are_flagged():
-    out = _fold([_race("FR", "Longchamp", "2026-10-04T17:00",
-                       big_race=True, is_abandoned=False)], NAMES)
+                       distance="1m0f0y", distance_f="8.0", runners=[])], NAMES)
     race = out[0]["tracks"][0]["races"][0]
-    assert race["big_race"] is True and race["is_abandoned"] is False
+    assert race["time"] == race["off_time"]
+    assert race["title"] == "A Race"
+    assert race["distance_f"] == "8.0"
+
+
+def test_the_raw_race_fields_survive_normalisation():
+    out = _fold([_race("FR", "Longchamp", "2026-10-04T17:00",
+                       big_race=True, pattern="Group 1", runners=[])], NAMES)
+    race = out[0]["tracks"][0]["races"][0]
+    assert race["big_race"] is True
+    assert race["pattern"] == "Group 1"

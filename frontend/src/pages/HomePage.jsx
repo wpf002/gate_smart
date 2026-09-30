@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getRacesToday, getRacesByDate, getInternationalRaces } from '../utils/api';
 import { RaceCard, RaceCardSkeleton } from '../components/races/RaceCard';
 import InternationalCard from '../components/races/InternationalCard';
+import TrackSection from '../components/races/TrackSection';
 import PageHeader from '../components/common/PageHeader';
 import AccuracyBadge from '../components/common/AccuracyBadge';
 import Icon from '../components/common/Icon';
@@ -20,60 +21,6 @@ const VIEW_TABS = [
   { key: 'usa', label: 'United States' },
   { key: 'intl', label: 'International' },
 ];
-
-function TrackSection({ course, races, isTomorrow }) {
-  const [collapsed, setCollapsed] = useState(true);
-  return (
-    <div className={`track-section${collapsed ? '' : ' is-open'}`}>
-      <button
-        onClick={() => setCollapsed(c => !c)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          width: '100%',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: '6px 0 10px',
-          textAlign: 'left',
-        }}
-      >
-        <span style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 20,
-          color: 'var(--accent-gold)',
-          letterSpacing: '0.06em',
-          flex: 1,
-        }}>
-          {course}
-        </span>
-        <span style={{
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          fontWeight: 600,
-          background: 'var(--bg-elevated)',
-          padding: '2px 8px',
-          borderRadius: 10,
-        }}>
-          {races.length} {races.length === 1 ? 'race' : 'races'}
-        </span>
-        <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-          {collapsed ? '›' : '‹'}
-        </span>
-      </button>
-
-      {!collapsed && (
-        <div className="race-grid">
-          {races.map(race => (
-            <RaceCard key={race.race_id} race={race} isTomorrow={isTomorrow} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 
 export default function HomePage() {
   const [selectedDay, setSelectedDay] = useState('today');
@@ -250,10 +197,9 @@ export default function HomePage() {
           </div>
         ) : isIntl ? (
           (data?.countries || []).length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="horse" size={48} /></div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22 }}>No international racing</div>
-              <div style={{ fontSize: 13, marginTop: 6 }}>Nothing carded outside the US for this day</div>
+            <div className="races-empty">
+              <div className="races-empty-title">No international racing</div>
+              <div className="races-empty-note">Nothing carded outside the US for this day</div>
             </div>
           ) : (
             <>
@@ -261,14 +207,13 @@ export default function HomePage() {
                 {data.total} races across {data.countries.length}{' '}
                 {data.countries.length === 1 ? 'country' : 'countries'}
               </div>
-              <InternationalCard countries={data.countries} />
+              <InternationalCard countries={data.countries} isTomorrow={selectedDay === 'tomorrow'} />
             </>
           )
         ) : tracks.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-            <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><Icon name="horse" size={48} /></div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22 }}>No races scheduled</div>
-            <div style={{ fontSize: 13, marginTop: 6 }}>Check back later or try another day</div>
+          <div className="races-empty">
+            <div className="races-empty-title">No races scheduled</div>
+            <div className="races-empty-note">Check back later or try another day</div>
           </div>
         ) : (
           <>

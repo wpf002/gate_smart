@@ -1699,7 +1699,7 @@ select option {
   }
 }
 
-/* ─── Races: feed toggle and the international card ──────────────────────── */
+/* ─── Races: feed toggle, country headings, empty state ─────────────────── */
 
 .view-toggle {
   display: flex;
@@ -1727,9 +1727,19 @@ select option {
   background: rgba(201, 162, 39, 0.1);
 }
 
+/* The country is the only level the US view doesn't have. Everything under it
+   is the same track-grid / track-section / race-grid the US view renders. */
 .intl-countries {
   display: grid;
-  gap: 22px;
+  gap: 28px;
+}
+
+/* A grid item defaults to min-width: auto, so the widest unbreakable thing
+   inside sets the column. International race names run to sixty characters and
+   RaceCard's title is nowrap, so without this the whole card stretched past the
+   viewport and the right-hand side was clipped away on a phone. */
+.intl-country {
+  min-width: 0;
 }
 
 .intl-country-head {
@@ -1739,13 +1749,13 @@ select option {
   gap: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-gold);
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .intl-country-name {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 400;
   letter-spacing: 0.06em;
   color: var(--accent-gold);
@@ -1757,143 +1767,26 @@ select option {
   white-space: nowrap;
 }
 
-/* Nothing but uniform headers, so auto-fit collapses the empty columns and
-   however many tracks a country has stretch across the full width. */
-.intl-tracks {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 8px;
-}
-
-.intl-track-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 11px 14px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.intl-track-head.is-active {
-  border-color: var(--border-gold);
-  background: rgba(201, 162, 39, 0.1);
-}
-
-.intl-track-name {
-  flex: 1;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.intl-track-head.is-active .intl-track-name {
-  color: var(--accent-gold-bright);
-}
-
-.intl-track-count {
-  font-size: 11px;
-  font-weight: 600;
+.races-empty {
+  text-align: center;
+  padding: 72px 20px;
   color: var(--text-muted);
-  background: var(--bg-elevated);
-  padding: 2px 8px;
-  border-radius: 10px;
-  white-space: nowrap;
 }
 
-.intl-track-chevron {
+.races-empty-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.races-empty-note {
   font-size: 13px;
-  color: var(--text-muted);
-}
-
-.intl-open {
-  margin-top: 8px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-gold);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.intl-race {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.intl-race:last-child {
-  border-bottom: none;
-}
-
-.intl-race.is-off {
-  opacity: 0.45;
-}
-
-.intl-race-time {
-  flex-shrink: 0;
-  width: 44px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent-gold-bright);
-}
-
-.intl-race-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.intl-race-name {
-  font-size: 13px;
-  color: var(--text-primary);
-  line-height: 1.35;
-}
-
-.intl-race-flag {
-  margin-left: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--accent-gold-bright);
-  border: 1px solid var(--border-gold);
-  border-radius: 3px;
-  padding: 0 4px;
-  white-space: nowrap;
-}
-
-.intl-race-tags {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.intl-race-field {
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
+  margin-top: 6px;
 }
 
 @media (min-width: 768px) {
   .view-toggle {
     padding: 16px 24px 0;
-  }
-  /* A full card is 7-10 races; three columns keeps it on one screen without
-     the lines getting so wide the time and the field size drift apart. */
-  .intl-open .intl-races {
-    columns: 420px 3;
-    column-gap: 0;
-  }
-  .intl-open .intl-race {
-    break-inside: avoid;
   }
 }

@@ -172,7 +172,25 @@ async def get_racecards(date: str = None, region: str = None) -> dict:
 
 
 async def get_race(race_id: str) -> dict:
-    """Find a NA race by ID. Format: '{MEET_ID}-{race_number}', e.g. 'IND_1775520000000-1'."""
+    """One race from whichever feed owns its id.
+
+    The two feeds write ids differently and there is no overlap, so the shape
+    of the id picks the feed:
+
+      IND_1775520000000-1   North America add-on, {MEET_ID}-{race_number}
+      rac_32299222618       core feed, which is where every non-US race lives
+
+    Without the second branch every international card was a dead link: the
+    detail page asked for a rac_ id, this looked for a meet, and 404'd.
+    """
+    if race_id.startswith("rac_"):
+        raw = await _get(
+            f"/racecards/{race_id}/pro",
+            cache_key=f"race:pro:{race_id}",
+            ttl=300,
+        )
+        return _normalize_race(raw)
+
     if "-" in race_id:
         meet_id = race_id.rsplit("-", 1)[0]
         try:
@@ -1495,7 +1513,7 @@ async def get_person_facet(person_id: str, person_type: str, facet: str) -> dict
 
 
 async def get_person_form(name: str, person_type: str) -> dict | None:
-    """Recent-form record for one trainer or jockey, or None if unmatched."""
+    """Recent-form record for one trainer, jockey or owner, or None if unmatched."""
     person_id = await find_person_id(name, person_type)
     if not person_id:
         return None
@@ -1507,5 +1525,7 @@ async def get_person_form(name: str, person_type: str) -> dict | None:
     if not summary:
         return None
     summary["id"] = person_id
-    summary["name"] = payload.get("trainer") or payload.get("jockey") or name
+    summary["courses"] = payload.get("courses") or []
+    summary["name"] = (payload.get("trainer") or payload.get("jockey")
+                       or payload.get("owner") or name)
     return summary

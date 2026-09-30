@@ -141,16 +141,6 @@ async def races_by_date(race_date: str, region: str = None):
 
 
 
-@router.get("/{race_id}")
-async def race_detail(race_id: str):
-    try:
-        return await racing_api.get_race(race_id)
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=502, detail="Racing data unavailable")
-
-
 # ── International card, grouped by country ───────────────────────────────────
 #
 # The US view runs off the North America add-on, which is a separate dataset
@@ -160,9 +150,15 @@ async def race_detail(race_id: str):
 #
 # It reads /racecards/pro rather than /racecards/standard. Same races, far more
 # per runner: every bookmaker's price and its movement, RPR, topspeed, official
-# rating, the spotlight comment, the trainer's last fourteen days. None of that
-# reaches this list, but the race detail behind it can use all of it without a
-# second fetch.
+# rating, the spotlight comment, the trainer's last fourteen days.
+#
+# Races go through _normalize_race, the same normaliser the US view uses, so
+# the page renders them with the same RaceCard rather than a second list that
+# has to be kept in step with it.
+#
+# This has to be declared above /{race_id}: FastAPI matches in declaration
+# order, so with it below, "international" was read as a race id and every
+# request 404'd.
 
 INTERNATIONAL_TTL = 600
 
@@ -185,27 +181,13 @@ def _fold(cards: list[dict], names: dict[str, str]) -> list[dict]:
             "course_id": race.get("course_id"),
             "races": [],
         })
-        track["races"].append({
-            "race_id": race.get("race_id"),
-            "race_name": race.get("race_name"),
-            "off_time": race.get("off_time"),
-            "off_dt": race.get("off_dt"),
-            "distance": race.get("distance_round") or race.get("distance"),
-            "going": race.get("going"),
-            "race_class": race.get("race_class"),
-            "pattern": race.get("pattern"),
-            "age_band": race.get("age_band"),
-            "prize": race.get("prize"),
-            "field_size": race.get("field_size"),
-            "big_race": bool(race.get("big_race")),
-            "is_abandoned": bool(race.get("is_abandoned")),
-        })
+        track["races"].append(racing_api._normalize_race(race))
 
     out = []
     for country in countries.values():
         tracks = []
         for track in country["tracks"].values():
-            track["races"].sort(key=lambda r: (r.get("off_dt") or "", r.get("off_time") or ""))
+            track["races"].sort(key=lambda r: (r.get("off_dt") or "", r.get("time") or ""))
             track["race_count"] = len(track["races"])
             tracks.append(track)
         tracks.sort(key=lambda t: t["course"].lower())
@@ -261,3 +243,13 @@ async def races_international(date: str = None):
     }
     await cache_set(cache_key, payload, ex=INTERNATIONAL_TTL)
     return payload
+
+
+@router.get("/{race_id}")
+async def race_detail(race_id: str):
+    try:
+        return await racing_api.get_race(race_id)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="Racing data unavailable")

@@ -103,3 +103,34 @@ async def test_a_horse_results_limit_is_clamped_to_the_endpoint_maximum(monkeypa
     monkeypatch.setattr(r, "_get", fake_get)
     await r.get_horse_results("hrs_1", limit=5000)
     assert seen["params"]["limit"] == 100
+
+
+@pytest.mark.asyncio
+async def test_a_core_feed_race_id_resolves_through_the_pro_racecard(monkeypatch):
+    # Every international card was a dead link: the detail page asked for a
+    # rac_ id and get_race only knew how to look up a NA meet.
+    seen = {}
+
+    async def fake_get(path, params=None, cache_key=None, ttl=300):
+        seen["path"] = path
+        return {"race_id": "rac_1", "course": "Catterick", "runners": []}
+
+    monkeypatch.setattr(r, "_get", fake_get)
+    race = await r.get_race("rac_32299222618")
+    assert seen["path"] == "/racecards/rac_32299222618/pro"
+    assert race["course"] == "Catterick"
+
+
+@pytest.mark.asyncio
+async def test_a_north_america_race_id_still_goes_to_the_meet(monkeypatch):
+    async def boom(*a, **k):
+        raise AssertionError("must not hit the core racecard endpoint")
+
+    async def no_meet(meet_id):
+        return {"races": []}
+
+    monkeypatch.setattr(r, "_get", boom)
+    monkeypatch.setattr(r, "get_na_meet_entries", no_meet)
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException):
+        await r.get_race("IND_1775520000000-1")
