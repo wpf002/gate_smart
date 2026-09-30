@@ -125,7 +125,6 @@ export default function MyCalls({ now = Date.now() }) {
                 {r.finish.length > 1 && (
                   <span> · then {r.finish.slice(1, 3).map((f) => (f.number ? `#${f.number}` : f.name)).join(', ')}</span>
                 )}
-                {r.result_note && <span> — {r.result_note}</span>}
               </span>
             )}
           </span>
