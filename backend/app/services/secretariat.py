@@ -816,17 +816,30 @@ def compute_input_fingerprint(race_data: dict) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
 
 
+def is_international(race_data: dict) -> bool:
+    """True for a core-feed race — Britain, Ireland or France."""
+    return (race_data.get("region") or "").upper() not in ("USA", "CAN", "")
+
+
 def _slim_race_for_prompt(race_data: dict) -> dict:
     """Strip bulky fields that add tokens without helping Claude handicap.
 
-    Deliberately KEEPS the handicapping angles the NA feed provides: post
-    position, equipment (blinker changes), medication, live tote odds beside the
-    morning line, claiming price, breed, and the eligibility conditions that
-    define a race's real class. Pedigree rides along in small fields, where it
-    is often the only form signal for a first-time starter.
+    Deliberately KEEPS the handicapping angles the feed provides: post position,
+    equipment (blinker changes), medication, live odds beside the morning line,
+    claiming price, breed, and the eligibility conditions that define a race's
+    real class. Pedigree rides along in small fields, where it is often the only
+    form signal for a first-time starter.
+
+    What counts as an angle depends on where the race is. A US card has a claim
+    price and a Lasix note and no official rating; a British one has an official
+    rating, a form string, a draw, a going stick and an analyst's comment, and no
+    claim price at all. The drop sets used to be written for the US feed alone —
+    `ofr`, `comment` and `draw` were listed as "UK-only leftovers" and thrown
+    away — so an international race reached the prompt stripped of everything
+    that decides it.
     """
     _RUNNER_DROP = {
-        # Duplicates of fields we keep, internal ids, and UK-only leftovers.
+        # Duplicates of fields we keep, and internal ids.
         "odds_list", "silk_url", "horse", "number", "draw", "ofr", "lbs",
         "spotlight", "comment", "dob", "colour", "sex", "owner", "bred",
         "prize", "or_adjusted", "jockey_id", "trainer_id", "cloth_number",
@@ -845,15 +858,131 @@ def _slim_race_for_prompt(race_data: dict) -> dict:
         "wager_pools", "is_cancelled", "has_results", "minutes_to_post",
         "region", "date", "time", "off_time", "course_id", "title",
     }
+
+    # On an international card these are the race, not leftovers. The official
+    # rating replaces the claim price as the class figure, the draw replaces the
+    # post position, the form string is the whole recent record in six
+    # characters, and the comment is a professional's read of the horse.
+    _INTL_KEEP = {
+        "form", "weight", "comment", "spotlight", "trainer_14_days",
+        "rpr", "ts", "sire", "damsire", "owner",
+    }
+    # The core feed ships each of these twice, raw and normalised. Only the
+    # normalised name is explained in the field guide, so the raw twin is pure
+    # token cost: ofr/official_rating, draw/post_position, lbs/weight,
+    # last_run/days_since_run, past_results_flags/course_distance_record.
+    _INTL_DROP = {
+        "ofr", "draw", "lbs", "last_run", "past_results_flags", "trainer_rtf",
+        "horse_id", "sire_id", "dam_id", "damsire_id", "owner_id",
+        "sire_region", "dam_region", "damsire_region", "sex_code", "region",
+        "trainer_location", "headgear", "scratched", "quotes", "stable_tour",
+        "medical", "headgear_run", "silk_url", "number",
+    }
+    _INTL_RACE_KEEP = {"pattern", "age_band", "rating_band", "is_jumps",
+                       "race_type", "going_detail", "betting_forecast",
+                       "sex_restriction", "tip", "verdict"}
+    _INTL_RACE_DROP = {
+        "type", "going_detailed", "jumps", "race_status", "is_abandoned",
+        "distance_round", "rail_movements", "stalls", "race_name", "surface",
+    }
+
     runners = race_data.get("runners", [])
     large_field = len(runners) > 10
     drop_set = _RUNNER_DROP_LARGE if large_field else _RUNNER_DROP
-    slim = {k: v for k, v in race_data.items() if k not in _RACE_DROP and k != "runners"}
+    race_drop = _RACE_DROP
+    if is_international(race_data):
+        drop_set = (drop_set - _INTL_KEEP) | _INTL_DROP
+        race_drop = (race_drop - _INTL_RACE_KEEP) | _INTL_RACE_DROP
+    slim = {k: v for k, v in race_data.items() if k not in race_drop and k != "runners"}
     slim["runners"] = [
         {k: v for k, v in r.items() if k not in drop_set and v not in (None, "", [])}
         for r in runners
     ]
     return slim
+
+
+def _field_guide(race_data: dict) -> str:
+    """The "reading the data" notes for the feed this race came from.
+
+    A British card and an American one are described in different vocabularies.
+    Telling the model to weigh a claim price at Catterick, where there is no
+    claim price, wastes the instruction and leaves the official rating —
+    the actual class figure — unexplained.
+    """
+    common = """
+READING THE DATA — use these fields, they are the edge available to you:
+- `odds` is the live price where a market is up, otherwise the forecast;
+  `live_odds` against `morning_line_odds` shows where the money has moved. Late
+  money toward a horse is real information; a drifting favorite is a warning.
+- `going` and `weather`: an off track upgrades runners and pedigrees proven on
+  soft ground, and downgrades those with all their form on a sound surface.
+- `sire`/`dam` matter most for first-time starters and maidens with no form."""
+
+    if not is_international(race_data):
+        return common + """
+- `equipment` and `medication`: first-time blinkers, blinkers off, or a Lasix
+  change are classic form-turnaround angles. Say so when one is present.
+- `post_position` is the actual gate. Inside/outside draw matters most in
+  sprints, on turf, and in large fields.
+- `claiming_price` (and the race's claim range) is the clearest class signal in
+  US racing. A horse dropping in claim price is being placed to win; a sharp
+  rise is a class test.
+- `age_restriction` / `sex_restriction` / `race_restriction`: state-bred,
+  fillies-and-mares or restricted company is materially softer than open.
+- `breed`: if this is NOT Thoroughbred (Quarterhorse, Arabian), it is a short
+  dash where gate speed decides everything — do not apply thoroughbred pace or
+  closing logic."""
+
+    intl = common + """
+
+THIS IS A BRITISH, IRISH OR FRENCH RACE. It is not US racing and the US reading
+does not transfer. There is no claim price, no Lasix and no morning line. What
+you have instead:
+
+- `official_rating` is the class figure and the handicapper's opinion of the
+  horse. In a handicap, `weight` is set from it, so a well-handicapped horse is
+  one rated below what its recent form suggests. Compare a runner's rating to
+  the race's `rating_band`: near the ceiling is top weight in a race it is
+  rated to win; near the floor is a horse carrying little but rated to lose.
+- `form` is the finishing positions of its recent runs, oldest first. "0" is a
+  finish outside the top nine, "-" a season break, "/" a longer absence, "P"
+  pulled up, "F" fell, "U" unseated. "441" is a horse improving into form; "100"
+  is one that won and stopped.
+- `post_position` is the stall (the draw). On straight courses and over
+  sprint trips a low or high draw can be worth lengths; over a distance with a
+  bend soon after the start it matters much less.
+- `weight` is the burden in pounds and is the whole point of a handicap: the
+  handicapper is trying to make every runner dead-heat. Top weight is the best
+  horse being asked to prove it.
+- `equipment` is headgear. "first-time blinkers", "first-time cheekpieces" or a
+  first-time tongue tie is the same turnaround angle Lasix is in the US — the
+  stable trying something. Say so when it is present.
+- `days_since_run` is the layoff. Under 10 days is a quick turnaround, which
+  suits some yards and flattens others; over 100 is a comeback.
+- `course_distance_record` — "course winner", "distance winner", "course and
+  distance winner" — is proven suitability for exactly today's test, and
+  "beaten favourite" is a horse the market got wrong before.
+- `trainer_form` is the yard's last fortnight and the share of its string
+  running to form. A barn out of form is a genuine negative on an otherwise
+  well-in horse.
+- `comment` / `spotlight` is a professional's written read of the runner. Use it
+  as evidence, not as an opinion to repeat: if it disagrees with the figures,
+  say which you believe and why.
+- `rpr` is the Racing Post Rating and `ts` the topspeed figure. Higher is
+  better on both. They are the nearest thing here to a US speed figure.
+- `pattern` ("Group 1", "Listed") and `race_class` ("Class 6") are the class
+  ladder. Class 1 is the top, Class 7 the bottom — the OPPOSITE direction to a
+  US claiming ladder, so do not read a high class number as a good race."""
+
+    if race_data.get("is_jumps"):
+        intl += """
+- THIS IS A JUMPS RACE (`race_type` chase, hurdle or National Hunt flat). Gate
+  speed is nearly irrelevant. Stamina for the trip, jumping fluency and the
+  ground decide it, the field is strung out early, and a horse can win from
+  anywhere. Never apply flat-racing pace or post-position logic here. Treat "F",
+  "U" and "P" in the form string as jumping errors and a genuine risk, not
+  simply as bad runs."""
+    return intl
 
 
 def _pace_scenario_spec(arm: str | None) -> str:
@@ -1103,25 +1232,7 @@ async def build_analyze_request(
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}{form_block}{figures_block}{connections_block}{pedigree_block}
 
-READING THE DATA — use these fields, they are the edge available to you:
-- `odds` is the LIVE tote price when the pool is up, otherwise the morning line;
-  `live_odds` vs `morning_line_odds` shows where the money has moved. Late money
-  toward a horse is real information; a drifting favorite is a warning.
-- `equipment` and `medication`: first-time blinkers, blinkers off, or a Lasix
-  change are classic form-turnaround angles. Say so when one is present.
-- `post_position` is the actual gate. Inside/outside draw matters most in
-  sprints, on turf, and in large fields.
-- `claiming_price` (and the race's claim range) is the clearest class signal in
-  US racing. A horse dropping in claim price is being placed to win; a sharp
-  rise is a class test.
-- `age_restriction` / `sex_restriction` / `race_restriction`: state-bred,
-  fillies-and-mares or restricted company is materially softer than open.
-- `breed`: if this is NOT Thoroughbred (Quarterhorse, Arabian), it is a short
-  dash where gate speed decides everything — do not apply thoroughbred pace or
-  closing logic.
-- `going` and `weather`: an off/muddy track or heavy precipitation upgrades
-  speed and pedigree suited to wet ground.
-- `sire`/`dam` matter most for first-time starters and maidens with no form.
+{_field_guide(race_data).lstrip()}
 
 Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else '$100.00 (default)'}
 
@@ -1222,25 +1333,7 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
 Race Data:
 {json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}{form_block}
 
-READING THE DATA — use these fields, they are the edge available to you:
-- `odds` is the LIVE tote price when the pool is up, otherwise the morning line;
-  `live_odds` vs `morning_line_odds` shows where the money has moved. Late money
-  toward a horse is real information; a drifting favorite is a warning.
-- `equipment` and `medication`: first-time blinkers, blinkers off, or a Lasix
-  change are classic form-turnaround angles. Say so when one is present.
-- `post_position` is the actual gate. Inside/outside draw matters most in
-  sprints, on turf, and in large fields.
-- `claiming_price` (and the race's claim range) is the clearest class signal in
-  US racing. A horse dropping in claim price is being placed to win; a sharp
-  rise is a class test.
-- `age_restriction` / `sex_restriction` / `race_restriction`: state-bred,
-  fillies-and-mares or restricted company is materially softer than open.
-- `breed`: if this is NOT Thoroughbred (Quarterhorse, Arabian), it is a short
-  dash where gate speed decides everything — do not apply thoroughbred pace or
-  closing logic.
-- `going` and `weather`: an off/muddy track or heavy precipitation upgrades
-  speed and pedigree suited to wet ground.
-- `sire`/`dam` matter most for first-time starters and maidens with no form.
+{_field_guide(race_data).lstrip()}
 
 Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else '$100.00 (default)'}
 

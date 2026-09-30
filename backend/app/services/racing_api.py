@@ -14,6 +14,10 @@ from app.core.config import settings
 
 BASE_URL = "https://api.theracingapi.com/v1"
 
+# The contest scores every bet off a 2-unit stake. UK tote dividends are
+# declared to 1 unit, so they are doubled to match.
+STAKE_UNITS = 2
+
 # Upstream allows 5 req/sec. A bare semaphore still lets short bursts exceed
 # that when responses are fast — which returned 429s and failed 183 dates of a
 # backfill. This paces requests to a fixed minimum interval instead.
@@ -105,13 +109,78 @@ def _best_odds(odds_list: list) -> str:
         return "SP"
 
 
+# Racing Post headgear codes. The NA feed writes equipment out in words; the
+# core feed writes a letter, so it is expanded here rather than in four places
+# downstream.
+_HEADGEAR = {
+    "b": "blinkers", "v": "visor", "h": "hood", "p": "cheekpieces",
+    "t": "tongue tie", "e": "eye shield", "z": "hood",
+}
+
+# Flags the core feed puts against a runner's past record.
+_RESULT_FLAGS = {
+    "C": "course winner", "D": "distance winner",
+    "CD": "course and distance winner", "BF": "beaten favourite",
+}
+
+
+def _headgear_text(code: str, first_run: str) -> str:
+    """"b" plus a headgear_run of 1 is first-time blinkers, which is an angle."""
+    code = (code or "").strip().lower()
+    if not code:
+        return ""
+    worn = ", ".join(_HEADGEAR.get(c, c) for c in code if c.strip())
+    if not worn:
+        return ""
+    return f"first-time {worn}" if str(first_run or "") == "1" else worn
+
+
+def _flags_text(flags) -> str:
+    if not flags:
+        return ""
+    return ", ".join(_RESULT_FLAGS.get(f, f) for f in flags if f)
+
+
+def _trainer_14_text(rec, rtf) -> str:
+    """The barn's last fortnight, as one readable phrase."""
+    if not isinstance(rec, dict):
+        return ""
+    runs, wins, pct = rec.get("runs"), rec.get("wins"), rec.get("percent")
+    if not runs:
+        return ""
+    out = f"{wins or 0} from {runs} in the last 14 days ({pct or 0}%)"
+    if rtf:
+        out += f", {rtf}% of the string running to form"
+    return out
+
+
 def _normalize_runner(r: dict) -> dict:
-    """Map Standard-tier runner fields to consistent frontend names."""
+    """Map a core-feed runner onto the names the app already uses.
+
+    The US and international feeds describe the same things with different
+    words. Reconciling them here means the race page, the prompt and the
+    contest never have to ask which feed a race came from:
+
+      draw                 -> post_position   the gate, whatever it's called
+      headgear + _run      -> equipment       "first-time blinkers", not "b"
+      wind_surgery         -> medication      the nearest thing to a Lasix note
+      ofr                  -> official_rating the class figure, as in the US
+                                              the claim price is the class signal
+      last_run             -> days_since_run
+      past_results_flags   -> course_distance_record
+
+    The core feed only publishes declared runners, so a horse that won't run is
+    absent rather than flagged — scratched is therefore always False, which is
+    what the rest of the app expects to find.
+    """
+    headgear = _headgear_text(r.get("headgear"), r.get("headgear_run"))
+    wind = (r.get("wind_surgery") or "").strip()
     return {
         **r,
         "horse_name": r.get("horse") or r.get("horse_name", ""),
         "cloth_number": r.get("number") or r.get("cloth_number"),
         "stall_number": r.get("draw") or r.get("stall_number"),
+        "post_position": r.get("draw") or r.get("post_position"),
         "official_rating": r.get("ofr") or r.get("official_rating"),
         "rpr": r.get("rpr"),
         "ts": r.get("ts"),            # Timeform speed figure
@@ -122,22 +191,55 @@ def _normalize_runner(r: dict) -> dict:
         "silk_url": r.get("silk_url"),
         "spotlight": r.get("spotlight", ""),
         "comment": r.get("comment", ""),
+        "equipment": headgear or r.get("equipment", ""),
+        "headgear_first_time": headgear.startswith("first-time"),
+        "medication": wind and f"wind surgery {wind}" or r.get("medication", ""),
+        "days_since_run": r.get("last_run") or r.get("days_since_run"),
+        "course_distance_record": _flags_text(r.get("past_results_flags")),
+        "trainer_form": _trainer_14_text(r.get("trainer_14_days"), r.get("trainer_rtf")),
         "trainer_14_days": r.get("trainer_14_days"),
+        "scratched": False,
+        "non_runner": False,
     }
 
 
 def _normalize_race(r: dict) -> dict:
-    """Map Standard-tier race fields to consistent frontend names."""
+    """Map a core-feed race onto the names the app already uses.
+
+    Same reconciliation as the runner: `type` is the US feed's `race_type`,
+    `race_status` is its `is_cancelled`, and a jumps race says so explicitly so
+    nothing downstream applies flat-racing pace logic to a three-mile chase.
+    """
     distance = r.get("distance") or (
         f"{r['distance_f']}f" if r.get("distance_f") else None
     )
+    status = (r.get("race_status") or "").lower()
+    runners = [_normalize_runner(runner) for runner in r.get("runners", [])]
+    jumps = (r.get("jumps") or "").strip()
+    race_type = r.get("race_type") or r.get("type") or ""
+    try:
+        field_size = int(r.get("field_size") or 0) or len(runners)
+    except (TypeError, ValueError):
+        field_size = len(runners)
     return {
         **r,
         "time": r.get("off_time") or r.get("time", ""),
         "title": r.get("race_name") or r.get("title", ""),
         "distance": distance,
         "going_detail": r.get("going_detailed") or r.get("going"),
-        "runners": [_normalize_runner(runner) for runner in r.get("runners", [])],
+        "race_type": race_type,
+        # Chase, hurdle and National Hunt flat are a different sport from the
+        # flat: stamina and jumping decide them, not gate speed.
+        "jumps": jumps,
+        "is_jumps": bool(jumps) or race_type.lower() in ("chase", "hurdle", "nh flat"),
+        "is_cancelled": status == "abandoned" or bool(r.get("is_abandoned")),
+        "has_results": status in ("result", "resulted", "finished"),
+        "field_size": field_size,
+        # The track's own published changes, under the name the US view uses.
+        "changes": [c for c in ([r.get("rail_movements")] if r.get("rail_movements") else []) if c],
+        # The UK equivalent of a morning line: the forecast price for the card.
+        "betting_forecast": r.get("betting_forecast") or "",
+        "runners": runners,
     }
 
 
@@ -375,6 +477,66 @@ async def get_odds_history(race_id: str, horse_id: str) -> dict:
         cache_key=f"odds_history:{race_id}:{horse_id}",
         ttl=120,  # prices move; this is the shortest useful life
     )
+
+
+def normalize_core_result(res: dict) -> dict:
+    """A core-feed result in the shape the contest already grades.
+
+    The two feeds price a race completely differently. A US chart carries a
+    payoff per runner per pool; a British one carries tote dividends at the race
+    level, declared to a 1-unit stake and inclusive of it. Both are converted to
+    the contest's 2-unit basis here so nothing downstream has to know which is
+    which.
+
+    Only the pools the contest actually settles are mapped: win, place, exacta
+    and trifecta. There is no show pool in British or Irish racing — the place
+    pool pays two to four places depending on the field — so a show bet grades
+    on the same top-three rule the contest uses everywhere and is left unpriced
+    rather than invented.
+    """
+    def _num(v):
+        try:
+            f = float(str(v).replace(",", "").replace("£", "").replace("€", "").strip())
+            return round(f * STAKE_UNITS, 2) if f > 0 else None
+        except (TypeError, ValueError, AttributeError):
+            return None
+
+    runners = sorted(
+        (r for r in (res.get("runners") or []) if str(r.get("position") or "").isdigit()),
+        key=lambda r: int(r["position"]),
+    )
+    win = _num(res.get("tote_win"))
+    places = [x for x in str(res.get("tote_pl") or "").split(",") if x.strip()]
+    out = []
+    for i, r in enumerate(runners):
+        row = {
+            **r,
+            "horse_name": r.get("horse") or r.get("horse_name") or "",
+            "position": r.get("position"),
+            "win_payoff": win if i == 0 else None,
+            "place_payoff": _num(places[i]) if i < len(places) else None,
+            "show_payoff": None,
+        }
+        out.append(row)
+
+    payoffs = []
+    for code, key in (("E", "tote_ex"), ("T", "tote_trifecta")):
+        amount = _num(res.get(key))
+        if amount:
+            payoffs.append({"wager_type": code, "payoff_amount": amount,
+                            "base_amount": STAKE_UNITS})
+    return {**res, "runners": out, "payoffs": payoffs}
+
+
+async def get_core_result(race_id: str) -> dict | None:
+    """One finished core-feed race, graded-ready. None while it is still to run."""
+    try:
+        raw = await _get(f"/results/{race_id}", cache_key=f"core_result:{race_id}", ttl=3600)
+    except Exception:
+        return None
+    if not (raw or {}).get("runners"):
+        return None
+    return normalize_core_result(raw)
 
 
 async def search_horses(name: str) -> dict:
@@ -1375,6 +1537,9 @@ async def get_entity_results(entity_id: str, entity_type: str, limit: int = 20,
     if not group:
         raise HTTPException(status_code=400, detail=f"entity_type must be one of {sorted(ENTITY_GROUPS)}")
     params = {"limit": max(1, min(int(limit or 20), 100))}
+    if filters.get("skip"):
+        params["skip"] = int(filters.pop("skip"))
+    filters.pop("skip", None)
     params.update(_result_filters(**filters))
     return await _get(
         f"/{group}/{entity_id}/results",
@@ -1470,6 +1635,117 @@ def summarise_person_analysis(payload: dict) -> dict | None:
         "profit_per_unit": round(profit / starts, 3),
         "total_profit": round(profit, 2),
     }
+
+
+RESULTS_PAGE = 100          # the endpoint's own maximum
+SEASON_MAX_PAGES = 12       # 1,200 races is more than any one yard runs here
+
+
+def _twelve_month_chunks(start, end):
+    """Split a range into windows the endpoint will accept.
+
+    /results and the per-entity results endpoints reject any span wider than
+    twelve months with a 422 — but they accept a twelve-month window anywhere in
+    history, which is what makes a year-by-year record possible at all. A wider
+    range asked for in one call just fails, so it is cut up here.
+    """
+    import datetime as _dt
+    out = []
+    lo = start
+    while lo <= end:
+        hi = min(end, lo.replace(year=lo.year + 1) - _dt.timedelta(days=1))
+        out.append((lo, hi))
+        lo = hi + _dt.timedelta(days=1)
+    return out
+
+
+async def get_entity_window(entity_id: str, entity_type: str, start, end,
+                            name: str = "", label: str = "") -> dict | None:
+    """A trainer's or jockey's record for one calendar year, with a real
+    denominator.
+
+    The profile page could only ever quote 2023, because our own form archive
+    keeps top-three finishes and never wrote down a loss. This endpoint returns
+    whole races — every runner, whatever it finished — so counting the person's
+    own runs across a date range gives starts as well as wins.
+
+    It covers USA: Chad Brown comes back with 41 races in 2026, Saratoga and
+    Belmont among them, finishing positions included. The same limit as the rest
+    of the analysis data applies though — this is the group-races-and-selected-
+    handicaps dataset, so it is a record in stakes company, not a full season.
+    The caller has to say so.
+    """
+    if not entity_id or entity_type not in ("trainer", "jockey"):
+        return None
+    import datetime as _dt
+
+    today = _dt.date.today()
+    end = min(end, today)
+    if start > today or start > end:
+        return None
+
+    cache_key = f"window:{entity_type}:{entity_id}:{start}:{end}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    want = {t for t in re.split(r"[^a-z]+", (name or "").lower()) if len(t) > 1}
+    starts = wins = placed = 0
+    seen_races = 0
+    for lo, hi in _twelve_month_chunks(start, end):
+        for page in range(SEASON_MAX_PAGES):
+            try:
+                res = await get_entity_results(
+                    entity_id, entity_type, limit=RESULTS_PAGE,
+                    start_date=lo.isoformat(), end_date=hi.isoformat(),
+                    skip=page * RESULTS_PAGE,
+                )
+            except Exception:
+                break
+            races = res.get("results") or []
+            if not races:
+                break
+            seen_races += len(races)
+            for race in races:
+                for run in race.get("runners") or []:
+                    # The endpoint returns the whole race, so the person's own
+                    # runners have to be picked out of the field.
+                    who = (run.get(entity_type) or "").lower()
+                    if want and not want <= {t for t in re.split(r"[^a-z]+", who) if len(t) > 1}:
+                        continue
+                    starts += 1
+                    pos = str(run.get("position") or "")
+                    if pos == "1":
+                        wins += 1
+                    if pos in ("1", "2", "3"):
+                        placed += 1
+            if len(races) < RESULTS_PAGE:
+                break
+
+    if not starts:
+        return None
+    out = {
+        "label": label,
+        "from": start.isoformat(),
+        "races": seen_races,
+        "starts": starts,
+        "wins": wins,
+        "placed": placed,
+        "win_rate": round(wins / starts, 4),
+        "itm_rate": round(placed / starts, 4),
+        "through": end.isoformat(),
+    }
+    await cache_set(cache_key, out, ex=6 * 3600)
+    return out
+
+
+async def get_entity_season(entity_id: str, entity_type: str, year: int,
+                            name: str = "") -> dict | None:
+    """One calendar year. A thin wrapper so callers don't build dates."""
+    import datetime as _dt
+    return await get_entity_window(
+        entity_id, entity_type, _dt.date(year, 1, 1), _dt.date(year, 12, 31),
+        name=name, label=str(year))
 
 
 async def find_pedigree_id(name: str, kind: str) -> str | None:

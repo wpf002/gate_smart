@@ -222,29 +222,12 @@ export default function DebriefPanel({ debrief, loading }) {
       )}
       </div>
 
-      {/* Pre-race prediction comparison */}
-      {debrief.prediction_check?.contenders?.length > 0 && (
-        <div style={{
-          padding: '10px 14px',
-          background: 'rgba(26,107,168,0.08)',
-          borderRadius: 'var(--radius-md)',
-          borderLeft: '3px solid var(--accent-blue)',
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-blue-bright)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <Icon name="lightbulb" size={12} color="var(--accent-blue-bright)" /> PRE-RACE CONTENDERS
-            </span>
-          </div>
-          {debrief.prediction_check.contenders.map((c, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>{c.horse}</span>
-              <span style={{ fontFamily: 'var(--font-mono)', color: c.actual_finish === '1' ? '#FFD700' : c.actual_finish === '2' ? '#C0C0C0' : c.actual_finish === '3' ? '#CD7F32' : 'var(--text-muted)' }}>
-                {c.actual_finish === 'Out of money' ? c.actual_finish : `Finished ${c.actual_finish}`}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* The pre-race contender list used to sit here, repeating each of
+          Secretariat's shortlist and where it finished. The finish order,
+          also-rans and exotics are already above it, and the hit/partial/miss
+          badge at the top of the panel already says whether the top pick was
+          right — so it was a second copy of the result with no verdict
+          attached, and read as though it were telling you something new. */}
     </div>
   );
 }

@@ -21,10 +21,10 @@ const openRaces = (cards, now) => (cards || [])
  */
 export function useOpenRaces(now = Date.now()) {
   // Same query keys as the Races page, so this reuses its cache.
-  const { data: today } = useQuery({ queryKey: ['races', 'today'], queryFn: () => getRacesToday('usa') });
+  const { data: today } = useQuery({ queryKey: ['races', 'usa', 'today'], queryFn: () => getRacesToday('usa') });
   const todayOpen = openRaces(today?.racecards, now);
   const { data: tomorrow } = useQuery({
-    queryKey: ['races', 'tomorrow'],
+    queryKey: ['races', 'usa', 'tomorrow'],
     queryFn: () => getRacesByDate('tomorrow', 'usa'),
     enabled: !!today && todayOpen.length < LIMIT,
   });

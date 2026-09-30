@@ -52,3 +52,7 @@ class ContestPick(Base):
     # wagered — this is a scorekeeping figure, the same one the Report Card
     # publishes for Secretariat.
     payoff: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # The official finish, top four: [{"position", "name", "number"}, ...].
+    # Without it a graded pick could only say "+0" — a trifecta that had the
+    # winner in the wrong order looked identical to one that had nothing.
+    finish: Mapped[Optional[list]] = mapped_column(JSON(none_as_null=True), nullable=True)

@@ -48,6 +48,7 @@ async def init_db() -> None:
 # idempotent ("IF NOT EXISTS"). Removed columns / renames are NOT auto-handled.
 _STARTUP_MIGRATIONS: list[str] = [
     "ALTER TABLE llm_call_log ADD COLUMN IF NOT EXISTS user_id INTEGER",
+    "ALTER TABLE contest_picks ADD COLUMN IF NOT EXISTS finish JSON",
     "CREATE INDEX IF NOT EXISTS ix_llm_call_log_user_id ON llm_call_log (user_id)",
     # Market context on predictions — favorite-agreement / calibration analysis.
     "ALTER TABLE race_predictions ADD COLUMN IF NOT EXISTS field_size INTEGER",

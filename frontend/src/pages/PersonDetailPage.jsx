@@ -43,6 +43,40 @@ function Card({ title, note, children }) {
   );
 }
 
+/**
+ * One season, with a real denominator where the feed has one.
+ *
+ * `rec` comes from the results endpoint, which returns whole races, so it can
+ * count starts as well as wins. When the feed has nothing for that person in
+ * that year the card falls back to the archive's counts and says so, rather
+ * than showing a rate it can't stand behind.
+ */
+function SeasonCard({ title, rec, fallback, fallbackNote }) {
+  const n = (v) => (v ?? 0).toLocaleString();
+  if (rec && rec.starts) {
+    return (
+      <Card title={title} note={`${n(rec.starts)} Starts In Stakes Company`}>
+        <Figures items={[
+          { value: pct(rec.win_rate), label: 'Win Rate', gold: true },
+          { value: pct(rec.itm_rate), label: 'In The Money' },
+          { value: n(rec.wins), label: 'Wins' },
+          { value: n(rec.starts), label: 'Starts' },
+        ]} />
+      </Card>
+    );
+  }
+  return (
+    <Card title={title} note={fallbackNote}>
+      <Figures items={[
+        { value: n(fallback?.wins), label: 'Wins', gold: true },
+        { value: winShare(fallback?.wins, fallback?.itm), label: 'Win Share' },
+        { value: n(fallback?.tracks), label: 'Tracks' },
+        { value: n(fallback?.horses), label: 'Horses' },
+      ]} />
+    </Card>
+  );
+}
+
 function Figures({ items }) {
   return (
     <div className="person-figures">
@@ -99,39 +133,17 @@ export default function PersonDetailPage({ type }) {
 
         {data && (
           <>
+            {/* This year against last, same four measures, both with a real
+                start count behind them. The page used to lead with a 2023 win
+                rate, because 2023 was the only season our own archive recorded
+                losing runs for — a number nobody has a reason to care about. */}
             <div className="person-split">
-              {/* "First on file" is where our records start, not where the
-                  career did — the feed's person endpoints aren't on our plan,
-                  so there's no birth date and no true career start to show. */}
-              <Card
-                title={`Before ${data.season}`}
-                note={[
-                  data.prior.itm ? `${n(data.prior.itm)} Board Hits` : '',
-                  data.prior.first_run ? `First On File ${day(data.prior.first_run)}` : '',
-                ].filter(Boolean).join(' · ')}
-              >
-                <Figures items={[
-                  { value: n(data.prior.wins), label: 'Wins', gold: true },
-                  { value: winShare(data.prior.wins, data.prior.itm), label: 'Win Share' },
-                  { value: n(data.prior.tracks), label: 'Tracks' },
-                  { value: n(data.prior.horses), label: 'Horses' },
-                ]} />
-              </Card>
-
-              <Card
-                title={String(data.season)}
-                note={[
-                  data.current.itm ? `${n(data.current.itm)} Board Hits` : '',
-                  data.current.last_run ? `Last Winner ${day(data.current.last_run)}` : 'No Winners Yet',
-                ].filter(Boolean).join(' · ')}
-              >
-                <Figures items={[
-                  { value: n(data.current.wins), label: 'Wins', gold: true },
-                  { value: winShare(data.current.wins, data.current.itm), label: 'Win Share' },
-                  { value: n(data.current.tracks), label: 'Tracks' },
-                  { value: n(data.current.horses), label: 'Horses' },
-                ]} />
-              </Card>
+              <SeasonCard title={String(data.season)} rec={data.season_rec}
+                          fallback={data.current} fallbackNote={
+                            data.current.last_run ? `Last Winner ${day(data.current.last_run)}` : 'No Winners Yet'} />
+              <SeasonCard title={String(data.season - 1)} rec={data.season_prev}
+                          fallback={data.prior} fallbackNote={
+                            data.prior.first_run ? `First On File ${day(data.prior.first_run)}` : ''} />
             </div>
 
             {/* Recent form from the feed's analysis endpoints: a real start
@@ -152,19 +164,6 @@ export default function PersonDetailPage({ type }) {
                   },
                 ]} />
               </Card>
-            )}
-
-            {/* The one season on file with every runner, so the one place our
-                own archive can put a denominator behind a rate. */}
-            {data.prior.rated_season && (
-              <div className="person-rate">
-                <span className="person-rate-value">{pct(data.prior.rated_win_rate)}</span>
-                <span className="person-rate-label">
-                  win rate in {data.prior.rated_season} — {n(data.prior.rated_wins)} from{' '}
-                  {n(data.prior.rated_starts)} starts, the one season in our own archive with
-                  every run on file
-                </span>
-              </div>
             )}
 
             {data.top_tracks.length > 0 && (

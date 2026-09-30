@@ -46,8 +46,8 @@ export default function MyCalls({ now = Date.now() }) {
   });
 
   // Same query keys as the Races page and NextToPost, so this reuses their cache.
-  const { data: today } = useQuery({ queryKey: ['races', 'today'], queryFn: () => getRacesToday('usa') });
-  const { data: tomorrow } = useQuery({ queryKey: ['races', 'tomorrow'], queryFn: () => getRacesByDate('tomorrow', 'usa') });
+  const { data: today } = useQuery({ queryKey: ['races', 'usa', 'today'], queryFn: () => getRacesToday('usa') });
+  const { data: tomorrow } = useQuery({ queryKey: ['races', 'usa', 'tomorrow'], queryFn: () => getRacesByDate('tomorrow', 'usa') });
 
   // Today only. The endpoint also returns ungraded calls on later cards so
   // NextToPost can still exclude a race you've already called, but this list is
@@ -107,6 +107,17 @@ export default function MyCalls({ now = Date.now() }) {
             <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {r.bet_label || 'Win'} · {r.course}{r.number ? ` Race ${r.number}` : ''}
             </span>
+            {r.settled && r.finish?.length > 0 && (
+              <span style={{ display: 'block', fontSize: 11, marginTop: 3, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ color: 'var(--accent-gold-bright)' }}>
+                  Won: {r.finish[0].number ? `#${r.finish[0].number} ` : ''}{r.finish[0].name}
+                </span>
+                {r.finish.length > 1 && (
+                  <span> · then {r.finish.slice(1, 3).map((f) => (f.number ? `#${f.number}` : f.name)).join(', ')}</span>
+                )}
+                {r.result_note && <span> — {r.result_note}</span>}
+              </span>
+            )}
           </span>
           <Outcome pick={r} />
         </button>

@@ -5,6 +5,7 @@ The scoring and streak functions are pure over their inputs so they can be teste
 without a database. Settlement reads the official results chart, so a pick is
 graded the same day the race runs rather than waiting for the nightly job.
 """
+import asyncio
 from datetime import date, timedelta
 from typing import Iterable, Optional
 
@@ -52,20 +53,31 @@ RACING_TZ = "America/New_York"
 
 
 def racing_day(race_id: str, off=None) -> date:
-    """The date of the card this race belongs to, not the UTC date it starts on."""
+    """The date of the card this race belongs to, not the UTC date it starts on.
+
+    A North America id carries the card's epoch: IND_1775520000000-1. A core
+    feed id carries nothing but a serial — rac_32299222618 — and reading that
+    serial as an epoch put international picks in 1971, where nothing would ever
+    find them again. Those races go straight to the post time.
+    """
     import datetime as _dt
 
-    try:
-        stamp = int(race_id.rsplit("-", 1)[0].split("_")[1])
-        return _dt.datetime.fromtimestamp(stamp / 1000, tz=_dt.timezone.utc).date()
-    except (AttributeError, IndexError, ValueError, OSError, OverflowError):
-        # No parseable stamp: fall back to the post time read at the track's
-        # end of the continent, which is right for every US card bar the tail
-        # of a late West Coast night.
-        if off is None:
-            return today_racing_day()
-        from zoneinfo import ZoneInfo
-        return off.astimezone(ZoneInfo(RACING_TZ)).date()
+    if not str(race_id or "").startswith("rac_"):
+        try:
+            stamp = int(race_id.rsplit("-", 1)[0].split("_")[1])
+            return _dt.datetime.fromtimestamp(stamp / 1000, tz=_dt.timezone.utc).date()
+        except (AttributeError, IndexError, ValueError, OSError, OverflowError):
+            pass
+    # No parseable stamp: fall back to the post time. A British or Irish card is
+    # dated in its own local time; a US one is read at the eastern end of the
+    # continent, which is right for every card bar the tail of a late West
+    # Coast night.
+    if off is None:
+        return today_racing_day()
+    if str(race_id or "").startswith("rac_"):
+        return off.date() if off.tzinfo is None else off.astimezone(off.tzinfo).date()
+    from zoneinfo import ZoneInfo
+    return off.astimezone(ZoneInfo(RACING_TZ)).date()
 
 
 def today_racing_day() -> date:
@@ -79,6 +91,61 @@ def today_racing_day() -> date:
 def bet_spec(bet_type: str) -> dict:
     """The rules for a bet type, falling back to win for unknown/legacy rows."""
     return BET_TYPES.get(bet_type or DEFAULT_BET_TYPE, BET_TYPES[DEFAULT_BET_TYPE])
+
+
+# How much of the finish to keep on a settled pick. Four covers a trifecta and
+# the horse that just missed it.
+FINISH_DEPTH = 4
+
+
+def official_finish(runners: list) -> list:
+    """The top four home, as the pick stores them."""
+    out = []
+    for i, r in enumerate(runners[:FINISH_DEPTH]):
+        name = r.get("horse_name") or r.get("horse") or ""
+        if not name:
+            continue
+        out.append({
+            "position": int(r.get("position") or i + 1) if str(r.get("position") or i + 1).isdigit() else i + 1,
+            "name": name[:160],
+            "number": str(r.get("program_number") or r.get("number") or "")[:6],
+        })
+    return out
+
+
+def result_note(pick_keys: list, bet_type: str, finish: list,
+                correct: Optional[bool]) -> str:
+    """One line saying what actually happened to this bet.
+
+    "+0" on a trifecta that had the winner first and the next two the wrong way
+    round reads exactly like "+0" on one that had nothing, which is the least
+    useful thing the card could say.
+    """
+    from app.services.horse_form import horse_key
+
+    if correct:
+        return ""
+    if not finish:
+        return ""
+    order = [horse_key(f.get("name") or "") for f in finish]
+    n = bet_spec(bet_type)["picks"]
+    mine = [k for k in pick_keys[:n] if k]
+    if not mine:
+        return ""
+    hit_positions = {k: order.index(k) + 1 for k in mine if k in order}
+    if n == 1:
+        depth = bet_spec(bet_type)["depth"]
+        pos = hit_positions.get(mine[0])
+        if pos:
+            return f"Finished {pos}, needed top {depth}"
+        return "Ran out of the money"
+    if len(hit_positions) == n:
+        return "Had all of them, wrong order"
+    if mine[0] in hit_positions and hit_positions[mine[0]] == 1:
+        return "Had the winner, wrong order"
+    if hit_positions:
+        return f"{len(hit_positions)} of {n} in the top {len(finish)}"
+    return "None of them hit the board"
 
 
 def bet_hit(bet_type: str, pick_keys: list, finish_keys: list) -> Optional[bool]:
@@ -264,7 +331,8 @@ async def settle_pending_picks(user_id: Optional[int] = None) -> int:
         # Keep the whole race, not just the winner's name: exotics need the
         # finish order and the payoff pools to be graded and priced.
         results: dict[str, dict] = {}
-        for meet_id in {rid.rsplit("-", 1)[0] for rid in race_ids if "-" in rid}:
+        na_ids = {rid for rid in race_ids if not rid.startswith("rac_")}
+        for meet_id in {rid.rsplit("-", 1)[0] for rid in na_ids if "-" in rid}:
             try:
                 meet = await get_na_meet_results(meet_id)
             except Exception:
@@ -273,6 +341,19 @@ async def settle_pending_picks(user_id: Optional[int] = None) -> int:
                 number = str((race.get("race_key") or {}).get("race_number", ""))
                 if number and (race.get("runners") or []):
                     results[f"{meet_id}-{number}"] = race
+
+        # Core-feed races are fetched one at a time — there is no meet to batch
+        # by — and normalised into the same shape the grading expects. Without
+        # this every international pick sat pending and was voided after two
+        # days, because the loop above only knows how to read a NA meet id.
+        core_ids = [rid for rid in race_ids if rid.startswith("rac_")]
+        if core_ids:
+            from app.services.racing_api import get_core_result
+            fetched = await asyncio.gather(
+                *(get_core_result(rid) for rid in core_ids), return_exceptions=True)
+            for rid, res in zip(core_ids, fetched):
+                if isinstance(res, dict) and res.get("runners"):
+                    results[rid] = res
 
         settled = 0
         stale_before = today_racing_day() - timedelta(days=UNSETTLEABLE_AFTER_DAYS)
@@ -317,6 +398,7 @@ async def settle_pending_picks(user_id: Optional[int] = None) -> int:
                 bet_type=bet_type, hit=hit,
             )
             pick.winner_name = winner[:160]
+            pick.finish = official_finish(runners)
             pick.correct = graded["correct"]
             pick.secretariat_correct = graded["secretariat_correct"]
             pick.beat_secretariat = graded["beat_secretariat"]

@@ -101,7 +101,6 @@ describe('ContestPage', () => {
     expect(await screen.findByText("IF YOU'D BET $2 A CALL")).toBeInTheDocument();
     expect(screen.getByText('−$3.60')).toBeInTheDocument();
     // Calls the chart never priced are named, not folded into the loss.
-    expect(screen.getByText(/2 of 6 cashed · 2 never got a payout/)).toBeInTheDocument();
   });
 
   it('holds the ROI back until it is more than one payoff restated', async () => {

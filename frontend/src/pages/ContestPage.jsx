@@ -37,10 +37,6 @@ function Bankroll({ data }) {
             : `${data.roi >= 0 ? '+' : '−'}${Math.abs(data.roi * 100).toFixed(1)}%`}
         </span>
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-        {data.cashed} of {data.bets} cashed
-        {data.unpriced ? ` · ${data.unpriced} never got a payout` : ''}
-      </div>
     </div>
   );
 }
@@ -61,8 +57,17 @@ export default function ContestPage() {
   const authToken = useAppStore((s) => s.authToken);
   const [period, setPeriod] = useState('week');
 
-  const { data: board } = useQuery({ queryKey: ['leaderboard', period], queryFn: () => getLeaderboard(period) });
-  const { data: me } = useQuery({ queryKey: ['contest-me'], queryFn: getContestProgress, enabled: !!authToken });
+  // Both refresh on the same minute as the calls list. Settlement happens on
+  // read, so a graded race showed up in the list while the points, streak and
+  // bankroll beside it still read from before the gate opened.
+  const { data: board } = useQuery({
+    queryKey: ['leaderboard', period], queryFn: () => getLeaderboard(period),
+    refetchInterval: 60000,
+  });
+  const { data: me } = useQuery({
+    queryKey: ['contest-me'], queryFn: getContestProgress, enabled: !!authToken,
+    refetchInterval: 60000,
+  });
 
   const sec = board?.secretariat;
 

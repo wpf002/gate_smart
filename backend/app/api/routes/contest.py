@@ -21,7 +21,7 @@ from app.models.user import User
 from app.services.contest import (
     BET_TYPES, DEFAULT_BET_TYPE, POINTS_BEAT_BONUS, POINTS_CORRECT, STAKE,
     beat_secretariat_streak, best_streak, bet_spec, pick_day_streak, racing_day,
-    settle_pending_picks, today_racing_day,
+    result_note, settle_pending_picks, today_racing_day,
 )
 
 router = APIRouter()
@@ -73,6 +73,11 @@ def _pick_json(p: ContestPick) -> dict:
         "secretariat_correct": p.secretariat_correct, "beat_secretariat": p.beat_secretariat,
         "points": p.points, "stake": STAKE, "payoff": p.payoff,
         "net": None if p.payoff is None else round(p.payoff - STAKE, 2),
+        # The official top four, and one line on what happened to this bet.
+        "finish": p.finish or [],
+        "result_note": result_note(
+            [sel.get("key") for sel in (p.selections or [{"key": p.horse_key}])],
+            bet_type, p.finish or [], p.correct) if p.settled else "",
     }
 
 
@@ -81,7 +86,16 @@ def _bankroll(picks) -> dict:
 
     A pick with no payoff is left out of the denominator rather than counted as
     a loss — the same rule the Report Card uses for Secretariat.
+
+    International races are left out too, and counted separately. Their tote
+    returns are in pounds and euros, and adding those to dollars without a rate
+    would make the figure on the card wrong rather than merely incomplete. They
+    still score points and streaks like any other pick; it is only the money
+    line they stay out of.
     """
+    foreign = sum(1 for p in picks
+                  if p.settled and str(p.race_id or "").startswith("rac_"))
+    picks = [p for p in picks if not str(p.race_id or "").startswith("rac_")]
     priced = [p for p in picks if p.payoff is not None]
     staked = STAKE * len(priced)
     returned = sum(p.payoff for p in priced)
@@ -92,6 +106,7 @@ def _bankroll(picks) -> dict:
         "roi": round((returned - staked) / staked, 4) if staked else None,
         "cashed": sum(1 for p in priced if p.payoff > 0),
         "best": round(max((p.payoff for p in priced), default=0) - STAKE, 2) if priced else None,
+        "foreign": foreign,
     }
 
 

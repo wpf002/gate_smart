@@ -298,8 +298,9 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
     if len(full) < 2:
         raise HTTPException(status_code=400, detail="name must be at least 2 characters")
 
-    # v4: adds the Pro analysis record (real starts, a/e, level-stake P/L).
-    cache_key = f"people:profile:v4:{person_type}:{full.lower()}"
+    # v5: adds this year's and last year's record, each with a real denominator,
+    # and drops the 2023-only rate that replaced.
+    cache_key = f"people:profile:v5:{person_type}:{full.lower()}"
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
@@ -409,6 +410,26 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
         print(f"[people] live form unavailable for {full!r}: {type(e).__name__}: {e}")
         live_form = None
 
+    # This year and last, each with a real denominator.
+    #
+    # The page used to quote a 2023 win rate, because 2023 was the one season in
+    # our own archive that recorded losing runs. Nobody cares how a trainer did
+    # in 2023. The per-entity results endpoint returns whole races — every
+    # runner, whatever it finished — so counting a person's own runs across a
+    # date range gives starts as well as wins, for this year and last. It covers
+    # USA: Chad Brown comes back 12 from 60 in 2026 and 25 from 126 in 2025.
+    this_year = datetime.date.today().year
+    season_now = season_prev = None
+    try:
+        person_id = (live_form or {}).get("id") or await racing_api.find_person_id(full, person_type)
+        if person_id:
+            season_now, season_prev = await asyncio.gather(
+                racing_api.get_entity_season(person_id, person_type, this_year, full),
+                racing_api.get_entity_season(person_id, person_type, this_year - 1, full),
+            )
+    except Exception as e:  # noqa: BLE001
+        print(f"[people] season record unavailable for {full!r}: {type(e).__name__}: {e}")
+
     def _n(row, field):
         return int(getattr(row, field, 0) or 0) if row else 0
 
@@ -429,13 +450,6 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
         "tracks": max(_n(pp, "tracks"), _n(chart, "tracks"), _n(prior_form, "tracks")),
         "horses": max(_n(pp, "horses"), _n(chart, "horses"), _n(prior_form, "horses")),
         "first_run": min(firsts) if firsts else None,
-        # 2023 is the one season with losing runs on file, so its rate is the
-        # only one that can be quoted, and it's labelled as that season alone.
-        "rated_season": 2023 if _n(chart, "starts") else None,
-        "rated_starts": _n(chart, "starts"),
-        "rated_wins": _n(chart, "wins"),
-        "rated_win_rate": (round(_n(chart, "wins") / _n(chart, "starts"), 4)
-                           if _n(chart, "starts") else None),
     }
     payload = {
         "name": full,
@@ -445,6 +459,10 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
         # Rolling 12 months from the feed, so it's labelled as recent form
         # rather than a career record.
         "form": live_form,
+        # Real rates, this year and last. Null when the feed has nothing on file
+        # for that person in that year.
+        "season_rec": season_now,
+        "season_prev": season_prev,
         "prior": prior,
         "current": {
             "wins": _n(season, "wins"),
