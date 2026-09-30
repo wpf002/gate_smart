@@ -101,7 +101,7 @@ export default function PersonDetailPage({ type }) {
                   so there's no birth date and no true career start to show. */}
               <Card
                 title={`Before ${data.season}`}
-                note={data.prior.first_run ? `First on file ${day(data.prior.first_run)}` : ''}
+                note={data.prior.first_run ? `First On File ${day(data.prior.first_run)}` : ''}
               >
                 <Figures items={[
                   { value: n(data.prior.wins), label: 'Wins', gold: true },
@@ -113,7 +113,7 @@ export default function PersonDetailPage({ type }) {
 
               <Card
                 title={String(data.season)}
-                note={data.current.last_run ? `Last winner ${day(data.current.last_run)}` : 'No winners yet'}
+                note={data.current.last_run ? `Last Winner ${day(data.current.last_run)}` : 'No Winners Yet'}
               >
                 <Figures items={[
                   { value: n(data.current.wins), label: 'Wins', gold: true },
@@ -129,7 +129,7 @@ export default function PersonDetailPage({ type }) {
                 returned. The window is the plan's rolling 12 months, so it says
                 "recent form" and not a career record. */}
             {data.form && (
-              <Card title="Recent Form" note={`${n(data.form.starts)} starts · last 12 months`}>
+              <Card title="Recent Form" note={`Last 12 Months · ${n(data.form.starts)} Starts`}>
                 <Figures items={[
                   { value: pct(data.form.win_rate), label: 'Win Rate', gold: true },
                   { value: pct(data.form.itm_rate), label: 'In The Money' },
@@ -158,7 +158,7 @@ export default function PersonDetailPage({ type }) {
             )}
 
             {data.top_tracks.length > 0 && (
-              <Card title="Best Tracks" note="Wins since 2024">
+              <Card title="Best Tracks" note="Wins Since 2024">
                 <div className="person-rows is-split">
                   {data.top_tracks.map((t, i) => (
                     <div key={t.track} className="person-row">
@@ -172,7 +172,7 @@ export default function PersonDetailPage({ type }) {
             )}
 
             {data.surfaces.length > 0 && (
-              <Card title="Surface" note="Wins since 2024">
+              <Card title="Surface" note="Wins Since 2024">
                 <div className="person-rows is-split">
                   {data.surfaces.map((s) => (
                     <div key={s.surface} className="person-row">
@@ -185,7 +185,7 @@ export default function PersonDetailPage({ type }) {
             )}
 
             {data.recent_winners.length > 0 && (
-              <Card title="Latest Winners" note="$2 win payoff">
+              <Card title="Latest Winners" note="$2 Win Payoff">
                 <div className="person-rows is-split">
                   {data.recent_winners.map((w, i) => (
                     <div key={`${w.horse}-${w.date}-${i}`} className="person-row">

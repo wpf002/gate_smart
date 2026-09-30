@@ -1242,6 +1242,46 @@ def summarise_person_analysis(payload: dict) -> dict | None:
     }
 
 
+async def find_pedigree_id(name: str, kind: str) -> str | None:
+    """Id for a sire, dam or damsire. `kind` is sires | dams | damsires."""
+    if not name or kind not in ("sires", "dams", "damsires"):
+        return None
+    # Feed names carry a country suffix — "Tapit (USA)" — and cards often don't.
+    bare = re.sub(r"\s*\([A-Z]{2,3}\)\s*$", "", name).strip()
+    try:
+        data = await _get(
+            f"/{kind}/search",
+            params={"name": bare},
+            cache_key=f"{kind}_search:{bare.lower()}",
+            ttl=7 * 24 * 3600,  # pedigree names never change
+        )
+    except Exception:
+        return None
+    rows = (data or {}).get("search_results") or []
+    want = bare.lower()
+    exact = next((r for r in rows
+                  if re.sub(r"\s*\([A-Z]{2,3}\)\s*$", "", r.get("name") or "").strip().lower() == want),
+                 None)
+    return (exact or (rows[0] if rows else {})).get("id")
+
+
+async def get_pedigree_analysis(ped_id: str, kind: str, facet: str) -> dict:
+    """Progeny analysis for a sire/dam/damsire. facet is distances | classes."""
+    return await _get(
+        f"/{kind}/{ped_id}/analysis/{facet}",
+        cache_key=f"pedigree:{kind}:{ped_id}:{facet}",
+        ttl=7 * 24 * 3600,
+    )
+
+
+async def get_person_facet(person_id: str, person_type: str, facet: str) -> dict | None:
+    """One analysis facet, or None. facet e.g. distances, jockeys, horse-age."""
+    try:
+        return await get_person_analysis(person_id, person_type, facet)
+    except Exception:
+        return None
+
+
 async def get_person_form(name: str, person_type: str) -> dict | None:
     """Recent-form record for one trainer or jockey, or None if unmatched."""
     person_id = await find_person_id(name, person_type)

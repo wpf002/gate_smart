@@ -279,3 +279,17 @@ async def record_many_races(results: list, race_date=None) -> int:
             if attempt < 2:
                 await asyncio.sleep(2 * (attempt + 1))
     raise RuntimeError(f"batch insert failed for {race_date}: {last_err}")
+
+
+async def form_counts_for(runners: list[dict]) -> dict[str, int]:
+    """How many archived lines each runner has, keyed by lowercased name.
+
+    Pedigree only earns its place for horses with no record of their own, and
+    this is what tells them apart from a horse with ten runs behind it.
+    """
+    try:
+        context = await get_form_context(runners, limit=MAX_LINES_PER_HORSE)
+    except Exception:
+        return {}
+    return {(name or "").strip().lower(): len(lines or [])
+            for name, lines in (context or {}).items()}

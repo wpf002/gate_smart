@@ -30,6 +30,7 @@ Two limits, both load-bearing:
 import asyncio
 
 from app.services import racing_api
+from app.services.pedigree import bucket_for, furlongs_of
 
 # Enough to cover a full field's connections without pushing the 5 req/sec cap;
 # each person costs a search plus an analysis call on a cache miss.
@@ -54,8 +55,53 @@ def _people(runners: list) -> list[tuple[str, str]]:
     return sorted(seen)
 
 
-async def get_connections_form(runners: list) -> dict[tuple[str, str], dict]:
-    """Recent-form records keyed by (name, type). Missing people are omitted."""
+def _at_trip(payload: dict, race_furlongs: float) -> dict | None:
+    """A person's record at today's kind of trip, not across every distance.
+
+    A rider's mile figures say nothing about a five-furlong dash, and the
+    overall number hides both.
+    """
+    rows = (payload or {}).get("distances") or []
+    want = bucket_for(race_furlongs) if race_furlongs else None
+    if not rows or not want:
+        return None
+    runs = wins = 0
+    ae_num = 0.0
+    for r in rows:
+        f = furlongs_of(r.get("dist_f"))
+        if f is None or bucket_for(f) != want:
+            continue
+        n = int(r.get("runners") or r.get("rides") or 0)
+        runs += n
+        wins += int(r.get("1st") or 0)
+        ae_num += float(r.get("a/e") or 0) * n
+    if runs < MIN_STARTS:
+        return None
+    return {"trip": want, "starts": runs, "wins": wins,
+            "win_rate": round(wins / runs, 4), "ae": round(ae_num / runs, 2)}
+
+
+def _combo(payload: dict, jockey_name: str) -> dict | None:
+    """What this trainer and this rider have done together."""
+    rows = (payload or {}).get("jockeys") or []
+    want = {t for t in jockey_name.lower().replace(".", " ").split() if len(t) > 1}
+    if not want:
+        return None
+    for r in rows:
+        have = {t for t in (r.get("jockey") or "").lower().replace(".", " ").split() if len(t) > 1}
+        if want <= have or have <= want:
+            runs = int(r.get("runners") or 0)
+            if runs < 10:  # a pairing needs a few goes before it means anything
+                return None
+            return {"starts": runs, "wins": int(r.get("1st") or 0),
+                    "win_rate": round(float(r.get("win_%") or 0), 4),
+                    "ae": round(float(r.get("a/e") or 0), 2)}
+    return None
+
+
+async def get_connections_form(runners: list, race_furlongs: float = 0.0
+                               ) -> dict[tuple[str, str], dict]:
+    """Records keyed by (name, type): overall, at today's trip, and the pairing."""
     people = _people(runners)
     if not people:
         return {}
@@ -64,13 +110,34 @@ async def get_connections_form(runners: list) -> dict[tuple[str, str], dict]:
     async def one(name: str, kind: str):
         async with gate:
             try:
-                return (name, kind), await racing_api.get_person_form(name, kind)
+                form = await racing_api.get_person_form(name, kind)
+                if not form or form.get("starts", 0) < MIN_STARTS:
+                    return (name, kind), None
+                if race_furlongs:
+                    trip = await racing_api.get_person_facet(form["id"], kind, "distances")
+                    form["at_trip"] = _at_trip(trip, race_furlongs)
+                return (name, kind), form
             except Exception:
                 return (name, kind), None
 
-    pairs = await asyncio.gather(*(one(n, k) for n, k in people))
-    return {key: form for key, form in pairs
-            if form and form.get("starts", 0) >= MIN_STARTS}
+    found = {k: v for k, v in await asyncio.gather(*(one(n, k) for n, k in people)) if v}
+
+    # Trainer x jockey, for the pairings actually going to post today.
+    async def pair(trainer_name, jockey_name):
+        rec = found.get((trainer_name, "trainer"))
+        if not rec:
+            return None
+        async with gate:
+            payload = await racing_api.get_person_facet(rec["id"], "trainer", "jockeys")
+        combo = _combo(payload, jockey_name)
+        if combo:
+            rec.setdefault("combos", {})[jockey_name] = combo
+
+    pairs = {((r.get("trainer") or "").strip(), (r.get("jockey") or "").strip())
+             for r in runners or []
+             if not r.get("scratched") and r.get("trainer") and r.get("jockey")}
+    await asyncio.gather(*(pair(t, j) for t, j in pairs))
+    return found
 
 
 def render_connections_block(runners: list, form: dict[tuple[str, str], dict]) -> str:
@@ -82,15 +149,26 @@ def render_connections_block(runners: list, form: dict[tuple[str, str], dict]) -
         if r.get("scratched") or r.get("non_runner"):
             continue
         parts = []
+        trainer_name = (r.get("trainer") or "").strip()
+        jockey_name = (r.get("jockey") or "").strip()
         for field, kind, label in (("trainer", "trainer", "Trn"), ("jockey", "jockey", "Jky")):
             name = (r.get(field) or "").strip()
             rec = form.get((name, kind))
             if not rec:
                 continue
+            line = (f"{label} {name}: {rec['win_rate']:.0%} win, {rec['itm_rate']:.0%} ITM "
+                    f"({rec['starts']} starts), a/e {rec['ae']:.2f}, "
+                    f"{rec['profit_per_unit']:+.2f}/unit")
+            trip = rec.get("at_trip")
+            if trip:
+                line += (f"; at {trip['trip']} trips {trip['win_rate']:.0%} "
+                         f"from {trip['starts']}, a/e {trip['ae']:.2f}")
+            parts.append(line)
+        combo = (form.get((trainer_name, "trainer")) or {}).get("combos", {}).get(jockey_name)
+        if combo:
             parts.append(
-                f"{label} {name}: {rec['win_rate']:.0%} win, {rec['itm_rate']:.0%} ITM "
-                f"({rec['starts']} starts), a/e {rec['ae']:.2f}, "
-                f"{rec['profit_per_unit']:+.2f}/unit"
+                f"Together: {combo['win_rate']:.0%} from {combo['starts']} rides, "
+                f"a/e {combo['ae']:.2f}"
             )
         if parts:
             num = r.get("number") or "?"
@@ -109,15 +187,19 @@ def render_connections_block(runners: list, form: dict[tuple[str, str], dict]) -
         "overbets.\n"
         "- /unit is profit on a flat stake backing every runner. Negative is normal — "
         "compare riders and barns against each other, not against zero.\n"
+        "- \"at sprint/middle/route trips\" is their record at today's kind of distance, "
+        "which can differ sharply from the overall figure. \"Together\" is this exact "
+        "trainer-and-rider pairing.\n"
         f"- Anyone with fewer than {MIN_STARTS} starts on file is left out rather than "
         "shown as a percentage off a handful of runs."
     )
 
 
-async def get_connections_context(runners: list) -> str:
+async def get_connections_context(runners: list, race_furlongs: float = 0.0) -> str:
     """The block, ready to drop into a prompt. Never raises."""
     try:
-        return render_connections_block(runners, await get_connections_form(runners))
+        return render_connections_block(
+            runners, await get_connections_form(runners, race_furlongs))
     except Exception as e:  # noqa: BLE001
         print(f"[connections] unavailable: {type(e).__name__}: {e}")
         return ""

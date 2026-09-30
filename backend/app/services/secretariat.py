@@ -3,6 +3,7 @@ Secretariat — GateSmart's AI handicapping engine.
 Powered by Claude (Anthropic). This is the core intelligence of the platform.
 All race analysis, horse evaluation, and betting recommendations flow through here.
 """
+import asyncio
 import json
 import logging
 import os
@@ -1065,13 +1066,27 @@ async def build_analyze_request(
     except Exception:
         form_block = ""
 
-    # Trainer and jockey form in stakes company, from the Pro analysis
-    # endpoints. Never blocks the analysis: an empty block is the old behaviour.
+    # Connections and pedigree, from the Pro analysis endpoints. Both are
+    # distance-aware, so they describe today's trip rather than a career
+    # average. Neither can block the analysis: an empty block is what the
+    # prompt saw before these existed.
+    try:
+        furlongs = float(race_data.get("distance_f") or 0)
+    except (TypeError, ValueError):
+        furlongs = 0.0
     try:
         from app.services.connections import get_connections_context
-        connections_block = await get_connections_context(runners)
-    except Exception:
-        connections_block = ""
+        from app.services.horse_form import form_counts_for
+        from app.services.pedigree import get_pedigree_context
+
+        counts = await form_counts_for(runners)
+        connections_block, pedigree_block = await asyncio.gather(
+            get_connections_context(runners, furlongs),
+            get_pedigree_context(runners, furlongs, counts),
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"[secretariat] connections/pedigree unavailable: {type(e).__name__}: {e}")
+        connections_block = pedigree_block = ""
 
     exp_block = _experience_level_block(experience_level, arm)
     stake_block = _stake_sizing_block(bankroll)
@@ -1079,7 +1094,7 @@ async def build_analyze_request(
     prompt = f"""{exp_block}Analyze this race. One sentence per field. Short phrases in arrays.
 
 Race Data:
-{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}{form_block}{connections_block}
+{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}{form_block}{connections_block}{pedigree_block}
 
 READING THE DATA — use these fields, they are the edge available to you:
 - `odds` is the LIVE tote price when the pool is up, otherwise the morning line;
