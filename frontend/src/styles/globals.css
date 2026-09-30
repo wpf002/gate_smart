@@ -1845,3 +1845,57 @@ select option {
   border-color: var(--border-gold);
   background: rgba(201, 162, 39, 0.1);
 }
+
+/* ─── Profile: surfaces, and the market read ─────────────────────────────── */
+
+/* However many surfaces there are, they share the row equally — the column
+   count is set inline from the length. */
+.person-surfaces {
+  display: grid;
+}
+
+.person-surfaces .person-figure {
+  border-bottom: none;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.person-surfaces .person-figure:last-child {
+  border-right: none;
+}
+
+.person-market {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px;
+}
+
+.person-market-value {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.person-market.is-over .person-market-value {
+  color: var(--accent-red-bright);
+}
+
+.person-market.is-under .person-market-value {
+  color: var(--accent-green-bright);
+}
+
+.person-market-label {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.person-market-money {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}

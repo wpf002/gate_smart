@@ -3,6 +3,7 @@ The Racing API client — Pro plan, plus the North America data add-on.
 Endpoint docs: https://api.theracingapi.com
 Rate limit: 5 req/sec. Redis caching keeps us well within this.
 """
+import asyncio
 import contextvars
 import re
 
@@ -1639,6 +1640,131 @@ def summarise_person_analysis(payload: dict) -> dict | None:
 
 RESULTS_PAGE = 100          # the endpoint's own maximum
 SEASON_MAX_PAGES = 12       # 1,200 races is more than any one yard runs here
+_WINDOW_CONCURRENCY = 3     # the plan 429s in the low single digits per second
+
+
+def _twelve_month_chunks(start, end):
+    """Split a range into windows the endpoint will accept.
+
+    /results and the per-entity results endpoints reject any span wider than
+    twelve months with a 422 — but they accept a twelve-month window anywhere in
+    history, which is what makes a year-by-year record possible at all. A wider
+    range asked for in one call just fails, so it is cut up here.
+    """
+    import datetime as _dt
+    out = []
+    lo = start
+    while lo <= end:
+        hi = min(end, lo.replace(year=lo.year + 1) - _dt.timedelta(days=1))
+        out.append((lo, hi))
+        lo = hi + _dt.timedelta(days=1)
+    return out
+
+
+async def get_entity_window(entity_id: str, entity_type: str, start, end,
+                            name: str = "", label: str = "") -> dict | None:
+    """A trainer's or jockey's record for one calendar year, with a real
+    denominator.
+
+    The profile page could only ever quote 2023, because our own form archive
+    keeps top-three finishes and never wrote down a loss. This endpoint returns
+    whole races — every runner, whatever it finished — so counting the person's
+    own runs across a date range gives starts as well as wins.
+
+    It covers USA: Chad Brown comes back with 41 races in 2026, Saratoga and
+    Belmont among them, finishing positions included. The same limit as the rest
+    of the analysis data applies though — this is the group-races-and-selected-
+    handicaps dataset, so it is a record in stakes company, not a full season.
+    The caller has to say so.
+    """
+    if not entity_id or entity_type not in ("trainer", "jockey"):
+        return None
+    import datetime as _dt
+
+    today = _dt.date.today()
+    end = min(end, today)
+    if start > today or start > end:
+        return None
+
+    cache_key = f"window:{entity_type}:{entity_id}:{start}:{end}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    want = {t for t in re.split(r"[^a-z]+", (name or "").lower()) if len(t) > 1}
+
+    def _count(races: list) -> tuple[int, int, int]:
+        starts = wins = placed = 0
+        for race in races:
+            for run in race.get("runners") or []:
+                # The endpoint returns the whole race, so the person's own
+                # runners have to be picked out of the field.
+                who = (run.get(entity_type) or "").lower()
+                if want and not want <= {t for t in re.split(r"[^a-z]+", who) if len(t) > 1}:
+                    continue
+                starts += 1
+                pos = str(run.get("position") or "")
+                if pos == "1":
+                    wins += 1
+                if pos in ("1", "2", "3"):
+                    placed += 1
+        return starts, wins, placed
+
+    # Six years run one after another took twelve seconds to build a profile.
+    # The years are independent, so they go together — bounded, because the
+    # plan starts returning 429 in the low single digits per second, and the
+    # pages inside a year stay sequential since each depends on the last.
+    gate = asyncio.Semaphore(_WINDOW_CONCURRENCY)
+
+    async def one_chunk(lo, hi):
+        got_races, s_, w_, p_ = 0, 0, 0, 0
+        async with gate:
+            for page in range(SEASON_MAX_PAGES):
+                try:
+                    res = await get_entity_results(
+                        entity_id, entity_type, limit=RESULTS_PAGE,
+                        start_date=lo.isoformat(), end_date=hi.isoformat(),
+                        skip=page * RESULTS_PAGE,
+                    )
+                except Exception:
+                    break
+                races = res.get("results") or []
+                if not races:
+                    break
+                got_races += len(races)
+                a, b, c = _count(races)
+                s_, w_, p_ = s_ + a, w_ + b, p_ + c
+                if len(races) < RESULTS_PAGE:
+                    break
+        return got_races, s_, w_, p_
+
+    chunks = await asyncio.gather(
+        *(one_chunk(lo, hi) for lo, hi in _twelve_month_chunks(start, end)))
+    seen_races = sum(c[0] for c in chunks)
+    starts = sum(c[1] for c in chunks)
+    wins = sum(c[2] for c in chunks)
+    placed = sum(c[3] for c in chunks)
+
+    if not starts:
+        return None
+    out = {
+        "label": label,
+        "from": start.isoformat(),
+        "races": seen_races,
+        "starts": starts,
+        "wins": wins,
+        "placed": placed,
+        "win_rate": round(wins / starts, 4),
+        "itm_rate": round(placed / starts, 4),
+        "through": end.isoformat(),
+    }
+    await cache_set(cache_key, out, ex=6 * 3600)
+    return out
+
+
+RESULTS_PAGE = 100          # the endpoint's own maximum
+SEASON_MAX_PAGES = 12       # 1,200 races is more than any one yard runs here
+_WINDOW_CONCURRENCY = 3     # the plan 429s in the low single digits per second
 
 
 def _twelve_month_chunks(start, end):

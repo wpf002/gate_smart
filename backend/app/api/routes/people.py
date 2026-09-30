@@ -261,6 +261,14 @@ async def search_suggestions() -> JSONResponse:
 PROFILE_RECENT_LIMIT = 12
 PROFILE_TRACK_LIMIT = 8
 
+# How far back the "before this year" card reaches. One upstream call per year,
+# cached for six hours, so this is the trade between depth and a cold profile.
+PROFILE_HISTORY_YEARS = 6
+
+# A rate off a handful of starts is noise. Below this the card shows the
+# archive's counts instead, rather than "0.0% from 1 start".
+PROFILE_MIN_STARTS = 20
+
 
 def _person_columns(person_type: str) -> tuple[str, str]:
     """(form-archive column, chart/PP name prefix) for a person type."""
@@ -298,9 +306,8 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
     if len(full) < 2:
         raise HTTPException(status_code=400, detail="name must be at least 2 characters")
 
-    # v5: adds this year's and last year's record, each with a real denominator,
-    # and drops the 2023-only rate that replaced.
-    cache_key = f"people:profile:v5:{person_type}:{full.lower()}"
+    # v6: tracks deduped across letter case, surfaces folded to dirt/turf/AW.
+    cache_key = f"people:profile:v8:{person_type}:{full.lower()}"
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
@@ -371,17 +378,36 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
             WHERE lower(pp_jockey_first || ' ' || pp_jockey_last) = :key
               AND pp_race_date < '2023-01-01'
         """) if is_jockey else None
+        # The feed writes the same track in two cases — "BELMONT AT THE BIG A"
+        # and "Belmont At The Big A" — across 40 tracks. Grouping on the raw
+        # column split each one in two, and the page title-cases both back to
+        # the same name, so a profile listed Belmont Park twice with the wins
+        # divided between them.
         tracks_q = _all(f"""
-            SELECT track, COUNT(*) FILTER (WHERE finish_pos = 1) AS wins, COUNT(*) AS itm
+            SELECT max(track) AS track,
+                   COUNT(*) FILTER (WHERE finish_pos = 1) AS wins,
+                   COUNT(*) AS itm
             FROM horse_form_lines
-            WHERE lower({col}) = :key
-            GROUP BY track ORDER BY wins DESC, itm DESC LIMIT :tracks
+            WHERE lower({col}) = :key AND track IS NOT NULL AND track <> ''
+            GROUP BY upper(btrim(track))
+            ORDER BY wins DESC, itm DESC LIMIT :tracks
         """, tracks=PROFILE_TRACK_LIMIT)
+        # Inner and outer turf are turf; the course configuration is a
+        # different question from what the horse ran on. Folding them leaves
+        # the three surfaces that actually differ.
         surfaces_q = _all(f"""
-            SELECT surface, COUNT(*) FILTER (WHERE finish_pos = 1) AS wins
+            SELECT CASE
+                     WHEN upper(btrim(surface)) LIKE '%%TURF%%' THEN 'Turf'
+                     WHEN upper(btrim(surface)) LIKE '%%DIRT%%' THEN 'Dirt'
+                     WHEN upper(btrim(surface)) LIKE '%%ALL WEATHER%%'
+                       OR upper(btrim(surface)) LIKE '%%SYNTH%%'
+                       OR upper(btrim(surface)) LIKE '%%POLY%%' THEN 'All Weather'
+                     ELSE initcap(btrim(surface))
+                   END AS surface,
+                   COUNT(*) FILTER (WHERE finish_pos = 1) AS wins
             FROM horse_form_lines
             WHERE lower({col}) = :key AND surface IS NOT NULL AND surface <> ''
-            GROUP BY surface HAVING COUNT(*) FILTER (WHERE finish_pos = 1) > 0
+            GROUP BY 1 HAVING COUNT(*) FILTER (WHERE finish_pos = 1) > 0
             ORDER BY wins DESC LIMIT 6
         """)
         winners_q = _all(f"""
@@ -410,25 +436,6 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
         print(f"[people] live form unavailable for {full!r}: {type(e).__name__}: {e}")
         live_form = None
 
-    # This year and last, each with a real denominator.
-    #
-    # The page used to quote a 2023 win rate, because 2023 was the one season in
-    # our own archive that recorded losing runs. Nobody cares how a trainer did
-    # in 2023. The per-entity results endpoint returns whole races — every
-    # runner, whatever it finished — so counting a person's own runs across a
-    # date range gives starts as well as wins, for this year and last. It covers
-    # USA: Chad Brown comes back 12 from 60 in 2026 and 25 from 126 in 2025.
-    this_year = datetime.date.today().year
-    season_now = season_prev = None
-    try:
-        person_id = (live_form or {}).get("id") or await racing_api.find_person_id(full, person_type)
-        if person_id:
-            season_now, season_prev = await asyncio.gather(
-                racing_api.get_entity_season(person_id, person_type, this_year, full),
-                racing_api.get_entity_season(person_id, person_type, this_year - 1, full),
-            )
-    except Exception as e:  # noqa: BLE001
-        print(f"[people] season record unavailable for {full!r}: {type(e).__name__}: {e}")
 
     def _n(row, field):
         return int(getattr(row, field, 0) or 0) if row else 0
@@ -461,8 +468,6 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
         "form": live_form,
         # Real rates, this year and last. Null when the feed has nothing on file
         # for that person in that year.
-        "season_rec": season_now,
-        "season_prev": season_prev,
         "prior": prior,
         "current": {
             "wins": _n(season, "wins"),
@@ -479,5 +484,61 @@ async def person_profile(name: str = "", type: str = "trainer") -> JSONResponse:
                             "win_payoff": float(r.win_payoff) if r.win_payoff else None}
                            for r in winners],
     }
+    await cache_set(cache_key, payload, ex=6 * 3600)
+    return JSONResponse(payload)
+
+
+@router.get("/record")
+async def person_record(name: str = "", type: str = "trainer") -> JSONResponse:
+    """This year, and everything before it, each with a real denominator.
+
+    Separate from /profile because it is slow and the profile is not. Six years
+    means roughly a dozen upstream calls, the plan starts returning 429 above
+    about three at once, and each one takes the best part of two seconds — so
+    asking for it inline made every first view of a profile wait ten seconds for
+    two cards. The page paints from /profile and fills these in when they land.
+
+    The per-entity results endpoint returns whole races, every runner whatever
+    it finished, so counting a person's own runs gives starts as well as wins.
+    It covers USA and goes back years: Todd Pletcher has 266 races on file for
+    2015. A span over twelve months is rejected, so get_entity_window cuts a
+    wide range into year chunks.
+    """
+    person_type = (type or "").lower().strip()
+    if person_type not in _VALID_TYPES:
+        raise HTTPException(status_code=400, detail=f"type must be one of {_VALID_TYPES}")
+    full = (name or "").strip()
+    if len(full) < 2:
+        raise HTTPException(status_code=400, detail="name must be at least 2 characters")
+
+    import datetime
+
+    cache_key = f"people:record:v1:{person_type}:{full.lower()}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return JSONResponse(cached)
+
+    this_year = datetime.date.today().year
+    now = prior = None
+    try:
+        person_id = await racing_api.find_person_id(full, person_type)
+        if person_id:
+            now, prior = await asyncio.gather(
+                racing_api.get_entity_season(person_id, person_type, this_year, full),
+                racing_api.get_entity_window(
+                    person_id, person_type,
+                    datetime.date(this_year - PROFILE_HISTORY_YEARS, 1, 1),
+                    datetime.date(this_year - 1, 12, 31),
+                    name=full, label=f"{this_year - PROFILE_HISTORY_YEARS}–{this_year - 1}"),
+            )
+    except Exception as e:  # noqa: BLE001
+        print(f"[people] record unavailable for {full!r}: {type(e).__name__}: {e}")
+
+    def _enough(rec):
+        # A rate off a handful of starts is noise; the page falls back to the
+        # archive's counts rather than printing "0.0% from 1 start".
+        return rec if (rec or {}).get("starts", 0) >= PROFILE_MIN_STARTS else None
+
+    payload = {"season": this_year, "season_rec": _enough(now), "season_prior": _enough(prior)}
     await cache_set(cache_key, payload, ex=6 * 3600)
     return JSONResponse(payload)

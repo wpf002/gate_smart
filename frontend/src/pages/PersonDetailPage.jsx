@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getPersonProfile } from '../utils/api';
+import { getPersonProfile, getPersonRecord } from '../utils/api';
 import PageHeader from '../components/common/PageHeader';
 import FollowButton from '../components/common/FollowButton';
 
@@ -55,7 +55,8 @@ function SeasonCard({ title, rec, fallback, fallbackNote }) {
   const n = (v) => (v ?? 0).toLocaleString();
   if (rec && rec.starts) {
     return (
-      <Card title={title} note={`${n(rec.starts)} Starts In Stakes Company`}>
+      <Card title={title}
+            note={`${rec.label ? `${rec.label} · ` : ''}${n(rec.starts)} ${rec.starts === 1 ? 'Start' : 'Starts'} In Stakes Company`}>
         <Figures items={[
           { value: pct(rec.win_rate), label: 'Win Rate', gold: true },
           { value: pct(rec.itm_rate), label: 'In The Money' },
@@ -74,6 +75,40 @@ function SeasonCard({ title, rec, fallback, fallbackNote }) {
         { value: n(fallback?.horses), label: 'Horses' },
       ]} />
     </Card>
+  );
+}
+
+/**
+ * Whether the market gets this person right.
+ *
+ * a/e is actual wins over the wins their own starting prices implied, so 0.80
+ * is twenty percent fewer winners than the odds called for. The level-stake
+ * profit says the same thing in money. One line says it in words, because
+ * "A/E 0.8" and "−$0.24" told you nothing unless you already knew both terms.
+ */
+function MarketRead({ form }) {
+  const ae = form.ae;
+  const pl = form.profit_per_unit;
+  if (ae === null || ae === undefined) return null;
+  const gap = Math.round(Math.abs(1 - ae) * 100);
+  const over = ae < 1;
+  // Inside a few percent of even, the sample can't tell you which way it runs.
+  const flat = gap < 5;
+  const money = pl === null || pl === undefined
+    ? null
+    : `${pl >= 0 ? '+' : '−'}$${Math.abs(pl).toFixed(2)} per $1 on every runner`;
+  return (
+    <div className={`person-market${flat ? '' : over ? ' is-over' : ' is-under'}`}>
+      <span className="person-market-value">{ae.toFixed(2)}</span>
+      <span className="person-market-label">
+        {flat
+          ? 'The market prices them about right — they win roughly as often as their odds say they should.'
+          : over
+            ? `The market overrates them: ${gap}% fewer winners than their odds implied.`
+            : `The market underrates them: ${gap}% more winners than their odds implied.`}
+        {money && <span className="person-market-money">{money}</span>}
+      </span>
+    </div>
   );
 }
 
@@ -100,6 +135,18 @@ export default function PersonDetailPage({ type }) {
     queryFn: () => getPersonProfile(decoded, type),
     enabled: decoded.length >= 2,
     retry: false,
+  });
+
+  // Six years of real start counts is a dozen upstream calls on a plan that
+  // 429s above three at once — ten seconds the rest of the page shouldn't wait
+  // for. It loads alongside, and the cards show the archive's counts until it
+  // lands.
+  const { data: record } = useQuery({
+    queryKey: ['person-record', type, decoded],
+    queryFn: () => getPersonRecord(decoded, type),
+    enabled: decoded.length >= 2,
+    retry: false,
+    staleTime: 6 * 60 * 60 * 1000,
   });
 
   const notFound = isError && error?.response?.status === 404;
@@ -137,32 +184,26 @@ export default function PersonDetailPage({ type }) {
                 start count behind them. The page used to lead with a 2023 win
                 rate, because 2023 was the only season our own archive recorded
                 losing runs for — a number nobody has a reason to care about. */}
+            {/* Earlier years on the left, this year on the right — the cards
+                read left to right in time, which is the order they were put
+                the wrong way round in. */}
             <div className="person-split">
-              <SeasonCard title={String(data.season)} rec={data.season_rec}
-                          fallback={data.current} fallbackNote={
-                            data.current.last_run ? `Last Winner ${day(data.current.last_run)}` : 'No Winners Yet'} />
-              <SeasonCard title={String(data.season - 1)} rec={data.season_prev}
+              <SeasonCard title={`Before ${data.season}`} rec={record?.season_prior}
                           fallback={data.prior} fallbackNote={
                             data.prior.first_run ? `First On File ${day(data.prior.first_run)}` : ''} />
+              <SeasonCard title={String(data.season)} rec={record?.season_rec}
+                          fallback={data.current} fallbackNote={
+                            data.current.last_run ? `Last Winner ${day(data.current.last_run)}` : 'No Winners Yet'} />
             </div>
 
-            {/* Recent form from the feed's analysis endpoints: a real start
-                count, actual-vs-expected, and what a flat unit on every runner
-                returned. The window is the plan's rolling 12 months, so it says
-                "recent form" and not a career record. */}
+            {/* A/E and level-stake profit measure the same thing — whether the
+                market prices this person correctly — and neither label meant
+                anything to anyone who didn't already know the term. They read
+                as a sentence instead, with the direction stated. */}
             {data.form && (
-              <Card title="Recent Form" note={`Last 12 Months · ${n(data.form.starts)} Starts`}>
-                <Figures items={[
-                  { value: pct(data.form.win_rate), label: 'Win Rate', gold: true },
-                  { value: pct(data.form.itm_rate), label: 'In The Money' },
-                  { value: data.form.ae ?? '—', label: 'A/E' },
-                  {
-                    value: data.form.profit_per_unit === null || data.form.profit_per_unit === undefined
-                      ? '—'
-                      : `${data.form.profit_per_unit >= 0 ? '+' : '−'}$${Math.abs(data.form.profit_per_unit).toFixed(2)}`,
-                    label: '$1 On Every Runner',
-                  },
-                ]} />
+              <Card title="Against The Market"
+                    note={`Rolling 12 Months · ${n(data.form.starts)} Starts`}>
+                <MarketRead form={data.form} />
               </Card>
             )}
 
@@ -180,13 +221,18 @@ export default function PersonDetailPage({ type }) {
               </Card>
             )}
 
+            {/* Three surfaces in a two-column list left a hole in the corner.
+                One row of equal tiles fits however many there are. */}
             {data.surfaces.length > 0 && (
               <Card title="Surface" note="Wins Since 2024">
-                <div className="person-rows is-split">
+                <div
+                  className="person-surfaces"
+                  style={{ gridTemplateColumns: `repeat(${data.surfaces.length}, 1fr)` }}
+                >
                   {data.surfaces.map((s) => (
-                    <div key={s.surface} className="person-row">
-                      <span className="person-row-name">{s.surface}</span>
-                      <span className="person-row-stat">{s.wins}<span className="person-row-unit"> wins</span></span>
+                    <div className="person-figure" key={s.surface}>
+                      <div className="person-figure-value">{n(s.wins)}</div>
+                      <div className="person-figure-label">{s.surface}</div>
                     </div>
                   ))}
                 </div>
