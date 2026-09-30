@@ -150,17 +150,29 @@ export default function PersonDetailPage({ type }) {
                 start count behind them. The page used to lead with a 2023 win
                 rate, because 2023 was the only season our own archive recorded
                 losing runs for — a number nobody has a reason to care about. */}
-            {/* Earlier years on the left, this year on the right — the cards
-                read left to right in time, which is the order they were put
-                the wrong way round in. */}
-            <div className="person-split">
-              <SeasonCard title={`Before ${data.season}`} rec={record?.season_prior}
-                          fallback={data.prior} fallbackNote={
-                            data.prior.first_run ? `First On File ${day(data.prior.first_run)}` : ''} />
-              <SeasonCard title={String(data.season)} rec={record?.season_rec}
-                          fallback={data.current} fallbackNote={
-                            data.current.last_run ? `Last Winner ${day(data.current.last_run)}` : 'No Winners Yet'} />
-            </div>
+            {/* Earlier years on the left, this year on the right, so the cards
+                read left to right in time.
+
+                Both sides use one source or neither does. A claiming yard can
+                have 273 wins in our archive and barely a run in the feed's
+                stakes-company dataset, which left one card showing a win rate
+                over real starts and the other showing raw counts — two cards
+                side by side measuring different things. */}
+            {(() => {
+              const paired = record?.season_prior && record?.season_rec;
+              return (
+                <div className="person-split">
+                  <SeasonCard title={`Before ${data.season}`}
+                              rec={paired ? record.season_prior : null}
+                              fallback={data.prior} fallbackNote={
+                                data.prior.first_run ? `First On File ${day(data.prior.first_run)}` : ''} />
+                  <SeasonCard title={String(data.season)}
+                              rec={paired ? record.season_rec : null}
+                              fallback={data.current} fallbackNote={
+                                data.current.last_run ? `Last Winner ${day(data.current.last_run)}` : 'No Winners Yet'} />
+                </div>
+              );
+            })()}
 
             {data.top_tracks.length > 0 && (
               <Card title="Best Tracks" note="Wins Since 2024">
