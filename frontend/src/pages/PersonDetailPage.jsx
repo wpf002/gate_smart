@@ -19,6 +19,10 @@ import FollowButton from '../components/common/FollowButton';
  */
 
 const pct = (v) => (v === null || v === undefined ? '—' : `${(v * 100).toFixed(1)}%`);
+// Our archive records a top-three finish and nothing else from 2024 on, so
+// there is no start count to divide by and no true in-the-money rate for these
+// windows. What it can say honestly is how many of the board hits were wins.
+const winShare = (wins, board) => (board ? pct(wins / board) : '—');
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const day = (iso) => {
   if (!iso) return '';
@@ -101,11 +105,14 @@ export default function PersonDetailPage({ type }) {
                   so there's no birth date and no true career start to show. */}
               <Card
                 title={`Before ${data.season}`}
-                note={data.prior.first_run ? `First On File ${day(data.prior.first_run)}` : ''}
+                note={[
+                  data.prior.itm ? `${n(data.prior.itm)} Board Hits` : '',
+                  data.prior.first_run ? `First On File ${day(data.prior.first_run)}` : '',
+                ].filter(Boolean).join(' · ')}
               >
                 <Figures items={[
                   { value: n(data.prior.wins), label: 'Wins', gold: true },
-                  { value: n(data.prior.itm), label: 'In The Money' },
+                  { value: winShare(data.prior.wins, data.prior.itm), label: 'Win Share' },
                   { value: n(data.prior.tracks), label: 'Tracks' },
                   { value: n(data.prior.horses), label: 'Horses' },
                 ]} />
@@ -113,11 +120,14 @@ export default function PersonDetailPage({ type }) {
 
               <Card
                 title={String(data.season)}
-                note={data.current.last_run ? `Last Winner ${day(data.current.last_run)}` : 'No Winners Yet'}
+                note={[
+                  data.current.itm ? `${n(data.current.itm)} Board Hits` : '',
+                  data.current.last_run ? `Last Winner ${day(data.current.last_run)}` : 'No Winners Yet',
+                ].filter(Boolean).join(' · ')}
               >
                 <Figures items={[
                   { value: n(data.current.wins), label: 'Wins', gold: true },
-                  { value: n(data.current.itm), label: 'In The Money' },
+                  { value: winShare(data.current.wins, data.current.itm), label: 'Win Share' },
                   { value: n(data.current.tracks), label: 'Tracks' },
                   { value: n(data.current.horses), label: 'Horses' },
                 ]} />
@@ -133,12 +143,12 @@ export default function PersonDetailPage({ type }) {
                 <Figures items={[
                   { value: pct(data.form.win_rate), label: 'Win Rate', gold: true },
                   { value: pct(data.form.itm_rate), label: 'In The Money' },
-                  { value: data.form.ae ?? '—', label: 'Actual / Expected' },
+                  { value: data.form.ae ?? '—', label: 'A/E' },
                   {
                     value: data.form.profit_per_unit === null || data.form.profit_per_unit === undefined
                       ? '—'
-                      : `${data.form.profit_per_unit >= 0 ? '+' : '−'}${Math.abs(data.form.profit_per_unit).toFixed(2)}`,
-                    label: 'Profit / Unit',
+                      : `${data.form.profit_per_unit >= 0 ? '+' : '−'}$${Math.abs(data.form.profit_per_unit).toFixed(2)}`,
+                    label: '$1 On Every Runner',
                   },
                 ]} />
               </Card>

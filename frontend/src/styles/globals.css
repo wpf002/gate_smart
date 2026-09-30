@@ -788,6 +788,7 @@ select option {
 .contest-bankroll {
   padding: 12px 14px;
   border-top: 1px solid var(--border-subtle);
+  text-align: center;
 }
 
 .contest-stat-value {

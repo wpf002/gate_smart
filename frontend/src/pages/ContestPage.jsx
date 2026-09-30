@@ -27,7 +27,7 @@ function Bankroll({ data }) {
       <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
         IF YOU'D BET $2 A CALL
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginTop: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 10, marginTop: 4 }}>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: colour }}>
           {up ? '+' : '−'}${Math.abs(data.net).toFixed(2)}
         </span>
