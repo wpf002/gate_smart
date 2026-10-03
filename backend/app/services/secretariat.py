@@ -1126,7 +1126,8 @@ async def analyze_race(race_data: dict, mode: str = "balanced", bankroll: float 
     Returns structured analysis of all runners and recommended bets.
     """
     create_kwargs = await build_analyze_request(
-        race_data, mode=mode, bankroll=bankroll, experience_level=experience_level, model=model
+        race_data, mode=mode, bankroll=bankroll, experience_level=experience_level,
+        model=model or pick_model_for_race(race_data.get("race_id")),
     )
 
     try:
@@ -1297,121 +1298,50 @@ async def stream_analyze_race(race_data: dict, mode: str = "balanced", bankroll:
     """
     Async generator for streaming race analysis.
     Yields ("chunk", str) during generation, then ("result", dict) when done.
+
+    This is what runs when a user opens a race and the nightly analysis isn't in
+    the cache for them — they're on a different experience level, or a scratch
+    or rider change has moved the fingerprint since last night.
+
+    It used to build its own prompt on Haiku. That made it a different
+    Secretariat from the one the scorecard grades: a model that lost the pick
+    experiment 15.7% to 24.5% (p=0.001), working from a prompt with no chart
+    figures, no connections and no pedigree. After a scratch, a user could open
+    a top pick the graded Secretariat never made. It now goes through the same
+    build_analyze_request the nightly batch uses, on the model pick_model_for_race
+    chose for this race, so the only difference left is that it streams.
     """
-    runners = race_data.get("runners", [])
-    ts_context = await get_hardware_and_historical_context(runners)
-    ts_block = "\n\nADDITIONAL HARDWARE DATA:\n" + "\n\n".join(ts_context.values()) if ts_context else ""
-
-    # Rolling calibration rides as a cached system block (changes once daily) so
-    # Secretariat still learns from its own history without re-billing the tokens.
-    arm = prompt_arm_for_race(race_data.get("race_id"))
-    cal_context = await get_calibration_context(race_data.get("race_id"), arm=arm)
-    lessons_context = await get_lessons_context(race_data.get("race_id"))
-
-    # Our own accumulated form lines — the NA feed ships every runner with an
-    # empty `form`, so without this the model handicaps blind on recent record.
-    try:
-        from app.services.horse_form import (
-            get_form_context, lines_for_field, render_form_block,
-        )
-        form_block = render_form_block(
-            await get_form_context(runners, limit=lines_for_field(len(runners)))
-        )
-    except Exception:
-        form_block = ""
-
-    exp_block = _experience_level_block(experience_level, arm)
-    stake_block = _stake_sizing_block(bankroll)
-    pace_spec = _pace_scenario_spec(arm)
-    prompt = (
-        f"RACE ID: {race_data.get('race_id', 'unknown')} | "
-        f"MODE: {mode} | "
-        "ANALYZE THE FOLLOWING RACE:\n\n"
-        f"{exp_block}"
-        f"""Analyze this race. One sentence per field. Short phrases in arrays.
-
-Race Data:
-{json.dumps(_slim_race_for_prompt(race_data), indent=2)}{ts_block}{form_block}
-
-{_field_guide(race_data).lstrip()}
-
-Mode: {mode} | Bankroll: {f'${bankroll:.2f}' if bankroll else '$100.00 (default)'}
-
-{stake_block}
-Return this JSON exactly:
-{{
-  "race_summary": "one sentence",
-  "pace_scenario": "{pace_spec}",
-  "vulnerable_favorite": "horse name or null",
-  "runners": [
-    {{
-      "horse_id": "id",
-      "horse_name": "name",
-      "number": "program number",
-      "contender_score": 0-100,
-      "value_score": 0-100,
-      "strengths": ["short phrase"],
-      "weaknesses": ["short phrase"],
-      "summary": "one sentence — style follows USER EXPERIENCE LEVEL above",
-      "fair_odds": "e.g. 3/1",
-      "recommended_bet": "win/place/show/avoid/use-in-exotics or null"
-    }}
-  ],
-  "predicted_finish": {{
-    "first":  {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }},
-    "second": {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }},
-    "third":  {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }},
-    "fourth": {{ "horse_name": "name", "number": "#N", "reasoning": "one sentence" }}
-  }},
-  "top_contenders": ["#N name1", "#N name2"],
-  "longshot_alert": {{
-    "horse_name": "name or null",
-    "number": "#N or null",
-    "reason": "one sentence",
-    "odds": "current odds"
-  }},
-  "bet_recommendations": {{
-    "win":       {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
-    "place":     {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
-    "show":      {{ "selection": "#N HorseName", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
-    "exacta":    {{ "selection": "#N/#M", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
-    "trifecta":  {{ "selection": "#N/#M/#K", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }},
-    "superfecta":{{ "selection": "#N/#M/#K/#J", "reasoning": "one sentence", "stake_suggestion": "follow STAKE SIZING RULES above" }}
-  }},
-  "fade_reason": "see FADE REASON above — the category, or sided_with_favorite",
-  "overall_summary": "2-3 sentences — style follows USER EXPERIENCE LEVEL above. Complete sentences, do not cut off mid-thought.",
-  "beginner_tip": "one concrete action a first-time bettor can take today — any stake mentioned must follow STAKE SIZING RULES",
-  "confidence": "low/medium/high"
-}}"""
+    race_id = race_data.get("race_id")
+    kwargs = await build_analyze_request(
+        race_data, mode=mode, bankroll=bankroll, experience_level=experience_level,
+        model=pick_model_for_race(race_id),
     )
 
     full_text = ""
     final_message = None
-    async with client.messages.stream(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=5000,
-        temperature=0.2,
-        system=_cached_system(cal_context, uncached=lessons_context, system=system_prompt_for_arm(arm)),
-        messages=[{"role": "user", "content": prompt}]
-    ) as stream:
+    async with client.messages.stream(**kwargs) as stream:
         async for text in stream.text_stream:
             full_text += text
             yield ("chunk", text)
         final_message = await stream.get_final_message()
 
-    # Log cost for the streamed call (no retry path — truncation surfaces as a parse error)
+    # Log cost for the streamed call (no retry path — truncation surfaces as a
+    # parse error). Cache tokens are logged too: the system prefix is cached, and
+    # leaving those out understated what a miss costs.
     if final_message is not None:
         from app.core.llm_cost import log_call
         usage = getattr(final_message, "usage", None)
         await log_call(
             endpoint="stream_analyze_race",
-            model="claude-haiku-4-5-20251001",
+            model=kwargs["model"],
             user_id=user_id,
             input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
             output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
+            cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0 if usage else 0,
+            cache_write_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0 if usage else 0,
         )
 
-    result = _dedupe_predicted_finish(_truncate_analysis(_parse_json(full_text)))
+    result = finish_analysis(full_text, race_data.get("race_number"))
 
     yield ("result", result)
 
