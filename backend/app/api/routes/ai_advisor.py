@@ -671,7 +671,8 @@ async def secretariat_accuracy(days: int = ACCURACY_WINDOW_DAYS) -> JSONResponse
     days = max(1, min(int(days), 365))
     # Bump the suffix when the payload schema changes so prior deploys'
     # cached payloads can't shadow new fields.
-    cache_key = f"accuracy:window{days}d:v1"
+    # v2: the window ends yesterday (Eastern) instead of including today.
+    cache_key = f"accuracy:window{days}d:v2"
     cached = await cache_get(cache_key)
     if cached is not None:
         return JSONResponse(cached)
@@ -683,7 +684,17 @@ async def secretariat_accuracy(days: int = ACCURACY_WINDOW_DAYS) -> JSONResponse
     from app.core import database as _db
     from app.models.accuracy import RacePrediction
 
-    since = _dt.date.today() - _dt.timedelta(days=days - 1)
+    # Thirty COMPLETED racing days, ending yesterday in Eastern time.
+    #
+    # The window used to run through today, and today is never graded until
+    # the nightly settles it — so "last 30 days" was really 29, and each morning
+    # the badge dropped a day off the back without adding one at the front. It
+    # was also dated by the server's UTC clock, which rolls to tomorrow at 8 PM
+    # Eastern while the evening card is still running.
+    from zoneinfo import ZoneInfo
+    today_et = _dt.datetime.now(ZoneInfo("America/New_York")).date()
+    until = today_et - _dt.timedelta(days=1)
+    since = until - _dt.timedelta(days=days - 1)
 
     def _norm(name):
         return (name or "").lower().strip().replace("'", "").replace("-", " ")
@@ -703,6 +714,7 @@ async def secretariat_accuracy(days: int = ACCURACY_WINDOW_DAYS) -> JSONResponse
                 RacePrediction.analysis_mode == "auto_daily",
                 RacePrediction.top_pick_correct.is_not(None),
                 RacePrediction.race_date >= since,
+                RacePrediction.race_date <= until,
             )
         )
         rows = result.all()
@@ -725,6 +737,7 @@ async def secretariat_accuracy(days: int = ACCURACY_WINDOW_DAYS) -> JSONResponse
             "show_rate_percent": None,
             "days": days,
             "since": since.isoformat(),
+            "until": until.isoformat(),
             "sample_size_note": "No settled races yet",
             "last_updated": None,
         }
@@ -737,6 +750,7 @@ async def secretariat_accuracy(days: int = ACCURACY_WINDOW_DAYS) -> JSONResponse
             "show_rate_percent": round((shows / total) * 100, 1),
             "days": days,
             "since": since.isoformat(),
+            "until": until.isoformat(),
             "sample_size_note": f"{total:,} settled races over {days} days",
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }

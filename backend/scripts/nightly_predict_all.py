@@ -42,6 +42,30 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+
+# A pick has to be in before the gate opens. Two minutes is enough slack for
+# the request to reach the model without locking anything at the wire.
+LOCK_MARGIN = datetime.timedelta(minutes=2)
+
+
+def race_is_off(race: dict, now: datetime.datetime | None = None) -> bool:
+    """True when the race's post time has passed, or is inside LOCK_MARGIN.
+
+    A race with no readable post time is kept: dropping it would silently thin
+    the card, and the feed's post time is what every other check relies on.
+    """
+    off = race.get("off_dt")
+    if not off:
+        return False
+    try:
+        when = datetime.datetime.fromisoformat(str(off).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if when.tzinfo is None:
+        return False
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    return when <= now + LOCK_MARGIN
+
 def _format_bucket_hint(track: str, race_type: str, surface: str, cal) -> str | None:
     """Build a short calibration block giving the model its own historical
     top-pick win rate in this bucket. Stats only — no directive language —
@@ -727,6 +751,19 @@ async def main(target_date: datetime.date, dry_run: bool, limit: int | None = No
         ]
         print(f"  --only-missing: {len(existing_ids)} already predicted; "
               f"{len(all_races)} of {before} races need backfill.")
+
+    # Never lock a pick on a race that has already gone off. The nightly runs
+    # before the card, but the catch-up can fire during it: on 2026-09-18 one
+    # locked the whole card at 13:55 ET, two hours into racing, while the feed
+    # was serving final tote odds. Those 24 picks won 41.7% against 26.9% for
+    # honestly locked ones, and they went straight into the published rate.
+    # 126 picks across eight days had the same flaw before this guard existed.
+    # A race is skipped once its post time is within LOCK_MARGIN of now.
+    before = len(all_races)
+    all_races = [(r, region) for (r, region) in all_races if not race_is_off(r)]
+    if len(all_races) < before:
+        print(f"  Skipped {before - len(all_races)} races already off or about to go — "
+              f"a pick locked after the gate isn't a prediction.")
 
     if limit:
         all_races = all_races[:limit]  # testing aid: tiny real run, e.g. --limit 2 --dry-run
