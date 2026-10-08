@@ -169,7 +169,7 @@ export default function AccuracyPage() {
             <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
           ) : todayPending ? (
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              {today?.message || "Today's report generates tomorrow morning at 6 AM ET"}
+              {today?.message || "Today's report generates tomorrow morning at 9 AM ET"}
             </div>
           ) : (
             <>

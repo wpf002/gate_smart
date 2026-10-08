@@ -280,7 +280,7 @@ _accuracy_last_attempt: datetime.datetime | None = None
 
 
 async def job_accuracy_catchup() -> None:
-    """Self-healing accuracy check. Runs every 30 min between 10 UTC and 14 UTC.
+    """Self-healing accuracy check. Runs every 30 min, 9:30 AM–1 PM Eastern.
 
     Fires nightly_accuracy.py if yesterday's daily_accuracy_reports row is
     missing OR exists but email_sent=False. Idempotent: the script's own
@@ -296,8 +296,15 @@ async def job_accuracy_catchup() -> None:
     from app.core import database as _db
     from app.models.accuracy import DailyAccuracyReport
 
+    from zoneinfo import ZoneInfo
+
     now_utc = datetime.now(timezone.utc)
-    if not (10 <= now_utc.hour < 14):
+    # Only after the 9 AM ET send has had its chance. Starting any earlier, this
+    # would see yesterday's report unsent and mail it before today's picks lock,
+    # without the morning line the 9 AM digest exists to carry.
+    now_et = now_utc.astimezone(ZoneInfo("America/New_York"))
+    minutes = now_et.hour * 60 + now_et.minute
+    if not (9 * 60 + 30 <= minutes < 13 * 60):
         return
 
     if _accuracy_last_attempt is not None:
@@ -305,7 +312,7 @@ async def job_accuracy_catchup() -> None:
         if age_min < _ACCURACY_CATCHUP_COOLDOWN_MIN:
             return
 
-    yesterday = now_utc.date() - timedelta(days=1)
+    yesterday = now_et.date() - timedelta(days=1)
     try:
         async with _db._AsyncSessionLocal() as db:
             result = await db.execute(
@@ -473,11 +480,14 @@ def create_scheduler() -> AsyncIOScheduler | None:
         max_instances=1,
         coalesce=True,
     )
+    # 9 AM Eastern, not 6: the digest carries today's morning line, and today's
+    # picks lock from about 8:15 ET because the North America card isn't posted
+    # earlier. Pinned to Eastern so it stays at 9 when the clocks change.
     scheduler.add_job(
         job_nightly_accuracy,
-        CronTrigger(hour=10, minute=0),
+        CronTrigger(hour=9, minute=0, timezone="America/New_York"),
         id="nightly_accuracy",
-        name="Nightly accuracy + morning briefing email (10:00 UTC / 6 AM ET)",
+        name="Nightly accuracy + morning briefing email (9 AM ET)",
         misfire_grace_time=3600,
         max_instances=1,
         coalesce=True,
@@ -487,7 +497,7 @@ def create_scheduler() -> AsyncIOScheduler | None:
         job_accuracy_catchup,
         IntervalTrigger(minutes=30, start_date=catchup_first_run),
         id="accuracy_catchup",
-        name="Accuracy self-heal (every 30 min, 10–14 UTC)",
+        name="Accuracy self-heal (every 30 min, 9:30 AM–1 PM ET)",
         max_instances=1,
         coalesce=True,
     )

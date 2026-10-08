@@ -37,3 +37,12 @@ def test_a_race_with_no_readable_post_time_is_kept():
     assert not n.race_is_off({}, ET_1355)
     assert not n.race_is_off({"off_dt": "not a time"}, ET_1355)
     assert not n.race_is_off({"off_dt": "2026-09-18T12:00:00"}, ET_1355)  # naive
+
+
+def test_post_times_read_as_a_clock():
+    from app.services.secretariat import _clock_12h
+    assert _clock_12h("13:05") == "1:05 PM"
+    assert _clock_12h("00:30") == "12:30 AM"
+    assert _clock_12h("12:00") == "12:00 PM"
+    assert _clock_12h(None) == ""
+    assert _clock_12h("TBA") == "TBA"

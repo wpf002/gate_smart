@@ -423,8 +423,12 @@ if __name__ == "__main__":
     if args.date:
         target = datetime.date.fromisoformat(args.date)
     else:
-        # Script runs at 10 AM UTC = 6 AM ET. datetime.date.today() returns the UTC date
-        # (same calendar day as race day in ET), so subtract 1 to get yesterday's races.
-        target = datetime.date.today() - datetime.timedelta(days=1)
+        # Runs at 9 AM Eastern and reports the previous racing day. Dated in
+        # Eastern rather than by the server's UTC clock, which reads tomorrow
+        # from 8 PM ET onward — a manual run in the evening would otherwise
+        # report today's half-finished card as "yesterday".
+        from zoneinfo import ZoneInfo
+        today_et = datetime.datetime.now(ZoneInfo("America/New_York")).date()
+        target = today_et - datetime.timedelta(days=1)
 
     asyncio.run(main(target, dry_run=args.dry_run))

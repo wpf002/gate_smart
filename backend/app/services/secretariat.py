@@ -2564,6 +2564,121 @@ def _format_post_time(post_et: str) -> str:
     return f"{_twelve(h_et)} ET / {_twelve(h_ct)} CT"
 
 
+def _clock_12h(hhmm: str | None) -> str:
+    """"13:05" -> "1:05 PM". Anything unreadable comes back as it went in."""
+    try:
+        h, m = (int(x) for x in str(hhmm).split(":")[:2])
+    except (TypeError, ValueError):
+        return hhmm or ""
+    return f"{(h % 12) or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
+
+
+async def _morning_line(day) -> tuple[str, str]:
+    """Secretariat's locked 1-2-3-4 for every race on `day`, as (html, text).
+
+    The same line the race cards show under SECRETARIAT'S MORNING LINE, read
+    from the nightly's own rows — no model call. The digest goes out at 9 AM ET
+    so that today's picks, which lock from about 8:15, are in it; when they
+    aren't, the section says so rather than going missing.
+    """
+    import datetime
+    from itertools import groupby
+    from zoneinfo import ZoneInfo
+
+    from sqlalchemy import select
+
+    from app.core import database as _db
+    from app.models.accuracy import RacePrediction
+
+    async with _db._AsyncSessionLocal() as db:
+        rows = list((await db.execute(
+            select(RacePrediction).where(
+                RacePrediction.race_date == day,
+                RacePrediction.analysis_mode == "auto_daily",
+                RacePrediction.user_id.is_(None),
+            )
+        )).scalars().all())
+
+    title = f"Today's Morning Line — {day.strftime('%A, %B %d')}"
+    if not rows:
+        note = ("Today's picks weren't locked when this went out. They're on every "
+                "race card in the app once they are.")
+        return (f'  <h2 style="color:#c8a84b">🌅 {title}</h2>\n'
+                f'  <p style="font-size:13px;color:#666">{note}</p>\n',
+                f"\n{title.upper()}\n{note}\n")
+
+    # Only the top pick is stored with its program number; the rest are names.
+    # The card for the day maps names back to numbers, so the line reads 6-4-1-2
+    # the way it does in the app. A horse it can't place keeps its name.
+    numbers: dict[str, dict[str, str]] = {}
+    try:
+        from app.services import racing_api
+        card = await racing_api.get_na_racecards_full(day.isoformat())
+        for race in card.get("racecards") or []:
+            numbers[race.get("race_id")] = {
+                (r.get("horse_name") or "").lower().strip(): str(r.get("number") or "").strip()
+                for r in race.get("runners") or []
+            }
+    except Exception as e:  # noqa: BLE001
+        print(f"[morning_line] card unavailable, showing names: {type(e).__name__}: {e}")
+
+    def _num(race_id, name, stored=None):
+        if stored:
+            return str(stored).lstrip("#").strip()
+        return (numbers.get(race_id) or {}).get((name or "").lower().strip())
+
+    def _race_no(p):
+        tail = str(p.race_id or "").rsplit("-", 1)[-1]
+        return tail if tail.isdigit() else ""
+
+    rows.sort(key=lambda p: (p.track_code or "ZZZ", p.post_time_et or "99:99"))
+    locked = min(r.created_at for r in rows if r.created_at)
+    locked_et = locked.astimezone(ZoneInfo("America/New_York")).strftime("%-I:%M %p")
+
+    html_rows, text_rows = [], []
+    for idx, (track, items) in enumerate(groupby(rows, key=lambda p: p.track_code or "?")):
+        items = list(items)
+        if idx:
+            html_rows.append('<tr><td colspan="4" style="padding:0;height:12px;background:#fff"></td></tr>')
+            text_rows.append("")
+        html_rows.append(
+            f'<tr style="background:#c8a84b;color:#1a1a1a"><td colspan="4" '
+            f'style="padding:8px;font-weight:bold;font-size:14px">{track} — {len(items)} races</td></tr>')
+        text_rows.append(f"── {track} — {len(items)} races ──")
+        for p in items:
+            names = [p.predicted_first, p.predicted_second, p.predicted_third, p.predicted_fourth]
+            nums = [_num(p.race_id, names[0], p.predicted_first_num)] + [
+                _num(p.race_id, n) for n in names[1:]]
+            line = "-".join(n or "?" for n, nm in zip(nums, names) if nm)
+            top_num = nums[0]
+            top = f"#{top_num} {p.predicted_first}" if top_num else (p.predicted_first or "—")
+            race = f"Race {_race_no(p)}" if _race_no(p) else (p.race_name or "")
+            post = _clock_12h(p.post_time_et)
+            html_rows.append(
+                '<tr style="border-bottom:1px solid #eee">'
+                f'<td style="padding:6px 8px;white-space:nowrap">{race}</td>'
+                f'<td style="padding:6px 8px;white-space:nowrap;color:#666">{post}</td>'
+                f'<td style="padding:6px 8px"><strong>{top}</strong></td>'
+                f'<td style="padding:6px 8px;font-family:monospace;white-space:nowrap">{line}</td>'
+                '</tr>')
+            text_rows.append(f"  {race:<9} {post:>8}  {top:<30} {line}")
+
+    note = (f"Secretariat's predicted finish for {len(rows)} races, locked at {locked_et} ET "
+            "before the first post. Tracks that post their card later are added in the app.")
+    html = (
+        f'  <h2 style="color:#c8a84b">🌅 {title}</h2>\n'
+        f'  <p style="font-size:13px;color:#666">{note}</p>\n'
+        '  <table class="tight" style="border-collapse:collapse;width:100%;font-size:13px">'
+        '<tr style="background:#222;color:#fff">'
+        '<th style="padding:6px 8px;text-align:left">Race</th>'
+        '<th style="padding:6px 8px;text-align:left">Post (ET)</th>'
+        '<th style="padding:6px 8px;text-align:left">Top Pick</th>'
+        '<th style="padding:6px 8px;text-align:left">Line</th></tr>'
+        + "\n".join(html_rows) + '</table>\n')
+    text = f"\n{title.upper()}\n{note}\n{'─' * 60}\n" + "\n".join(text_rows) + "\n"
+    return html, text
+
+
 async def generate_daily_email_report(report, predictions: list) -> dict:
     """
     Builds a complete daily digest email for every settled race.
@@ -2577,6 +2692,15 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
 
     today_str = report.report_date.strftime("%A, %B %d, %Y") if report.report_date else str(datetime.date.today())
 
+    # The digest reports yesterday and goes out the next morning, so the morning
+    # line is for the day after the report date — the day the reader opens it.
+    try:
+        ml_day = (report.report_date or datetime.date.today()) + datetime.timedelta(days=1)
+        morning_html, morning_text = await _morning_line(ml_day)
+    except Exception as e:  # noqa: BLE001
+        print(f"[digest] morning line unavailable: {type(e).__name__}: {e}")
+        morning_html = morning_text = ""
+
     hits = [p for p in predictions if p.top_pick_correct]
     misses = [p for p in predictions if not p.top_pick_correct]
     total = len(predictions)
@@ -2587,11 +2711,6 @@ async def generate_daily_email_report(report, predictions: list) -> dict:
     show_hits = [p for p in predictions if getattr(p, "show_pick_correct", False)]
     place_pct = f"{len(place_hits)/total:.1%}" if total else "0.0%"
     show_pct = f"{len(show_hits)/total:.1%}" if total else "0.0%"
-
-    # Flat-bet P&L straight from official payoffs on these same races, plus the
-    # same math over the last 30 days. One day is ~130 bets, which is far too
-    # few to read an ROI off — a single longshot swings it 15 points — so the
-    # email shows the day beside a window long enough to mean something.
 
     # ── Build complete results table in Python (every race, no LLM needed) ──
     def _ps_segments(p):
@@ -2888,7 +3007,7 @@ HOW I'M EVOLVING
 COMPLETE RESULTS ({total} races)
 {'─'*60}
 {text_table}
-"""
+{morning_text}"""
 
     # A bare <div> with a fixed max-width has no viewport meta, so a phone lays
     # the mail out at its ~980px default and zooms the whole thing out — every
@@ -2946,7 +3065,7 @@ COMPLETE RESULTS ({total} races)
 {_render_trends_html(trends)}
   <h2>📋 Complete Results — All {total} Races</h2>
   {html_table}
-
+{morning_html}
   <p style="font-size:11px;color:#999;margin-top:24px">
     Secretariat · GateSmart · {today_str}
   </p>

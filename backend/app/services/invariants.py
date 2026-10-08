@@ -172,7 +172,7 @@ async def check_slate_coverage(db) -> str | None:
     """The most recently REPORTED day should have been fully graded.
 
     Anchored to the latest accuracy report rather than to "yesterday". Yesterday
-    is still running until settlement at 10:00 UTC, so a calendar-based check
+    is still running until settlement at 9 AM ET, so a calendar-based check
     fires every night between midnight and mid-morning — and an alert that goes
     off on healthy days is one the owner learns to ignore.
     """

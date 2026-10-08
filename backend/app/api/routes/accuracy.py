@@ -25,7 +25,7 @@ async def get_daily_accuracy(
 
     With no date param, returns the most recent settled day's report —
     typically yesterday, since today's morning-line picks aren't settled
-    until tomorrow at 6 AM ET. Asking for today by default returned a
+    until tomorrow at 9 AM ET. Asking for today by default returned a
     "pending" stub all day and the home-page card silently rendered
     nothing.
 
@@ -54,7 +54,7 @@ async def get_daily_accuracy(
     if not report:
         return {
             "status": "pending",
-            "message": "Today's report generates tomorrow morning at 6 AM ET",
+            "message": "Today's report generates tomorrow morning at 9 AM ET",
             "date": target.isoformat(),
         }
 
