@@ -8,14 +8,19 @@ are large, and the service has no public endpoint, so the question could only
 be answered from inside the app.
 
 It matters because the obvious cost fix is wrong here. Setting `maxmemory` with
-`allkeys-lru` would evict whatever is coldest, and the keys with no TTL include
+`allkeys-lru` would evict whatever is coldest, and some keys carry no TTL:
 `paper:bank:*` and `paper:bets:*` (a user's paper-trading balance and bet
-history), `accuracy:total` / `accuracy:correct` (the counters behind the
-accuracy page), and `equibase:*` (scraped speed figures). Evicting those is
-data loss, not caching.
+history) and `accuracy:total` / `accuracy:correct` (the counters behind the
+accuracy page). Evicting those is data loss, not caching.
 
-So: measure first. This samples each prefix rather than walking every key, so
-it stays cheap on a live instance. Read-only, owner-gated.
+Measuring first is what found the actual problem. `equibase:*` is 63,741 keys
+and ~1.5 GB of the 1.5 GB in use — and it is orphaned. Commit e9ad052 moved
+that data to Postgres in April 2026 ("Redis is a cache — not the right home
+for 600k+ static historical records"); the tables hold 684k past-performance
+rows and 319k chart rows, the read path queries them, and nothing has written
+or read the Redis copies since. They have been billed for six months.
+
+So: measure, then purge what is provably dead. Both are owner-gated.
 """
 import fnmatch
 import os
@@ -161,3 +166,74 @@ async def redis_usage(user: User = Depends(get_current_user)):
     """Owner-gated view of the same summary the nightly job logs."""
     _require_admin(user)
     return await redis_usage_summary()
+
+# ── purging the orphaned Equibase copy ───────────────────────────────────────
+
+ORPHAN_PATTERN = "equibase:*"
+
+
+async def purge_orphaned_equibase(dry_run: bool = True, batch_size: int = 500) -> dict:
+    """Delete the Redis copy of data that lives in Postgres.
+
+    The precondition is the whole safety story: both Postgres tables must hold
+    rows for more horses than this would delete keys for. If the migration were
+    ever rolled back, or the tables emptied, this refuses rather than deleting
+    the last copy.
+
+    UNLINK rather than DEL: it frees the memory on a background thread, so
+    63,741 keys do not block the server that is also serving the race card.
+    """
+    from sqlalchemy import func, select
+
+    from app.core import cache as cache_mod
+    from app.core.database import _AsyncSessionLocal
+    from app.models.equibase import HorsePastPerformance, HorseResultChart
+
+    redis = getattr(cache_mod, "_redis", None)
+    if redis is None:
+        raise HTTPException(status_code=503, detail="Redis is not connected")
+
+    async with _AsyncSessionLocal() as session:
+        pp_rows = (await session.execute(select(func.count(HorsePastPerformance.id)))).scalar() or 0
+        chart_rows = (await session.execute(select(func.count(HorseResultChart.id)))).scalar() or 0
+    precondition = {"past_performance_rows": int(pp_rows), "result_chart_rows": int(chart_rows)}
+    if pp_rows <= 0 or chart_rows <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Refusing to purge: Postgres does not hold this data ({precondition})",
+        )
+
+    before = (await redis.info("memory")).get("used_memory", 0)
+    matched = 0
+    deleted = 0
+    pending: list[str] = []
+
+    async for key in redis.scan_iter(match=ORPHAN_PATTERN, count=1000):
+        matched += 1
+        if dry_run:
+            continue
+        pending.append(key)
+        if len(pending) >= batch_size:
+            deleted += await redis.unlink(*pending)
+            pending.clear()
+    if pending and not dry_run:
+        deleted += await redis.unlink(*pending)
+
+    after = (await redis.info("memory")).get("used_memory", 0)
+    return {
+        "dry_run": dry_run,
+        "pattern": ORPHAN_PATTERN,
+        "precondition": precondition,
+        "matched_keys": matched,
+        "deleted_keys": deleted,
+        "used_memory_mb_before": round(before / (1024 * 1024), 1),
+        "used_memory_mb_after": round(after / (1024 * 1024), 1),
+        "freed_mb": round((before - after) / (1024 * 1024), 1),
+    }
+
+
+@router.post("/purge-orphans")
+async def purge_orphans(dry_run: bool = True, user: User = Depends(get_current_user)):
+    """Count (dry_run=true, the default) or delete the orphaned Equibase keys."""
+    _require_admin(user)
+    return await purge_orphaned_equibase(dry_run=dry_run)

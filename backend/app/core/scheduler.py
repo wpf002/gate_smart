@@ -130,6 +130,32 @@ async def job_settle_contest_picks() -> None:
         log.warning(f"[scheduler] contest settlement failed: {e}")
 
 
+async def job_purge_equibase_orphans() -> None:
+    """Delete the orphaned Equibase keys once, when REDIS_PURGE_EQUIBASE=1.
+
+    The endpoint needs an owner session, which is right for a destructive
+    action taken by hand and useless for one taken during a deploy. The env var
+    is the deliberate act instead: set it, let the boot run fire, read the
+    numbers in the log, unset it. Absent the variable this does nothing, so the
+    job is inert on every ordinary deploy.
+    """
+    if os.getenv("REDIS_PURGE_EQUIBASE", "") != "1":
+        return
+    try:
+        from app.api.routes.admin_redis import purge_orphaned_equibase
+
+        dry = os.getenv("REDIS_PURGE_DRY_RUN", "1") == "1"
+        result = await purge_orphaned_equibase(dry_run=dry)
+        log.warning(
+            "[redis purge] dry_run=%s matched=%d deleted=%d  %.0f MB -> %.0f MB (freed %.0f MB)  postgres=%s",
+            result["dry_run"], result["matched_keys"], result["deleted_keys"],
+            result["used_memory_mb_before"], result["used_memory_mb_after"],
+            result["freed_mb"], result["precondition"],
+        )
+    except Exception as e:  # noqa: BLE001 — a purge must never break the loop
+        log.error(f"[redis purge] failed: {e}")
+
+
 async def job_redis_usage() -> None:
     """Log what Redis is holding, by key prefix, once a day.
 
@@ -460,6 +486,16 @@ def create_scheduler() -> AsyncIOScheduler | None:
 
     # Nightly jobs — misfire_grace_time=3600 means a backend that restarts
     # within an hour of the scheduled time still fires the missed job.
+    scheduler.add_job(
+        job_purge_equibase_orphans,
+        CronTrigger(hour=4, minute=15),
+        id="purge_equibase_orphans",
+        name="Purge orphaned Equibase keys (opt-in, 04:15 UTC)",
+        next_run_time=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=1),
+        misfire_grace_time=3600,
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.add_job(
         job_redis_usage,
         CronTrigger(hour=4, minute=5),
