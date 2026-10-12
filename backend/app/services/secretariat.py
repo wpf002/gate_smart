@@ -2499,6 +2499,14 @@ def _render_trends_html(trends: dict) -> str:
     if not trends or not trends.get("block"):
         return ""
 
+    # The three tables sit one under another, and each used to size its columns
+    # from its own content — "MAIDEN CLAIMING" in one table pushed its 7-Day
+    # column somewhere different from "CLAIMING" in the next. One set of widths
+    # with a fixed layout puts every column on the same line down the page. The
+    # widths go on the cells as well as the table, because some mail clients
+    # ignore table-layout.
+    _W = ("16%", "44%", "20%", "20%")
+
     def _row(e: dict) -> str:
         today_cell = (
             f"{e['today_w']}/{e['today_n']} ({e['today_rate']:.0%})"
@@ -2506,10 +2514,10 @@ def _render_trends_html(trends: dict) -> str:
         )
         return (
             '<tr>'
-            f'<td style="padding:3px 8px">{e["track"]}</td>'
-            f'<td style="padding:3px 8px">{e["race_type"]}</td>'
-            f'<td style="padding:3px 8px">{e["window_w"]}/{e["window_n"]} ({e["window_rate"]:.0%})</td>'
-            f'<td style="padding:3px 8px">{today_cell}</td>'
+            f'<td style="padding:3px 8px;width:{_W[0]}">{e["track"]}</td>'
+            f'<td style="padding:3px 8px;width:{_W[1]}">{e["race_type"]}</td>'
+            f'<td style="padding:3px 8px;width:{_W[2]}">{e["window_w"]}/{e["window_n"]} ({e["window_rate"]:.0%})</td>'
+            f'<td style="padding:3px 8px;width:{_W[3]}">{today_cell}</td>'
             '</tr>'
         )
 
@@ -2519,18 +2527,18 @@ def _render_trends_html(trends: dict) -> str:
         rows = "\n".join(_row(e) for e in entries)
         return (
             f'<h4 style="color:{color};margin:12px 0 4px">{title}</h4>'
-            '<table style="border-collapse:collapse;width:100%;font-size:12px">'
-            '<tr style="background:#eee"><th style="padding:3px 8px;text-align:left">Track</th>'
-            '<th style="padding:3px 8px;text-align:left">Type</th>'
-            '<th style="padding:3px 8px;text-align:left">7-day</th>'
-            '<th style="padding:3px 8px;text-align:left">Today</th></tr>'
+            '<table style="border-collapse:collapse;width:100%;font-size:12px;table-layout:fixed">'
+            f'<tr style="background:#eee"><th style="padding:3px 8px;text-align:left;width:{_W[0]}">Track</th>'
+            f'<th style="padding:3px 8px;text-align:left;width:{_W[1]}">Type</th>'
+            f'<th style="padding:3px 8px;text-align:left;width:{_W[2]}">7-Day</th>'
+            f'<th style="padding:3px 8px;text-align:left;width:{_W[3]}">Today</th></tr>'
             f'{rows}</table>'
         )
 
     sections = "".join([
-        _section("Persistent weak spots", trends.get("persistent_weak", []), "#a33"),
-        _section("Regressing today", trends.get("regressing", []), "#c06"),
-        _section("Improving today", trends.get("improving", []), "#2d6a2d"),
+        _section("Persistent Weak Spots", trends.get("persistent_weak", []), "#a33"),
+        _section("Regressing Today", trends.get("regressing", []), "#c06"),
+        _section("Improving Today", trends.get("improving", []), "#2d6a2d"),
     ])
     if not sections:
         return ""
