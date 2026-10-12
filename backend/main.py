@@ -8,7 +8,7 @@ from slowapi.errors import RateLimitExceeded
 
 load_dotenv()
 
-from app.api.routes import races, horses, betting, ai_advisor, education, tracksense, simulator, alerts, affiliate, auth, accuracy, admin_cost, contest, watchlist, people
+from app.api.routes import races, horses, betting, ai_advisor, education, tracksense, simulator, alerts, affiliate, auth, accuracy, admin_cost, admin_redis, contest, watchlist, people
 from app.core.cache import init_redis
 from app.core.config import settings
 from app.core.database import init_db
@@ -80,6 +80,7 @@ app.include_router(watchlist.router, prefix="/api/watchlist", tags=["Watchlist"]
 app.include_router(contest.router, prefix="/api/contest", tags=["Contest"])
 app.include_router(people.router, prefix="/api/people", tags=["People"])
 app.include_router(admin_cost.router, prefix="/api/admin/cost", tags=["Admin"])
+app.include_router(admin_redis.router, prefix="/api/admin/redis", tags=["Admin"])
 
 
 @app.get("/health")
