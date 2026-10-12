@@ -18,6 +18,7 @@ So: measure first. This samples each prefix rather than walking every key, so
 it stays cheap on a live instance. Read-only, owner-gated.
 """
 import fnmatch
+import os
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -52,6 +53,13 @@ PREFIXES: list[str] = [
 # Keys sampled per prefix for the average-size estimate. 50 is enough to size a
 # prefix within a few percent and costs a few milliseconds.
 SAMPLE_PER_PREFIX = 50
+
+# Stop walking after this many keys. A full SCAN of a 1.5 GB keyspace takes
+# minutes of round-trips, and the first run of this report did exactly that:
+# the job fired and said nothing for long enough to look broken. Past the cap
+# the counts are scaled by DBSIZE, which is close enough to decide a policy and
+# bounded enough to run on a schedule.
+SCAN_CAP = int(os.environ.get("REDIS_REPORT_SCAN_CAP", "50000"))
 
 
 def _admin_emails() -> set[str]:
@@ -89,11 +97,16 @@ async def redis_usage_summary() -> dict:
         raise HTTPException(status_code=503, detail="Redis is not connected")
 
     info = await redis.info("memory")
+    total_keys = await redis.dbsize()
     buckets: dict[str, dict] = {}
+    scanned = 0
 
     # SCAN rather than KEYS: KEYS blocks the server for the length of the
     # keyspace, and this runs against production.
     async for key in redis.scan_iter(count=1000):
+        scanned += 1
+        if scanned > SCAN_CAP:
+            break
         bucket = buckets.setdefault(
             _bucket_for(key),
             {"keys": 0, "sampled": 0, "sampled_bytes": 0, "persistent": 0, "example": key},
@@ -110,14 +123,18 @@ async def redis_usage_summary() -> dict:
             if ttl == -1:  # -1 = no expiry, -2 = key is gone
                 bucket["persistent"] += 1
 
+    # Past the cap, each scanned key stands for several in the keyspace.
+    scale = (total_keys / scanned) if scanned and total_keys > scanned else 1.0
+
     rows = []
     for prefix, b in buckets.items():
         avg = b["sampled_bytes"] / b["sampled"] if b["sampled"] else 0
-        estimated = avg * b["keys"]
+        keys_estimated = round(b["keys"] * scale)
+        estimated = avg * keys_estimated
         rows.append(
             {
                 "prefix": prefix,
-                "keys": b["keys"],
+                "keys": keys_estimated,
                 "avg_bytes": round(avg),
                 "estimated_mb": round(estimated / (1024 * 1024), 1),
                 "estimated_monthly_usd": round(estimated / (1024**3) * 10, 2),
@@ -128,11 +145,13 @@ async def redis_usage_summary() -> dict:
     rows.sort(key=lambda r: r["estimated_mb"], reverse=True)
 
     return {
+        "scanned_keys": scanned,
+        "scan_truncated": scale > 1.0,
         "used_memory_mb": round(info.get("used_memory", 0) / (1024 * 1024), 1),
         "used_memory_rss_mb": round(info.get("used_memory_rss", 0) / (1024 * 1024), 1),
         "maxmemory_mb": round(info.get("maxmemory", 0) / (1024 * 1024), 1),
         "maxmemory_policy": info.get("maxmemory_policy"),
-        "total_keys": sum(r["keys"] for r in rows),
+        "total_keys": total_keys,
         "by_prefix": rows,
     }
 
