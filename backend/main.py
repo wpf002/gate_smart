@@ -16,8 +16,36 @@ from app.core.limiter import limiter
 from app.core.scheduler import create_scheduler
 
 
+def _configure_logging() -> None:
+    """Give app loggers somewhere to write.
+
+    Nothing configured logging, so under uvicorn the root logger had no handler
+    and every log.info / log.warning / log.error from app code was dropped.
+    Only print() reached the deploy logs, which is why `[smoke]` lines were
+    visible and llm_cost's "DAILY CAP REACHED" alarm — a log.error — never
+    appeared once, in any deploy.
+
+    Third-party loggers stay at WARNING: httpx and SQLAlchemy at INFO would
+    write a line per request and per statement, which buries the alarms this
+    exists to surface.
+    """
+    import logging
+    import sys
+
+    root = logging.getLogger()
+    if not any(getattr(h, "_gatesmart", False) for h in root.handlers):
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(message)s"))
+        handler._gatesmart = True  # type: ignore[attr-defined]
+        root.addHandler(handler)
+    root.setLevel(logging.WARNING)
+    logging.getLogger("app").setLevel(logging.INFO)
+    logging.getLogger("scripts").setLevel(logging.INFO)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _configure_logging()
     await init_redis()
     try:
         await init_db()
