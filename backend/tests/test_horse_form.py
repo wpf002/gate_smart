@@ -151,3 +151,30 @@ def test_real_world_also_ran_strings():
         "Innova", "Trew Violence", "Superwolf"]
     got = parse_also_ran("Dom Wayne, Arimony, Mr. Big Rig, Big Mac Daddy  and   Farmer Fred R F")
     assert got == ["Dom Wayne", "Arimony", "Mr. Big Rig", "Big Mac Daddy", "Farmer Fred R F"]
+
+
+def _line(race_class):
+    class _F:
+        race_date = None; finish_pos = 2; field_size = 8
+        track = "SAR"; distance_f = 6.0; surface = "Dirt"; going = "Fast"
+    _F.race_class = race_class
+    return _format_line(_F())
+
+
+def test_an_optional_claiming_line_keeps_its_price():
+    # The class was cut at 26 characters, two short of this one's opening
+    # bracket, so every optional-claiming line lost the price that says what
+    # level the race was run at.
+    assert "ALLOWANCE OPTIONAL CLAIMING($25,000)" in _line("ALLOWANCE OPTIONAL CLAIMING($25,000)")
+    assert "STARTER OPTIONAL CLAIMING($12,500)" in _line("STARTER OPTIONAL CLAIMING($12,500)")
+    assert "MAIDEN OPTIONAL CLAIMING($50,000)" in _line("MAIDEN OPTIONAL CLAIMING($50,000)")
+
+
+def test_the_dearest_optional_claimer_still_fits():
+    assert "($100,000)" in _line("ALLOWANCE OPTIONAL CLAIMING($100,000)")
+
+
+def test_a_sponsored_stakes_title_is_still_trimmed():
+    # The grade leads the title, so it survives; only the sponsor is dropped.
+    out = _line("G2 Jessamine S. Presented by Keeneland Sales")
+    assert "G2 Jessamine S." in out and "Keeneland Sales" not in out

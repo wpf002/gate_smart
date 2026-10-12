@@ -171,6 +171,17 @@ async def record_race_form(result: dict, race_date=None, raise_on_error: bool = 
     return 0
 
 
+# How much of the class a form line keeps. It was 26, which is two characters
+# short of "ALLOWANCE OPTIONAL CLAIMING" before its price even starts: every
+# optional-claiming line reached the model as "ALLOWANCE OPTIONAL CLAIMIN" or
+# "STARTER OPTIONAL CLAIMING(" with the claim price cut off — 6,578 lines in
+# sixty days, all three optional-claiming families, 100% of them. The price is
+# the class level; without it a drop from $62,500 to $25,000 is invisible. 40
+# holds the longest of them ("ALLOWANCE OPTIONAL CLAIMING($100,000)" is 37) and
+# trims only the sponsor's name off long stakes titles.
+CLASS_WIDTH = 40
+
+
 def _format_line(f) -> str:
     """One compact past-performance line, e.g. '2/8 SAR 6.0f Dirt Fast CLM 10000'."""
     pos = f"{f.finish_pos}/{f.field_size}" if f.finish_pos and f.field_size else (
@@ -183,7 +194,7 @@ def _format_line(f) -> str:
         f"{f.distance_f:g}f" if f.distance_f else "",
         (f.surface or "")[:10],
         (f.going or "")[:8],
-        (f.race_class or "")[:26],
+        (f.race_class or "")[:CLASS_WIDTH],
     ]
     return " ".join(b for b in bits if b)
 
