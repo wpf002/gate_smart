@@ -71,17 +71,17 @@ def _bucket_for(key: str) -> str:
     return "other"
 
 
-@router.get("/usage")
-async def redis_usage(user: User = Depends(get_current_user)):
+async def redis_usage_summary() -> dict:
     """Key count, sampled average size, estimated bytes and TTL coverage per
     prefix — plus what Redis itself reports for total memory.
 
-    `persistent` is the number of sampled keys with no expiry. A prefix that is
-    entirely persistent cannot be freed by an eviction policy without losing
-    data, which is the whole question this endpoint exists to answer.
-    """
-    _require_admin(user)
+    `persistent_share` is the fraction of sampled keys with no expiry. A prefix
+    that is entirely persistent cannot be freed by an eviction policy without
+    losing data, which is the whole question this exists to answer.
 
+    Separate from the route so the nightly scheduler job can log the same
+    numbers: the route needs an owner login, and the log does not.
+    """
     from app.core import cache as cache_mod
 
     redis = getattr(cache_mod, "_redis", None)
@@ -135,3 +135,10 @@ async def redis_usage(user: User = Depends(get_current_user)):
         "total_keys": sum(r["keys"] for r in rows),
         "by_prefix": rows,
     }
+
+
+@router.get("/usage")
+async def redis_usage(user: User = Depends(get_current_user)):
+    """Owner-gated view of the same summary the nightly job logs."""
+    _require_admin(user)
+    return await redis_usage_summary()

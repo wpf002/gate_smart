@@ -130,6 +130,34 @@ async def job_settle_contest_picks() -> None:
         log.warning(f"[scheduler] contest settlement failed: {e}")
 
 
+async def job_redis_usage() -> None:
+    """Log what Redis is holding, by key prefix, once a day.
+
+    Redis is the second-largest line on the Railway bill at ~1.53 GB, and the
+    obvious lever (maxmemory + allkeys-lru) is unsafe here: paper:bank:*,
+    paper:bets:* and the accuracy counters carry no TTL, so eviction would be
+    data loss. The same numbers are available at /api/admin/redis/usage, but
+    that needs an owner login; in the log they can be read from the deploy's
+    own records while sizing a fix.
+    """
+    try:
+        from app.api.routes.admin_redis import redis_usage_summary
+
+        summary = await redis_usage_summary()
+        log.info(
+            "[redis] %.0f MB used, policy=%s, %d keys",
+            summary["used_memory_mb"], summary["maxmemory_policy"], summary["total_keys"],
+        )
+        for row in summary["by_prefix"][:8]:
+            log.info(
+                "[redis]   %-22s %7d keys  %8.1f MB  $%5.2f/mo  no-ttl share %s",
+                row["prefix"], row["keys"], row["estimated_mb"],
+                row["estimated_monthly_usd"], row["persistent_share"],
+            )
+    except Exception as e:  # noqa: BLE001 — a report must never break the loop
+        log.warning(f"[scheduler] redis usage report failed: {e}")
+
+
 async def job_daily_invariants() -> None:
     await _run_script("daily_invariants.py")
 
@@ -432,6 +460,18 @@ def create_scheduler() -> AsyncIOScheduler | None:
 
     # Nightly jobs — misfire_grace_time=3600 means a backend that restarts
     # within an hour of the scheduled time still fires the missed job.
+    scheduler.add_job(
+        job_redis_usage,
+        CronTrigger(hour=4, minute=5),
+        id="redis_usage",
+        name="Redis usage by prefix (04:05 UTC)",
+        # Also once shortly after boot, so a deploy made to size a Redis fix
+        # does not have to wait until the early hours for its numbers.
+        next_run_time=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=2),
+        misfire_grace_time=3600,
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.add_job(
         job_nightly_recalibration,
         CronTrigger(hour=3, minute=30),
